@@ -1,6 +1,7 @@
 mod m20230503_000001_create_nonce_table;
 mod m20230503_000002_create_account_table;
 mod m20230503_000003_create_session_table;
+mod m20230503_000004_create_user_table;
 
 use sea_orm_migration::prelude::*;
 
