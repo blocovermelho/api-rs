@@ -3,6 +3,7 @@ mod m20230503_000002_create_account_table;
 mod m20230503_000003_create_session_table;
 mod m20230503_000004_create_user_table;
 mod m20230503_000005_create_discord_user_table;
+mod m20230503_000006_create_server_table;
 
 use sea_orm_migration::prelude::*;
 
