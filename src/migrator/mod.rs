@@ -18,6 +18,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20230503_000003_create_session_table::Migration),
             Box::new(m20230503_000004_create_user_table::Migration),
             Box::new(m20230503_000005_create_discord_user_table::Migration),
+            Box::new(m20230503_000006_create_server_table::Migration),
         ]
     }
 }
