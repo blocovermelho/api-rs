@@ -24,6 +24,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20230503_000006_create_server_table::Migration),
             Box::new(m20230503_000007_create_connection_table::Migration),
             Box::new(m20230503_000008_create_modpack_table::Migration),
+            Box::new(m20230503_000009_create_map_table::Migration),
         ]
     }
 }
