@@ -14,7 +14,8 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Place::Map).uuid().not_null())
                     .col(ColumnDef::new(Place::WorldPos).string().not_null())
                     .col(ColumnDef::new(Place::Name).string().not_null())
-                    .col(ColumnDef::new(Place::Tags).string().not_null()),
+                    .col(ColumnDef::new(Place::Tags).string().not_null())
+                    .to_owned(),
             )
             .await
     }
