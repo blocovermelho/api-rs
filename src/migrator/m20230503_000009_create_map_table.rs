@@ -12,7 +12,6 @@ impl MigrationTrait for Migration {
                     .table(Map::Table)
                     .col(ColumnDef::new(Map::Id).uuid().not_null().primary_key())
                     .col(ColumnDef::new(Map::Name).string().not_null())
-                    .col(ColumnDef::new(Map::Places).string().not_null())
                     .col(ColumnDef::new(Map::Players).string().not_null())
                     .col(ColumnDef::new(Map::Places).string().not_null())
                     .to_owned(),
