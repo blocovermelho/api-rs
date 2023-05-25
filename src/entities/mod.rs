@@ -3,5 +3,12 @@
 pub mod prelude;
 
 pub mod account;
+pub mod connection;
+pub mod discord_user;
+pub mod map;
+pub mod modpack;
 pub mod nonce;
+pub mod place;
+pub mod server;
 pub mod session;
+pub mod user;
