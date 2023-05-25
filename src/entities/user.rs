@@ -4,15 +4,15 @@ use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
-#[sea_orm(table_name = "session")]
+#[sea_orm(table_name = "user")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub player: String,
-    pub pos: String,
-    pub looking_at: String,
-    pub ip_addr: String,
-    pub server: String,
-    pub expires_at: String,
+    pub uuid: String,
+    pub joined_at: String,
+    pub linked_at: Option<String>,
+    pub last_seen: Option<String>,
+    pub trust: Option<String>,
+    pub referer: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
