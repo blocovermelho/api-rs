@@ -10,7 +10,7 @@ impl MigrationTrait for Migration {
             .create_table(
                 Table::create()
                     .table(Server::Table)
-                    .col(ColumnDef::new(Server::Id).uuid().primary_key())
+                    .col(ColumnDef::new(Server::Id).uuid().not_null().primary_key())
                     .col(ColumnDef::new(Server::Name).string().not_null())
                     .col(
                         ColumnDef::new(Server::SupportedVersions)

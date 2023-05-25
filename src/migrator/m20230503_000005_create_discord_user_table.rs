@@ -10,7 +10,12 @@ impl MigrationTrait for Migration {
             .create_table(
                 Table::create()
                     .table(DiscordUser::Table)
-                    .col(ColumnDef::new(DiscordUser::Id).string().primary_key())
+                    .col(
+                        ColumnDef::new(DiscordUser::Id)
+                            .string()
+                            .not_null()
+                            .primary_key(),
+                    )
                     .col(ColumnDef::new(DiscordUser::Status).string().not_null())
                     .col(ColumnDef::new(DiscordUser::Username).string().not_null())
                     .col(ColumnDef::new(DiscordUser::Email).string().not_null())
