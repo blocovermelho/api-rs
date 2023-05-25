@@ -1,5 +1,6 @@
 mod entities;
 mod migrator;
+mod types;
 
 use futures::executor::block_on;
 use migrator::Migrator;
