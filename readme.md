@@ -116,10 +116,10 @@ mod types {
 
 ## Status
 
-- [ ] Implementação dos modelos
-  - [ ] Migrations
-  - [ ] Geração dos Entities usando `sea-orm-cli`
-  - [ ] De-stringificação (Utilização de Tipos JSON na tabela usando Serde/SeaORM)
+- [x] Implementação dos modelos
+  - [x] Migrations
+  - [x] Geração dos Entities usando `sea-orm-cli`
+  - [x] De-stringificação (Utilização de Tipos JSON na tabela usando Serde/SeaORM)
 
 - [ ] Criação dos endpoints - `api.blocovermelho.org`
   - [ ] Rest - `/v2/`
