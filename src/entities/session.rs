@@ -3,7 +3,7 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::types::WorldPos::WorldPos;
+use crate::types::{LookVector::LookVector, WorldPos::WorldPos};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "session")]
@@ -11,7 +11,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub player: Uuid,
     pub pos: WorldPos,
-    pub looking_at: String,
+    pub looking_at: LookVector,
     pub ip_addr: String,
     pub server: Uuid,
     pub expires_at: ChronoDateTimeUtc,
