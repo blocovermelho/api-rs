@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 #[sea_orm(table_name = "connection")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub player: String,
-    pub server: String,
+    pub player: Uuid,
+    pub server: Uuid,
     pub version: Option<String>,
     pub platform: Option<String>,
 }

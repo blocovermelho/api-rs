@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 #[sea_orm(table_name = "place")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: String,
-    pub map: String,
+    pub id: Uuid,
+    pub map: Uuid,
     pub world_pos: String,
     pub name: String,
     pub tags: String,

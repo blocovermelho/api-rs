@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 #[sea_orm(table_name = "session")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub player: String,
+    pub player: Uuid,
     pub pos: String,
     pub looking_at: String,
     pub ip_addr: String,
-    pub server: String,
+    pub server: Uuid,
     pub expires_at: String,
 }
 
