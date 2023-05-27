@@ -12,7 +12,7 @@ pub struct Model {
     pub looking_at: String,
     pub ip_addr: String,
     pub server: Uuid,
-    pub expires_at: String,
+    pub expires_at: ChronoDateTimeUtc,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
