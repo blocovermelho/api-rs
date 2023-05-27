@@ -3,13 +3,15 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::types::enums::modpacks::{Modloader, RequirementLevel};
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "modpack")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    pub level: String,
-    pub loader: String,
+    pub level: RequirementLevel,
+    pub loader: Modloader,
     pub url: Option<String>,
     pub download_url: Option<String>,
     pub source: Option<String>,
