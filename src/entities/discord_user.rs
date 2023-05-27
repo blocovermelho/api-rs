@@ -3,12 +3,14 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::types::enums::DiscordResponse;
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "discord_user")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
-    pub status: String,
+    pub status: DiscordResponse,
     pub username: String,
     pub email: String,
     pub nickname: Option<String>,
