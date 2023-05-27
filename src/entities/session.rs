@@ -3,12 +3,14 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::types::WorldPos::WorldPos;
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "session")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub player: Uuid,
-    pub pos: String,
+    pub pos: WorldPos,
     pub looking_at: String,
     pub ip_addr: String,
     pub server: Uuid,
