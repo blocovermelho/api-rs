@@ -18,4 +18,8 @@ mkShell {
     CoreFoundation
     CoreServices
   ]);
+
+  shellHook = ''
+     alias ls='exa'
+  '';
 }

@@ -12,5 +12,7 @@ buildEnv {
 
     sqlite
     sqliteman
+
+    exa
   ];
 }
