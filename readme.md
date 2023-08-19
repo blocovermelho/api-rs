@@ -1,6 +1,15 @@
 # Api do Bloco Vermelho
 Versão 2
 
+## Configurando o ambiente de desenvolvimento
+Com a adição de suporte ao Nix, qualquer um pode ter todo o ambiente de desenvolvimento com apenas um comando.
+
+- Primeiro, baixe o [nix](https://nixos.org/download) se já não o possui.
+- Depois, execute `nix-shell` na raiz do projeto.
+
+O Nix irá baixar todas as dependencias necessárias para compilar o projeto, sem ter que instalar nada permanente no seu computador.
+
+
 ## Modelos
 
 ```rs
