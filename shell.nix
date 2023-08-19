@@ -21,5 +21,7 @@ mkShell {
 
   shellHook = ''
      alias ls='exa'
+     alias glog='git log --oneline --graph'
+     alias gloga='git log --oneline --graph --all'
   '';
 }
