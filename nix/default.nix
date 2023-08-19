@@ -12,5 +12,8 @@ buildEnv {
 
     sqlite
     sqliteman
+
+    exa
+    bat
   ];
 }

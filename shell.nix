@@ -18,4 +18,11 @@ mkShell {
     CoreFoundation
     CoreServices
   ]);
+
+  shellHook = ''
+     alias ls='exa'
+     alias cat='bat'
+     alias glog='git log --oneline --graph'
+     alias gloga='git log --oneline --graph --all'
+  '';
 }
