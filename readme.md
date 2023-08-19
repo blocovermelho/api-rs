@@ -9,6 +9,12 @@ Com a adição de suporte ao Nix, qualquer um pode ter todo o ambiente de desenv
 
 O Nix irá baixar todas as dependencias necessárias para compilar o projeto, sem ter que instalar nada permanente no seu computador.
 
+Execute os seguintes comandos apos as dependencias serem baixadas.
+- `rustup default nightly`
+- `rustup toolchain install nightly`
+- `rustup component add rust-src rust-analyzer`
+
+Você agora deve estar com um ambiente de desenvolvimento configurado.
 
 ## Modelos
 
