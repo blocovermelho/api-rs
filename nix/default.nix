@@ -14,5 +14,6 @@ buildEnv {
     sqliteman
 
     exa
+    bat
   ];
 }
