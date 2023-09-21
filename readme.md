@@ -16,136 +16,175 @@ Execute os seguintes comandos apos as dependencias serem baixadas.
 
 Você agora deve estar com um ambiente de desenvolvimento configurado.
 
-## Modelos
+## Features
 
-```rs
-mod types {
-    struct Account {
-        owner: Uuid, //fk User
-        discord_id: Option<u64>, //fk Discord
-        password: String,
-    }
+- Necessário: 
+  - Login  [Global]
+  - Perfis [Global]
+    - Settings
+  - Sessão [Global]
+  - Estatísticas [Global/Per-Server]
+  - Integração com o OAUTH do discord. [Global]
 
-    struct Session {
-        owner: Uuid, //fk user
-        ip_address: Ipv4Addr,
-        expires_at: DateTime<Utc>,
-    }
+- Adicionais
+  - Waypoints [Per-Server]
+  - Comunicação com o Discord [Per-Server]
+  - Board de Planejamento [Per-Server]
 
-    struct User {
-        uuid: Uuid, //Source
-        nickname: String,
-        joined_at: DateTime<Utc>,
-        linked_at: Option<DateTime<Utc>>,
-        last_seen: DateTime<Utc>,
-        trust: Trust,
-        referer: Option<Uuid>, //fk user
-    }
+## Rotas
+  - POST   `/api/auth?uuid=<uuid>`
+  - PATCH  `/api/auth?uuid=<uuid>`
+  - DELETE `/api/auth?uuid=<uuid>`
+  - POST   `/api/profile/create?uuid=<uuid>`
+  - PATCH  `/api/profile/update?uuid=<uuid>`
+  - GET    `/api/profile/<uuid>`
+  - POST   `/api/server/create`
+  - GET    `/api/server/<uuid>`
+  - GET    `/api/stats`
+  - GET    `/api/stats?server=<uuid>`
+  - GET    `/api/oauth?key=<key>`
 
-    enum Trust {
-        Unlinked,
-        Linked,
-        Referred,
-        Trusted,
-    }
 
-    enum DiscordStatus {
-        DiscordApiError,
-        OutsideGuild,
-        JoinedGuild,
-    }
+## Rotas planejadas
 
-    struct DiscordUser {
-        id: u64, // Source Discord
-        status: DiscordStatus,
-        username: String,
-        nickname: Option<String>,
-        discriminator: u16,
-    }
+<details> 
+<summary> Place API: </summary> 
+  - GET   `/api/place/<uuid>`
+  - POST  `/api/place/create`
+  - PATCH `/api/place/update?uuid=<uuid>`
+  - GET   `/api/place/nearby?server=<uuid>&dim=<dimension>&pos=<x,y,z>&range=<1...2000>`
+  - GET   `/api/place/when?tags=<tags[]>`
+</details>
+<details>
+<summary> Board API: </summary>
+  - POST   `/api/board/create`
+  - GET    `/api/board/<uuid>`
+  - PATCH  `/api/board/update?uuid=<uuid>`
+  - DELETE `/api/board/<uuid>`
 
-    struct Server {
-        id: Uuid, // source server
-        name: String,
-        supported_versions: Vec<String>,
-        ip: String,
-        modded: bool,
-        modpacks: Vec<Uuid>,
-        multimap: bool,
-        maps: Vec<Uuid>,
-        player_count: u64,
-        max_players: u64,
-    }
+  - POST   `/api/board/<uuid>/post`
+  - GET    `/api/board/<uuid>/post/<uuid>`
+  - DELETE `/api/board/<uuid>/post/<uuid>`
 
-    struct Connection {
-        player: Uuid, //fk user
-        server: Uuid, //fk server
-        version: String,
-    }
+  
+  - GET    `/api/board/<uuid>/post/<uuid>/comment/<uuid>`
+  - POST   `/api/board/<uuid>/post/<uuid>/comment`
+  - PATCH  `/api/board/<uuid>/post/<uuid>/comment/update?uuid=<uuid>`
+  - DELETE `/api/board/<uuid>/post/<uuid>/comment/<uuid>`
+</details>
+## Objetos
 
-    struct Modpack {
-        id: Uuid, //source modpack
-        level: ModpackLevel,
-        loader: Modloader,
-        url: String,
-        download_url: String,
-        source: Option<String>,
-        version: String,
-    }
+Profile:
 
-    enum ModpackLevel {
-        Optional,
-        Recommended,
-        Obligatory,
-    }
-
-    enum Modloader {
-        Quilt,
-        Fabric,
-        Forge,
-    }
-
-    struct Map {
-        id: Uuid, // source map
-        name: String,
-        players: Vec<Uuid>, //fk user
-        places: Vec<Uuid>,  //fk place
-    }
-
-    struct Place {
-        id: Uuid, // source place
-        map: Uuid,
-        x: String,
-        y: String,
-        z: String,
-        dimension: String,
-        name: String,
-        tags: Vec<String>,
-    }
-
-    struct Nonce {
-        code: String,
-        minecraft_uuid: Uuid,
-    }
-}
+```rust
+  struct Profile {
+    uuid: Uuid, // O UUID do minecraft
+    username: String,
+    discord_id: String,
+    pronouns: Vec<String>,        
+    last_seen: DateTime<Utc>,
+    joined_at: DateTime<Utc>,
+    session: Option<Uuid>
+  }
 ```
 
-## Status
+Session:
+```rust
+  struct Session {
+    uuid: Uuid, // Id aleatório que representa a sessão
+    owner: Uuid, // UUID do minecraft
+    ip_address: Ipv4Addr,
+    expires_at: DateTime<Utc>,
+    use_counter: usize,
+    server: Uuid
+  }
+```
+- Se `DateTime.now() > profile.session?.expires_at`, remover a sessão.
+- Uma sessão só é criada quando o jogador autenticado se desconecta.
+- Sessões são checkadas quando o jogador loga. 
+- A inexistência de uma sessão envia ao jogador a mensagem que pede para ele logar.
+- No caso de uma sessão válida ser utilizada mais que 10 vezes, essa sessão é descartada. 
+- No caso de uma mudança entre servidores com uma sessão válida, o contador de usos irá
+  se incrementar por dois.
 
-- [x] Implementação dos modelos
-  - [x] Migrations
-  - [x] Geração dos Entities usando `sea-orm-cli`
-  - [x] De-stringificação (Utilização de Tipos JSON na tabela usando Serde/SeaORM)
 
-- [ ] Criação dos endpoints - `api.blocovermelho.org`
-  - [ ] Rest - `/v2/`
-	- [ ] Login e Registro - `/server-auth/`
-	- [ ] Link com o OAUTH2 do Discord - `/link`
-	- [ ] Perfis - `/profile/`
-	- [ ] Servidores - `/server/`
-	- [ ] Mapas - `/map/`
-   - [ ] WS
-	- [ ] Link `wss://link` 
-   - [ ] GraphQL (Em consideração)
+Auth:
+```rust
+  struct Auth {
+    owner: Uuid, //UUID do minecraft
+    password: String,
+    discord_id: String,
+  }
+```
+- Se `SELECT * from Auth WHERE owner == player.uuid` retornar null, esse jogador não foi registrado ainda.
+- Auth é criado internamente e só pode ser destruido por um administrador ou um jogador autenticado.
+- Senhas podem ser alteradas com a confirmação de dois fatores pelo discord, ou por um jogador autenticado.
 
-- [ ] Migração dos projetos que usem a API V1 (api.soberanacraft.net) para a V2
-  - [ ] [Quilt Mod](https://github.com/blocovermelho/quilt-mod)
+
+Server:
+```rust
+  struct Server {
+    uuid: Uuid,
+    name: String,
+    supported_versions: Vec<String>,
+    ip: String,
+    modded: bool,
+    modpacks: Vec<Uuid>,
+    maps: Vec<Uuid>
+  }
+```
+
+Modpack:
+```rust
+  struct Modpack {
+    uuid: Uuid,
+    required: bool,
+    loader: String,
+    download_url: String,
+    version: String
+  }
+```
+
+Map:
+```rust
+  struct Map {
+    uuid: Uuid.
+    name: String,
+    players: Vec<Uuid>,
+    places: Vec<Uuid>
+  }
+```
+
+Place:
+```rust
+  struct Place {
+    id: Uuid,
+    owner: Uuid, //Id of Map
+    x: String,
+    y: String,
+    z: String,
+    dim: String,
+    name: String,
+    tags: Vec<String>
+  }
+```
+
+Nonce:
+```rust
+  struct Nonce {
+    code: String,
+    owner: Uuid // Minecraft UUID
+  }
+ ```
+
+ 
+Statistics:
+ ```rust
+  struct Statistics {
+    owner: Uuid, // Server UUID
+    unique_players: usize,
+    total_logins: usize,
+    total_playtime: DateTime<Utc>,
+    online_players: usize
+  }
+ ```
