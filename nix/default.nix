@@ -11,9 +11,7 @@ buildEnv {
     rustup    
 
     sqlite
-    sqliteman
-
-    exa
+    eza
     bat
   ];
 }
