@@ -72,6 +72,7 @@ Você agora deve estar com um ambiente de desenvolvimento configurado.
   - PATCH  `/api/board/<uuid>/post/<uuid>/comment/update?uuid=<uuid>`
   - DELETE `/api/board/<uuid>/post/<uuid>/comment/<uuid>`
 </details>
+
 ## Objetos
 
 Profile:
