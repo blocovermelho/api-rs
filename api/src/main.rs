@@ -9,7 +9,7 @@ use axum::{
     Router,
 };
 
-use std::sync::Mutex;
+use tokio::sync::Mutex;
 use crate::store::Store;
 
 pub mod models;
