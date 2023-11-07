@@ -720,6 +720,9 @@ dependencies = [
  "axum-macros",
  "bcrypt",
  "chrono",
+ "oauth",
+ "oauth2",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",
@@ -749,6 +752,7 @@ dependencies = [
 name = "oauth"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "oauth2",
  "reqwest",
  "serde",
