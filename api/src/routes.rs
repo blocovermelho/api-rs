@@ -6,6 +6,7 @@ use axum::{
     Json,
 };
 
+use oauth2::{AuthorizationCode, reqwest::async_http_client};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -15,9 +16,57 @@ use crate::{
     AppState,
 };
 
+/// [GET] /api/link?state=<>&code=<>
+pub async fn link(
+    State(state) : State<AppState>,
+    Query(link) : Query<LinkQueryParams>
+) -> Result<Json<LinkResult>, StatusCode>{
+
+    let mut data = state.data.lock().await;
+    let uuid = data.get_uuid_from_nonce(&link.state).ok_or(StatusCode::NOT_FOUND)?.clone();
+
+    data.drop_nonce(&link.state);
+    
+    let cfg = state.config.lock().await;
+    let client = oauth::routes::get_client(cfg.clone()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let response = client.exchange_code(AuthorizationCode::new(link.code)).request_async(async_http_client).await;
+    let token = response.map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    let reqwest_client = state.reqwest_client.lock().await;
+    let on_discord = oauth::routes::get_guild(&reqwest_client, &token, &cfg).await.map_err(|_| StatusCode::BAD_REQUEST)?;
+    let time = chrono::offset::Utc::now() - on_discord.joined_at;
+
+    Ok(Json(LinkResult {
+        discord_id: on_discord.user.id,
+        discord_username: on_discord.user.username,
+        is_joined: time.num_days() >= 7,
+        minecraft_uuid: uuid,
+    }))
+
+
+} 
+
+/// [GET] /api/oauth?uuid=<ID>
+pub async fn discord(
+    State(state) : State<AppState>,
+    Query(uuid) : Query<UuidQueryParam>
+) -> Result<Json<String>, StatusCode> {
+    let mut data = state.data.lock().await;
+    let cfg = state.config.lock().await;
+
+    let client = oauth::routes::get_client(cfg.clone()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let (url,token) = oauth::routes::authorize(&client).url();
+
+    data.add_nonce(token.secret().clone(), uuid.uuid);
+
+    Ok(Json(url.to_string()))
+}
+
 /// [GET] /api/users
 pub async fn get_users(State(state): State<AppState>) -> Result<Json<Vec<User>>, StatusCode> {
-    let data = state.data.lock().expect("mutex poisoned");
+    let data = state.data.lock().await;
     Ok(Json(data.get_users()))
 }
 
@@ -26,7 +75,7 @@ pub async fn get_user(
     State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<User>, StatusCode> {
-    let data = state.data.lock().expect("mutex poisoned");
+    let data = state.data.lock().await;
 
     return match data.get_user(&user_id) {
         Some(u) => Ok(Json(u.clone())),
@@ -39,7 +88,7 @@ pub async fn create_user(
     State(state): State<AppState>,
     Json(stub): Json<CreateUser>,
 ) -> Result<Json<User>, StatusCode> {
-    let mut data = state.data.lock().expect("mutex poisoned");
+    let mut data = state.data.lock().await;
     let user = User::from(stub);
 
     if data.add_user(user.clone()) {
@@ -55,7 +104,7 @@ pub async fn create_user(
 
 /// [GET] /api/servers
 pub async fn get_servers(State(state): State<AppState>) -> Result<Json<Vec<Server>>, StatusCode> {
-    let data = state.data.lock().expect("mutex poisoned");
+    let data = state.data.lock().await;
     Ok(Json(data.get_servers()))
 }
 
@@ -64,7 +113,7 @@ pub async fn get_server(
     State(state): State<AppState>,
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<Server>, StatusCode> {
-    let data = state.data.lock().expect("mutex poisoned");
+    let data = state.data.lock().await;
     let server = data.get_server(&server_id).ok_or(StatusCode::NOT_FOUND)?;
     Ok(Json(server.to_owned()))
 }
@@ -74,7 +123,7 @@ pub async fn create_server(
     State(state): State<AppState>,
     Json(stub): Json<CreateServer>,
 ) -> Result<Json<Server>, StatusCode> {
-    let mut data = state.data.lock().expect("mutex poisoned");
+    let mut data = state.data.lock().await;
 
     let server = Server::from(stub);
 
@@ -95,7 +144,7 @@ pub async fn enable(
     State(state): State<AppState>,
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<bool>, StatusCode> {
-    let mut data = state.data.lock().expect("poisoned");
+    let mut data = state.data.lock().await;
     let mut server = data.get_server(&server_id).ok_or(StatusCode::NOT_FOUND)?.clone();
 
     server.available = true;
@@ -114,7 +163,7 @@ pub async fn disable(
     State(state): State<AppState>,
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<bool>, StatusCode> {
-    let mut data = state.data.lock().expect("poisoned");
+    let mut data = state.data.lock().await;
     let mut server = data.get_server(&server_id).ok_or(StatusCode::NOT_FOUND)?.clone();
 
     server.available = false;
@@ -133,7 +182,7 @@ pub async fn get_session(
     State(state): State<AppState>,
     Query(session): Query<SessionQueryParams>,
 ) -> Result<Json<bool>, StatusCode> {
-    let data = state.data.lock().expect("poisoned");
+    let data = state.data.lock().await;
     let user = data.get_user(&session.uuid).ok_or(StatusCode::NOT_FOUND)?;
 
     Ok(Json(data.has_valid_session(
@@ -150,7 +199,7 @@ pub async fn logoff(
     Query(session): Query<SessionQueryParams>,
     Json(pos): Json<Pos>,
 ) -> Result<Json<bool>, StatusCode> {
-    let mut data = state.data.lock().expect("poisoned");
+    let mut data = state.data.lock().await;
 
     let server = data.get_server(&server_id).ok_or(StatusCode::NOT_FOUND)?;
     let mut user = data
@@ -197,7 +246,7 @@ pub async fn login(
     Path(server_id): Path<Uuid>,
     Query(session): Query<AuthenticationQueryParams>,
 ) -> Result<Json<bool>, StatusCode> {
-    let mut data = state.data.lock().expect("poisoned");
+    let mut data = state.data.lock().await;
 
     let _ = data.get_server(&server_id).ok_or(StatusCode::NOT_FOUND)?;
     let user = data.get_user(&session.uuid).ok_or(StatusCode::NOT_FOUND)?;
@@ -236,7 +285,7 @@ pub async fn create_account(
     State(state): State<AppState>,
     Query(session): Query<AuthenticationQueryParams>,
 ) -> Result<Json<bool>, StatusCode> {
-    let mut data = state.data.lock().expect("mutex poisoned");
+    let mut data = state.data.lock().await;
     let hash =
         bcrypt::hash(&session.password, 12).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -266,7 +315,7 @@ pub async fn changepw(
     State(state): State<AppState>,
     Query(session): Query<ChangePasswordQueryParams>,
 ) -> Result<Json<bool>, StatusCode> {
-    let mut data = state.data.lock().expect("mutex poisoned");
+    let mut data = state.data.lock().await;
 
     let mut acc = data
         .get_account(&session.uuid)
@@ -316,4 +365,23 @@ pub struct AuthenticationQueryParams {
 pub struct SessionQueryParams {
     uuid: Uuid,
     ip: Ipv4Addr,
+}
+
+#[derive(Deserialize)]
+pub struct LinkQueryParams {
+    code: String,
+    state: String,
+}
+
+#[derive(Deserialize)]
+pub struct UuidQueryParam {
+    uuid: Uuid
+}
+
+#[derive(Serialize)]
+pub struct LinkResult {
+    discord_id: String,
+    discord_username: String,
+    is_joined: bool,
+    minecraft_uuid: Uuid,
 }
