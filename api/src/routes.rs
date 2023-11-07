@@ -6,6 +6,7 @@ use axum::{
     Json,
 };
 
+use oauth2::{AuthorizationCode, reqwest::async_http_client};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -14,6 +15,54 @@ use crate::{
     store::MAX_ATTEMPTS_PER_ACC,
     AppState,
 };
+
+/// [GET] /api/link?state=<>&code=<>
+pub async fn link(
+    State(state) : State<AppState>,
+    Query(link) : Query<LinkQueryParams>
+) -> Result<Json<LinkResult>, StatusCode>{
+
+    let mut data = state.data.lock().await;
+    let uuid = data.get_uuid_from_nonce(&link.state).ok_or(StatusCode::NOT_FOUND)?.clone();
+
+    data.drop_nonce(&link.state);
+    
+    let cfg = state.config.lock().await;
+    let client = oauth::routes::get_client(cfg.clone()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let response = client.exchange_code(AuthorizationCode::new(link.code)).request_async(async_http_client).await;
+    let token = response.map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    let reqwest_client = state.reqwest_client.lock().await;
+    let on_discord = oauth::routes::get_guild(&reqwest_client, &token, &cfg).await.map_err(|_| StatusCode::BAD_REQUEST)?;
+    let time = chrono::offset::Utc::now() - on_discord.joined_at;
+
+    Ok(Json(LinkResult {
+        discord_id: on_discord.user.id,
+        discord_username: on_discord.user.username,
+        is_joined: time.num_days() >= 7,
+        minecraft_uuid: uuid,
+    }))
+
+
+} 
+
+/// [GET] /api/oauth?uuid=<ID>
+pub async fn discord(
+    State(state) : State<AppState>,
+    Query(uuid) : Query<UuidQueryParam>
+) -> Result<Json<String>, StatusCode> {
+    let mut data = state.data.lock().await;
+    let cfg = state.config.lock().await;
+
+    let client = oauth::routes::get_client(cfg.clone()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let (url,token) = oauth::routes::authorize(&client).url();
+
+    data.add_nonce(token.secret().clone(), uuid.uuid);
+
+    Ok(Json(url.to_string()))
+}
 
 /// [GET] /api/users
 pub async fn get_users(State(state): State<AppState>) -> Result<Json<Vec<User>>, StatusCode> {
@@ -316,4 +365,23 @@ pub struct AuthenticationQueryParams {
 pub struct SessionQueryParams {
     uuid: Uuid,
     ip: Ipv4Addr,
+}
+
+#[derive(Deserialize)]
+pub struct LinkQueryParams {
+    code: String,
+    state: String,
+}
+
+#[derive(Deserialize)]
+pub struct UuidQueryParam {
+    uuid: Uuid
+}
+
+#[derive(Serialize)]
+pub struct LinkResult {
+    discord_id: String,
+    discord_username: String,
+    is_joined: bool,
+    minecraft_uuid: Uuid,
 }

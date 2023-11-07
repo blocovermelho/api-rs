@@ -10,6 +10,10 @@ use axum::{
 };
 
 use tokio::sync::Mutex;
+
+use oauth::models::Config;
+use reqwest::Client;
+
 use crate::store::Store;
 
 pub mod models;
@@ -19,28 +23,40 @@ pub mod store;
 #[derive(Clone)]
 pub struct AppState {
     data: Arc<Mutex<Store>>,
-    path: Option<PathBuf>
+    path: Option<PathBuf>,
+    config: Arc<Mutex<Config>>,
+    config_path: Option<PathBuf>,
+    reqwest_client: Arc<Mutex<Client>>
 }
 
 impl AppState {
-    pub fn load(store: Store, path: Option<PathBuf>) -> AppState {
+    pub fn load(store: Store, path: Option<PathBuf>, config: Config, config_path: Option<PathBuf>) -> AppState {
         AppState {
             data: Arc::new(Mutex::new(store)),
-            path
+            path,
+            config: Arc::new(Mutex::new(config)),
+            config_path,
+            reqwest_client: Arc::new(Mutex::new(Client::new()))
         }
     }
 
     pub fn new() -> AppState {
         AppState {
             data: Arc::new(Mutex::new(Store::new())),
-            path: None
+            path: None,
+            config: Arc::new(Mutex::new(Config::empty())),
+            config_path: None,
+            reqwest_client: Arc::new(Mutex::new(Client::new()))
         }
     }
 
-    pub fn file(path: PathBuf) -> AppState {
+    pub fn file(path: PathBuf, config_path: PathBuf) -> AppState {
         AppState {
             data: Arc::new(Mutex::new(Store::new())),
-            path: Some(path)
+            path: Some(path),
+            config: Arc::new(Mutex::new(Config::empty())),
+            config_path: Some(config_path),
+            reqwest_client: Arc::new(Mutex::new(Client::new()))
         }
     }
 
@@ -52,23 +68,31 @@ impl AppState {
         Ok(())
     }
 
-    pub fn from(path: &PathBuf) -> std::io::Result<AppState> {
+    pub fn from(path: &PathBuf, config_path: &PathBuf) -> std::io::Result<AppState> {
         let mut file = File::open(path)?;
         let mut str = String::new();
 
         file.read_to_string(&mut str)?;
 
         let state = serde_json::from_str(&str)?;
+
+        str = String::new();
+
+        file = File::open(config_path)?;
+        file.read_to_string(&mut str)?;
+
+        let config = serde_json::from_str(&str)?;
         
-        Ok(AppState::load(state, Some(path.to_owned())))
+        Ok(AppState::load(state, Some(path.to_owned()), config, Some(config_path.to_owned())))
     }
 }
 
 #[tokio::main]
 async fn main() {
     let path = ["data.json"].iter().collect();
+    let config_path = ["config.json"].iter().collect();
 
-    let s = AppState::from(&path).unwrap_or_else(|_| AppState::file(path));
+    let s = AppState::from(&path, &config_path).unwrap();
 
     let server = Router::new()
         .route("/:server_id/enable", patch(routes::enable))
@@ -91,6 +115,8 @@ async fn main() {
         ;
 
     let app = Router::new()
+        .route("/link", get(routes::link))
+        .route("/oauth", get(routes::discord))
         .route("/servers", get(routes::get_servers))
         .route("/users", get(routes::get_users))
         .nest("/server", server)
@@ -98,7 +124,7 @@ async fn main() {
         .nest("/auth", auth)
         .with_state(s);
 
-    let addr = SocketAddr::from(([127,0,0,1], 3000));
+    let addr = SocketAddr::from(([127,0,0,1], 8080));
     
     axum::Server::bind(&addr)
     .serve(app.into_make_service())
