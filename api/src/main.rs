@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::prelude::*;
 
+use std::time::Duration;
 use std::{sync::Arc, path::PathBuf};
 use std::net::SocketAddr;
 
@@ -12,7 +13,11 @@ use axum::{
 use tokio::sync::Mutex;
 
 use oauth::models::Config;
-use reqwest::Client;
+use reqwest::{Client, header};
+use tower::ServiceBuilder;
+use tower_http::validate_request::ValidateRequestHeaderLayer;
+use tower_http::{ServiceBuilderExt, timeout::TimeoutLayer};
+use tower_http::trace::TraceLayer;
 
 use crate::store::Store;
 
@@ -94,16 +99,33 @@ async fn main() {
 
     let s = AppState::from(&path, &config_path).unwrap();
 
+    tracing_subscriber::fmt::init();
+
+    let sensitive_headers : Arc<[_]> = vec![header::AUTHORIZATION, header::COOKIE].into();
+
+    let stack = ServiceBuilder::new()
+        .sensitive_request_headers(sensitive_headers.clone())
+        .layer(TimeoutLayer::new(Duration::from_secs(20)))
+        .compression()
+    ;
+
+    let token = std::env::var("API_AUTH_TOKEN").expect("API_AUTH_TOKEN Environment variable is NOT SET.");
+
+    let authenticated = stack.clone().layer(ValidateRequestHeaderLayer::bearer(&token));
+
+
     let server = Router::new()
-        .route("/:server_id/enable", patch(routes::enable))
-        .route("/:server_id/disable", patch(routes::disable))
+        .route("/:server_id/enable", patch(routes::enable).layer(authenticated.clone()))
+        .route("/:server_id/disable", patch(routes::disable).layer(authenticated.clone()))
         .route("/:server_id", get(routes::get_server))
-        .route("/", post(routes::create_server))
+        .route("/", post(routes::create_server).layer(authenticated.clone()))
         ;
 
     let user = Router::new()
         .route("/:user_id", get(routes::get_user))
-        .route("/", post(routes::create_user))
+        .route("/", post(routes::create_user)
+            .layer(authenticated.clone())
+        )
         ;
 
     let auth = Router::new()
@@ -112,6 +134,7 @@ async fn main() {
         .route("/session", get(routes::get_session))
         .route("/changepw", patch(routes::changepw))
         .route("/", post(routes::create_account))
+        .layer(authenticated)
         ;
 
     let app = Router::new()
@@ -122,7 +145,10 @@ async fn main() {
         .nest("/server", server)
         .nest("/user", user)
         .nest("/auth", auth)
-        .with_state(s);
+        .with_state(s)
+        .layer(stack)
+        .layer(TraceLayer::new_for_http())
+        ;
 
     let addr = SocketAddr::from(([127,0,0,1], 8080));
     
