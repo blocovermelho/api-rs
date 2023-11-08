@@ -63,7 +63,7 @@ impl Store {
     pub fn has_valid_session(&self, user: &User, ip: &Ipv4Addr, when: DateTime<Utc>) -> bool {
         match self.get_account(&user.uuid) {
             Some(acc) => {
-                let diff = when - acc.last_login;
+                let diff = when - acc.last_login.unwrap_or(when);
                 acc.previous_ips.contains(ip) && diff.num_minutes() < 10
             }
             None => false,
@@ -71,7 +71,7 @@ impl Store {
     }
 
     pub fn invalidate_session(&mut self, account: &mut Account) -> bool {
-        account.last_login = DateTime::UNIX_EPOCH;
+        account.last_login = None;
 
         self.update_account(account.clone())
     }

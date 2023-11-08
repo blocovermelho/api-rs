@@ -29,7 +29,7 @@ pub struct Account {
     pub password: String,
     #[serde(skip_serializing, skip_deserializing)]
     pub current_join: DateTime<Utc>,
-    pub last_login: DateTime<Utc>,
+    pub last_login: Option<DateTime<Utc>>,
     pub previous_ips: HashSet<Ipv4Addr>,
 }
 

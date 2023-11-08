@@ -227,7 +227,7 @@ pub async fn logoff(
 
     user.playtime.insert(server_id, current_duration + duration);
 
-    account.last_login = now;
+    account.last_login = Some(now);
     account.previous_ips.insert(session.ip);
 
     data.update_account(account);
@@ -297,7 +297,7 @@ pub async fn create_account(
         uuid: user.uuid,
         password: hash,
         current_join: chrono::offset::Utc::now(),
-        last_login: chrono::offset::Utc::now(),
+        last_login: Some(chrono::offset::Utc::now()),
         previous_ips: ips,
     };
 
