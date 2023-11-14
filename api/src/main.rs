@@ -47,7 +47,8 @@ pub struct AppState {
     path: Option<PathBuf>,
     config: Arc<Mutex<Config>>,
     config_path: Option<PathBuf>,
-    reqwest_client: Arc<Mutex<Client>>
+    reqwest_client: Arc<Mutex<Client>>,
+    chs: Arc<Channels>,
 }
 
 impl AppState {
@@ -57,7 +58,8 @@ impl AppState {
             path,
             config: Arc::new(Mutex::new(config)),
             config_path,
-            reqwest_client: Arc::new(Mutex::new(Client::new()))
+            reqwest_client: Arc::new(Mutex::new(Client::new())),
+            chs: Arc::new(Channels::new()),
         }
     }
 
@@ -67,7 +69,8 @@ impl AppState {
             path: None,
             config: Arc::new(Mutex::new(Config::empty())),
             config_path: None,
-            reqwest_client: Arc::new(Mutex::new(Client::new()))
+            reqwest_client: Arc::new(Mutex::new(Client::new())),
+            chs: Arc::new(Channels::new()),
         }
     }
 
@@ -77,7 +80,8 @@ impl AppState {
             path: Some(path),
             config: Arc::new(Mutex::new(Config::empty())),
             config_path: Some(config_path),
-            reqwest_client: Arc::new(Mutex::new(Client::new()))
+            reqwest_client: Arc::new(Mutex::new(Client::new())),
+            chs: Arc::new(Channels::new()),
         }
     }
 
