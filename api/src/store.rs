@@ -14,7 +14,7 @@ pub struct Store {
     accounts: HashMap<Uuid, Account>,
     servers: HashMap<Uuid, Server>,
     current_attempts: HashMap<Uuid, i32>,
-    current_links: HashMap<String, Uuid>,
+    current_nonces: HashMap<String, Uuid>,
 }
 
 impl Store {
@@ -24,7 +24,7 @@ impl Store {
             accounts: HashMap::new(),
             servers: HashMap::new(),
             current_attempts: HashMap::new(),
-            current_links: HashMap::new(),
+            current_nonces: HashMap::new(),
         }
     }
 
@@ -156,24 +156,24 @@ impl Store {
 
         match current {
             Some(k) => {
-                self.current_links.remove(&k);
-                self.current_links.insert(nonce, uuid);
+                self.current_nonces.remove(&k);
+                self.current_nonces.insert(nonce, uuid);
             },
             None => {
-                self.current_links.insert(nonce, uuid);
+                self.current_nonces.insert(nonce, uuid);
             },
         }
     }
 
     pub fn get_nonce_for(&self, uuid: &Uuid) -> Option<String> {
-        self.current_links.iter().find(|(_,x) | x == &uuid).map(|x| x.0.to_owned())
+        self.current_nonces.iter().find(|(_,x) | x == &uuid).map(|x| x.0.to_owned())
     }
 
     pub fn get_uuid_from_nonce(&self, nonce: &String) -> Option<&Uuid> {
-        self.current_links.get(nonce)
+        self.current_nonces.get(nonce)
     }
 
     pub fn drop_nonce(&mut self, nonce: &String) {
-        self.current_links.remove(nonce);
+        self.current_nonces.remove(nonce);
     }
 }
