@@ -377,7 +377,7 @@ pub struct LinkQueryParams {
 
 #[derive(Deserialize)]
 pub struct UuidQueryParam {
-    uuid: Uuid
+    pub uuid: Uuid
 }
 
 #[derive(Serialize, Clone, Debug)]
