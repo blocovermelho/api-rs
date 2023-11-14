@@ -10,6 +10,8 @@ use axum::{
     Router,
 };
 
+use bus::OneshotBus;
+use routes::LinkResult;
 use tokio::sync::Mutex;
 
 use oauth::models::Config;
@@ -18,6 +20,7 @@ use tower::ServiceBuilder;
 use tower_http::validate_request::ValidateRequestHeaderLayer;
 use tower_http::{ServiceBuilderExt, timeout::TimeoutLayer};
 use tower_http::trace::TraceLayer;
+use uuid::Uuid;
 
 use crate::store::Store;
 
@@ -25,6 +28,18 @@ pub mod bus;
 pub mod models;
 pub mod routes;
 pub mod store;
+
+struct Channels {
+    links: OneshotBus<Uuid, LinkResult>,
+}
+
+impl Channels {
+    fn new() -> Self {
+        Self {
+            links: OneshotBus::new(),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct AppState {
