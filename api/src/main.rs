@@ -28,6 +28,7 @@ pub mod bus;
 pub mod models;
 pub mod routes;
 pub mod store;
+pub mod websocket;
 
 struct Channels {
     links: OneshotBus<Uuid, LinkResult>,
