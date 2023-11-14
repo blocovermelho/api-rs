@@ -378,7 +378,7 @@ pub struct UuidQueryParam {
     uuid: Uuid
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone, Debug)]
 pub struct LinkResult {
     pub discord_id: String,
     pub discord_username: String,
