@@ -37,14 +37,16 @@ pub async fn link(
     let on_discord = oauth::routes::get_guild(&reqwest_client, &token, &cfg).await.map_err(|_| StatusCode::BAD_REQUEST)?;
     let time = chrono::offset::Utc::now() - on_discord.joined_at;
 
-    Ok(Json(LinkResult {
+    let result = LinkResult {
         discord_id: on_discord.user.id,
         discord_username: on_discord.user.username,
         is_joined: time.num_days() >= 7,
         minecraft_uuid: uuid,
-    }))
+    };
 
+    let _ = state.chs.links.send(uuid, result.clone()).await;
 
+    Ok(Json(result))
 } 
 
 /// [GET] /api/oauth?uuid=<ID>
