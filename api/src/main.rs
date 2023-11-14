@@ -154,6 +154,7 @@ async fn main() {
         .route("/:server_id/login", post(routes::login))
         .route("/session", get(routes::get_session))
         .route("/changepw", patch(routes::changepw))
+        .route("/ws", get(websocket::handle_socket))
         .route("/", post(routes::create_account))
         .layer(authenticated)
         ;
