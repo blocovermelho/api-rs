@@ -1,5 +1,8 @@
-use std::{collections::{HashMap, HashSet}, net::Ipv4Addr, time::Duration};
-
+use std::{
+    collections::{HashMap, HashSet},
+    net::Ipv4Addr,
+    time::Duration,
+};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -13,7 +16,7 @@ pub struct User {
     pub pronouns: Vec<String>,
     pub last_server: Option<Uuid>,
     pub last_pos: HashMap<Uuid, Pos>,
-    pub playtime: HashMap<Uuid, Duration>
+    pub playtime: HashMap<Uuid, Duration>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -42,7 +45,7 @@ impl From<CreateUser> for User {
             pronouns: vec![],
             last_server: None,
             last_pos: HashMap::new(),
-            playtime: HashMap::new()
+            playtime: HashMap::new(),
         }
     }
 }
