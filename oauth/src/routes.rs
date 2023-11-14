@@ -1,20 +1,22 @@
-use oauth2::{basic::{BasicClient, BasicTokenResponse}, url::ParseError, AuthUrl, ClientId, ClientSecret, TokenUrl, RedirectUrl, CsrfToken, Scope, TokenResponse};
+use oauth2::{
+    basic::{BasicClient, BasicTokenResponse},
+    url::ParseError,
+    AuthUrl, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope, TokenResponse, TokenUrl,
+};
 use reqwest::Client;
 
-use crate::models::{Config, User, Member};
+use crate::models::{Config, Member, User};
 
 pub const BASE_URI: &'static str = "https://discord.com/api";
 
 pub fn get_client(config: Config) -> Result<BasicClient, ParseError> {
-    Ok(
-        BasicClient::new(
-            ClientId::new(config.client_id),
-            Some(ClientSecret::new(config.client_secret)),
-            AuthUrl::new(format!("{}{}", BASE_URI, "/oauth2/authorize"))?,
-            Some(TokenUrl::new(format!("{}{}", BASE_URI, "/oauth2/token"))?),
-        )
-        .set_redirect_uri(RedirectUrl::new(config.redirect_url)?)
+    Ok(BasicClient::new(
+        ClientId::new(config.client_id),
+        Some(ClientSecret::new(config.client_secret)),
+        AuthUrl::new(format!("{}{}", BASE_URI, "/oauth2/authorize"))?,
+        Some(TokenUrl::new(format!("{}{}", BASE_URI, "/oauth2/token"))?),
     )
+    .set_redirect_uri(RedirectUrl::new(config.redirect_url)?))
 }
 
 pub fn authorize(client: &BasicClient) -> oauth2::AuthorizationRequest<'_> {
@@ -24,7 +26,11 @@ pub fn authorize(client: &BasicClient) -> oauth2::AuthorizationRequest<'_> {
         .add_scope(Scope::new("guilds.members.read".to_string()))
 }
 
-pub async fn get_guild(client: &Client, token: &BasicTokenResponse, config: &Config) -> Result<Member, reqwest::Error> {
+pub async fn get_guild(
+    client: &Client,
+    token: &BasicTokenResponse,
+    config: &Config,
+) -> Result<Member, reqwest::Error> {
     let req = client
         .get(BASE_URI.to_owned() + "/users/@me/guilds/" + &config.guild_id + "/member")
         .bearer_auth(token.access_token().secret())

@@ -158,15 +158,18 @@ impl Store {
             Some(k) => {
                 self.current_nonces.remove(&k);
                 self.current_nonces.insert(nonce, uuid);
-            },
+            }
             None => {
                 self.current_nonces.insert(nonce, uuid);
-            },
+            }
         }
     }
 
     pub fn get_nonce_for(&self, uuid: &Uuid) -> Option<String> {
-        self.current_nonces.iter().find(|(_,x) | x == &uuid).map(|x| x.0.to_owned())
+        self.current_nonces
+            .iter()
+            .find(|(_, x)| x == &uuid)
+            .map(|x| x.0.to_owned())
     }
 
     pub fn get_uuid_from_nonce(&self, nonce: &String) -> Option<&Uuid> {

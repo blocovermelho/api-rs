@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 
-use oauth2::{AuthorizationCode, reqwest::async_http_client};
+use oauth2::{reqwest::async_http_client, AuthorizationCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -18,23 +18,31 @@ use crate::{
 
 /// [GET] /api/link?state=<>&code=<>
 pub async fn link(
-    State(state) : State<AppState>,
-    Query(link) : Query<LinkQueryParams>
-) -> Result<Json<LinkResult>, StatusCode>{
-
+    State(state): State<AppState>,
+    Query(link): Query<LinkQueryParams>,
+) -> Result<Json<LinkResult>, StatusCode> {
     let mut data = state.data.lock().await;
-    let uuid = data.get_uuid_from_nonce(&link.state).ok_or(StatusCode::NOT_FOUND)?.clone();
+    let uuid = data
+        .get_uuid_from_nonce(&link.state)
+        .ok_or(StatusCode::NOT_FOUND)?
+        .clone();
 
     data.drop_nonce(&link.state);
-    
-    let cfg = state.config.lock().await;
-    let client = oauth::routes::get_client(cfg.clone()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let response = client.exchange_code(AuthorizationCode::new(link.code)).request_async(async_http_client).await;
+    let cfg = state.config.lock().await;
+    let client =
+        oauth::routes::get_client(cfg.clone()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let response = client
+        .exchange_code(AuthorizationCode::new(link.code))
+        .request_async(async_http_client)
+        .await;
     let token = response.map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     let reqwest_client = state.reqwest_client.lock().await;
-    let on_discord = oauth::routes::get_guild(&reqwest_client, &token, &cfg).await.map_err(|_| StatusCode::BAD_REQUEST)?;
+    let on_discord = oauth::routes::get_guild(&reqwest_client, &token, &cfg)
+        .await
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
     let time = chrono::offset::Utc::now() - on_discord.joined_at;
 
     let result = LinkResult {
@@ -47,19 +55,20 @@ pub async fn link(
     let _ = state.chs.links.send(uuid, result.clone()).await;
 
     Ok(Json(result))
-} 
+}
 
 /// [GET] /api/oauth?uuid=<ID>
 pub async fn discord(
-    State(state) : State<AppState>,
-    Query(uuid) : Query<UuidQueryParam>
+    State(state): State<AppState>,
+    Query(uuid): Query<UuidQueryParam>,
 ) -> Result<Json<String>, StatusCode> {
     let mut data = state.data.lock().await;
     let cfg = state.config.lock().await;
 
-    let client = oauth::routes::get_client(cfg.clone()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let client =
+        oauth::routes::get_client(cfg.clone()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let (url,token) = oauth::routes::authorize(&client).url();
+    let (url, token) = oauth::routes::authorize(&client).url();
 
     data.add_nonce(token.secret().clone(), uuid.uuid);
 
@@ -130,7 +139,6 @@ pub async fn create_server(
     let server = Server::from(stub);
 
     if data.add_server(server.clone()) {
-
         state
             .flush(&data)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -147,12 +155,15 @@ pub async fn enable(
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<bool>, StatusCode> {
     let mut data = state.data.lock().await;
-    let mut server = data.get_server(&server_id).ok_or(StatusCode::NOT_FOUND)?.clone();
+    let mut server = data
+        .get_server(&server_id)
+        .ok_or(StatusCode::NOT_FOUND)?
+        .clone();
 
     server.available = true;
 
     data.update_server(server);
-    
+
     state
         .flush(&data)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -166,12 +177,15 @@ pub async fn disable(
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<bool>, StatusCode> {
     let mut data = state.data.lock().await;
-    let mut server = data.get_server(&server_id).ok_or(StatusCode::NOT_FOUND)?.clone();
+    let mut server = data
+        .get_server(&server_id)
+        .ok_or(StatusCode::NOT_FOUND)?
+        .clone();
 
     server.available = false;
 
     data.update_server(server);
-    
+
     state
         .flush(&data)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -377,7 +391,7 @@ pub struct LinkQueryParams {
 
 #[derive(Deserialize)]
 pub struct UuidQueryParam {
-    pub uuid: Uuid
+    pub uuid: Uuid,
 }
 
 #[derive(Serialize, Clone, Debug)]
