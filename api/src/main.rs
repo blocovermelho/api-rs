@@ -21,6 +21,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::store::Store;
 
+pub mod bus;
 pub mod models;
 pub mod routes;
 pub mod store;
