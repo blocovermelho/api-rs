@@ -380,8 +380,8 @@ pub struct UuidQueryParam {
 
 #[derive(Serialize)]
 pub struct LinkResult {
-    discord_id: String,
-    discord_username: String,
-    is_joined: bool,
-    minecraft_uuid: Uuid,
+    pub discord_id: String,
+    pub discord_username: String,
+    pub is_joined: bool,
+    pub minecraft_uuid: Uuid,
 }
