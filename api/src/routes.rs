@@ -260,17 +260,19 @@ pub async fn logoff(
     Path(server_id): Path<Uuid>,
     Query(session): Query<SessionQueryParams>,
     Json(pos): Json<Pos>,
-) -> Result<Json<bool>, StatusCode> {
+) -> Res<bool> {
     let mut data = state.data.lock().await;
 
-    let server = data.get_server(&server_id).ok_or(StatusCode::NOT_FOUND)?;
+    let server = data
+        .get_server(&server_id)
+        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
     let mut user = data
         .get_user(&session.uuid)
-        .ok_or(StatusCode::NOT_FOUND)?
+        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?
         .clone();
     let mut account = data
         .get_account(&user.uuid)
-        .ok_or(StatusCode::NOT_FOUND)?
+        .ok_or(ErrKind::NotFound(Err::new("Account not found.")))?
         .clone();
 
     user.last_server = Some(server.uuid);
@@ -283,9 +285,9 @@ pub async fn logoff(
         .get(&server_id)
         .unwrap_or(&Duration::default())
         .to_owned();
-    let duration = (now - account.current_join)
-        .to_std()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let duration = (now - account.current_join).to_std().map_err(|e| {
+        ErrKind::Internal(Err::new("Negative duration while calculating playtime.").with_inner(e))
+    })?;
 
     user.playtime.insert(server_id, current_duration + duration);
 
@@ -297,7 +299,7 @@ pub async fn logoff(
 
     state
         .flush(&data)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| ErrKind::Internal(Err::new("Couldn't flush data for User.").with_inner(e)))?;
 
     Ok(Json(true))
 }
