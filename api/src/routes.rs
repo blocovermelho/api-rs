@@ -6,6 +6,7 @@ use axum::{
     Json,
 };
 
+use chrono::{DateTime, Utc};
 use oauth2::{reqwest::async_http_client, AuthorizationCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -48,7 +49,7 @@ pub async fn link(
     let result = LinkResult {
         discord_id: on_discord.user.id,
         discord_username: on_discord.user.username,
-        is_joined: time.num_days() >= 7,
+        when: on_discord.joined_at,
         minecraft_uuid: uuid,
     };
 
@@ -426,6 +427,6 @@ pub struct UuidQueryParam {
 pub struct LinkResult {
     pub discord_id: String,
     pub discord_username: String,
-    pub is_joined: bool,
+    pub when: DateTime<Utc>,
     pub minecraft_uuid: Uuid,
 }
