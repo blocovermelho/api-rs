@@ -233,9 +233,11 @@ pub async fn disable(State(state): State<AppState>, Path(server_id): Path<Uuid>)
 pub async fn get_session(
     State(state): State<AppState>,
     Query(session): Query<SessionQueryParams>,
-) -> Result<Json<bool>, StatusCode> {
+) -> Res<bool> {
     let data = state.data.lock().await;
-    let user = data.get_user(&session.uuid).ok_or(StatusCode::NOT_FOUND)?;
+    let user = data
+        .get_user(&session.uuid)
+        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
 
     Ok(Json(data.has_valid_session(
         user,
