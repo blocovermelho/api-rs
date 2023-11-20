@@ -264,11 +264,18 @@ pub async fn logoff(
     Ok(Json(true))
 }
 
-/// [POST] /api/auth/:server_id/login?uuid=<ID>&ip=<IP>&password=<pass>
+/// [POST] /api/auth/:server_id/login
+/// ```json
+/// {
+///     "uuid": "743a0a05-8929-4383-a564-edc983ea0231",
+///     "ip": "127.0.0.1",
+///     "pass": "password123"
+/// }
+/// ```
 pub async fn login(
     State(state): State<AppState>,
     Path(server_id): Path<Uuid>,
-    Query(session): Query<AuthenticationQueryParams>,
+    Json(session): Json<AuthenticationQueryParams>,
 ) -> Result<Json<bool>, StatusCode> {
     let mut data = state.data.lock().await;
 
@@ -304,10 +311,17 @@ pub async fn login(
     }
 }
 
-/// [POST] /api/auth?uuid=<uuid>&ip=<ip>&pass=<pass>
+/// [POST] /api/auth
+/// ```json
+/// {
+///     "uuid": "<uuid>",
+///     "ip": "<ip>",
+///     "pass": "<pass>"
+/// }
+/// ```
 pub async fn create_account(
     State(state): State<AppState>,
-    Query(session): Query<AuthenticationQueryParams>,
+    Json(session): Json<AuthenticationQueryParams>,
 ) -> Result<Json<bool>, StatusCode> {
     let mut data = state.data.lock().await;
     let hash =
@@ -334,10 +348,16 @@ pub async fn create_account(
     Ok(Json(result))
 }
 
-/// [PATCH] /api/auth/changepw?uuid=<uuid>&ip=<ip>&old=<pass>&new=<pass>
+/// [PATCH] /api/auth/changepw
+/// ```json
+///     "uuid": "<uuid>"
+///     "ip": "<ip>"
+///     "old": "<old password>"
+///     "new": "<new password>"
+/// ```
 pub async fn changepw(
     State(state): State<AppState>,
-    Query(session): Query<ChangePasswordQueryParams>,
+    Json(session): Json<ChangePasswordQueryParams>,
 ) -> Result<Json<bool>, StatusCode> {
     let mut data = state.data.lock().await;
 
