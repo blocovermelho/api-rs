@@ -163,12 +163,11 @@ pub async fn get_servers(State(state): State<AppState>) -> Res<Vec<Server>> {
 }
 
 /// [GET] /api/server/:server_id
-pub async fn get_server(
-    State(state): State<AppState>,
-    Path(server_id): Path<Uuid>,
-) -> Result<Json<Server>, StatusCode> {
+pub async fn get_server(State(state): State<AppState>, Path(server_id): Path<Uuid>) -> Res<Server> {
     let data = state.data.lock().await;
-    let server = data.get_server(&server_id).ok_or(StatusCode::NOT_FOUND)?;
+    let server = data
+        .get_server(&server_id)
+        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
     Ok(Json(server.to_owned()))
 }
 
