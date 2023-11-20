@@ -211,23 +211,20 @@ pub async fn enable(State(state): State<AppState>, Path(server_id): Path<Uuid>) 
 }
 
 /// [PATCH] /api/server/:server_id/disable
-pub async fn disable(
-    State(state): State<AppState>,
-    Path(server_id): Path<Uuid>,
-) -> Result<Json<bool>, StatusCode> {
+pub async fn disable(State(state): State<AppState>, Path(server_id): Path<Uuid>) -> Res<bool> {
     let mut data = state.data.lock().await;
     let mut server = data
         .get_server(&server_id)
-        .ok_or(StatusCode::NOT_FOUND)?
+        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?
         .clone();
 
     server.available = false;
 
     data.update_server(server);
 
-    state
-        .flush(&data)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state.flush(&data).map_err(|e| {
+        ErrKind::Internal(Err::new("Couldn't flush data for Server.").with_inner(e))
+    })?;
 
     Ok(Json(true))
 }
