@@ -124,7 +124,7 @@ pub async fn discord(
 }
 
 /// [GET] /api/users
-pub async fn get_users(State(state): State<AppState>) -> Result<Json<Vec<User>>, StatusCode> {
+pub async fn get_users(State(state): State<AppState>) -> Res<Vec<User>> {
     let data = state.data.lock().await;
     Ok(Json(data.get_users()))
 }
