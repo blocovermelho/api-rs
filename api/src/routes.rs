@@ -130,16 +130,14 @@ pub async fn get_users(State(state): State<AppState>) -> Res<Vec<User>> {
 }
 
 /// [GET] /api/user/:user_id
-pub async fn get_user(
-    State(state): State<AppState>,
-    Path(user_id): Path<Uuid>,
-) -> Result<Json<User>, StatusCode> {
+pub async fn get_user(State(state): State<AppState>, Path(user_id): Path<Uuid>) -> Res<User> {
     let data = state.data.lock().await;
 
-    return match data.get_user(&user_id) {
-        Some(u) => Ok(Json(u.clone())),
-        None => Err(StatusCode::NOT_FOUND),
-    };
+    let u = data
+        .get_user(&user_id)
+        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
+
+    Ok(Json(u.clone()))
 }
 
 /// [POST] /api/user
