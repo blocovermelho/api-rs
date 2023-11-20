@@ -3,6 +3,7 @@ use std::{collections::HashSet, net::Ipv4Addr, time::Duration};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
+    response::IntoResponse,
     Json,
 };
 
@@ -34,6 +35,22 @@ impl Err {
     pub fn with_inner(&mut self, inner: impl ToString) -> Self {
         self.inner = Some(inner.to_string());
         self.clone()
+    }
+}
+
+pub enum ErrKind {
+    NotFound(Err),
+    Internal(Err),
+    BadRequest(Err),
+}
+
+impl IntoResponse for ErrKind {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            ErrKind::NotFound(e) => (StatusCode::NOT_FOUND, Json(e)).into_response(),
+            ErrKind::Internal(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(e)).into_response(),
+            ErrKind::BadRequest(e) => (StatusCode::BAD_REQUEST, Json(e)).into_response(),
+        }
     }
 }
 
