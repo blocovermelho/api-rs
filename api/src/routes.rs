@@ -316,24 +316,31 @@ pub async fn login(
     State(state): State<AppState>,
     Path(server_id): Path<Uuid>,
     Json(session): Json<AuthenticationQueryParams>,
-) -> Result<Json<bool>, StatusCode> {
+) -> Res<bool> {
     let mut data = state.data.lock().await;
 
-    let _ = data.get_server(&server_id).ok_or(StatusCode::NOT_FOUND)?;
-    let user = data.get_user(&session.uuid).ok_or(StatusCode::NOT_FOUND)?;
+    let server = data
+        .get_server(&server_id)
+        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
+    let mut user = data
+        .get_user(&session.uuid)
+        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?
+        .clone();
     let mut account = data
         .get_account(&user.uuid)
-        .ok_or(StatusCode::NOT_FOUND)?
+        .ok_or(ErrKind::NotFound(Err::new("Account not found.")))?
         .clone();
 
-    let password =
-        bcrypt::verify(session.password, &account.password).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let password = bcrypt::verify(session.password, &account.password)
+        .map_err(|e| ErrKind::Internal(Err::new(format!("BCrypt Error.")).with_inner(e)))?;
 
     if !password {
         let count = data.wrong_password(&account);
 
         if count >= MAX_ATTEMPTS_PER_ACC {
-            Err(StatusCode::UNAUTHORIZED)
+            Err(ErrKind::BadRequest(Err::new(
+                "Exhausted MAX_ATTEMPTS for this account.",
+            )))
         } else {
             Ok(Json(false))
         }
@@ -343,9 +350,9 @@ pub async fn login(
         account.current_join = chrono::offset::Utc::now();
         data.update_account(account);
 
-        state
-            .flush(&data)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        state.flush(&data).map_err(|e| {
+            ErrKind::Internal(Err::new("Couldn't flush data for User.").with_inner(e))
+        })?;
 
         Ok(Json(true))
     }
