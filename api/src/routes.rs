@@ -17,6 +17,26 @@ use crate::{
     AppState,
 };
 
+#[derive(Serialize, Clone)]
+pub struct Err {
+    pub error: String,
+    pub inner: Option<String>,
+}
+
+impl Err {
+    pub fn new(message: impl ToString) -> Self {
+        Self {
+            error: message.to_string(),
+            inner: None,
+        }
+    }
+
+    pub fn with_inner(&mut self, inner: impl ToString) -> Self {
+        self.inner = Some(inner.to_string());
+        self.clone()
+    }
+}
+
 /// [GET] /api/link?state=<>&code=<>
 pub async fn link(
     State(state): State<AppState>,
