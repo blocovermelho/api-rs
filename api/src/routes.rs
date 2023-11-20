@@ -157,7 +157,7 @@ pub async fn create_user(State(state): State<AppState>, Json(stub): Json<CreateU
 }
 
 /// [GET] /api/servers
-pub async fn get_servers(State(state): State<AppState>) -> Result<Json<Vec<Server>>, StatusCode> {
+pub async fn get_servers(State(state): State<AppState>) -> Res<Vec<Server>> {
     let data = state.data.lock().await;
     Ok(Json(data.get_servers()))
 }
