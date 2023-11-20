@@ -175,19 +175,19 @@ pub async fn get_server(State(state): State<AppState>, Path(server_id): Path<Uui
 pub async fn create_server(
     State(state): State<AppState>,
     Json(stub): Json<CreateServer>,
-) -> Result<Json<Server>, StatusCode> {
+) -> Res<Server> {
     let mut data = state.data.lock().await;
 
     let server = Server::from(stub);
 
     if data.add_server(server.clone()) {
-        state
-            .flush(&data)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        state.flush(&data).map_err(|e| {
+            ErrKind::Internal(Err::new("Couldn't flush data for Server.").with_inner(e))
+        })?;
 
         Ok(Json(server))
     } else {
-        Err(StatusCode::INTERNAL_SERVER_ERROR)
+        Err(ErrKind::BadRequest(Err::new("Server already exists.")))
     }
 }
 
