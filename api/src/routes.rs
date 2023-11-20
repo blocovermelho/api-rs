@@ -60,30 +60,37 @@ impl IntoResponse for ErrKind {
 pub async fn link(
     State(state): State<AppState>,
     Query(link): Query<LinkQueryParams>,
-) -> Result<Json<LinkResult>, StatusCode> {
+) -> Res<LinkResult> {
     let mut data = state.data.lock().await;
     let uuid = data
         .get_uuid_from_nonce(&link.state)
-        .ok_or(StatusCode::NOT_FOUND)?
+        .ok_or(ErrKind::NotFound(Err::new(
+            "Tried getting an user that hasn't started linking yet.",
+        )))?
         .clone();
 
     data.drop_nonce(&link.state);
 
     let cfg = state.config.lock().await;
-    let client =
-        oauth::routes::get_client(cfg.clone()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let client = oauth::routes::get_client(cfg.clone()).map_err(|e| {
+        ErrKind::Internal(Err::new("Error while getting a BasicClient").with_inner(e))
+    })?;
 
     let response = client
         .exchange_code(AuthorizationCode::new(link.code))
         .request_async(async_http_client)
         .await;
-    let token = response.map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    let token = response.map_err(|e| {
+        ErrKind::Internal(Err::new("Couldn't exchange the code for a discord user.").with_inner(e))
+    })?;
 
     let reqwest_client = state.reqwest_client.lock().await;
     let on_discord = oauth::routes::get_guild(&reqwest_client, &token, &cfg)
         .await
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
-    let time = chrono::offset::Utc::now() - on_discord.joined_at;
+        .map_err(|e| {
+            ErrKind::Internal(Err::new("Provided discord User didn't had a valid Guild Member object. Are you on the discord guild?").with_inner(e))
+        })?;
 
     let result = LinkResult {
         discord_id: on_discord.user.id,
