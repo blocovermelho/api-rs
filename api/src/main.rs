@@ -165,6 +165,7 @@ async fn main() {
         );
 
     let user = Router::new()
+        .route("/exists", get(routes::user_exists))
         .route("/:user_id", get(routes::get_user))
         .route("/", post(routes::create_user).layer(authenticated.clone()));
 

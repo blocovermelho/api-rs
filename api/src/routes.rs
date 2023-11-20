@@ -140,6 +140,14 @@ pub async fn get_user(State(state): State<AppState>, Path(user_id): Path<Uuid>) 
     Ok(Json(u.clone()))
 }
 
+/// [GET] /api/user/exists?uuid=<uuid>
+pub async fn user_exists(State(state): State<AppState>, Query(user_id): Query<UuidQueryParam>) -> Res<bool> {
+    let data = state.data.lock().await;
+    let user = data.get_user(&user_id.uuid);
+
+    Ok(Json(user.is_some()))
+}
+
 /// [POST] /api/user
 pub async fn create_user(State(state): State<AppState>, Json(stub): Json<CreateUser>) -> Res<User> {
     let mut data = state.data.lock().await;
