@@ -209,6 +209,14 @@ pub async fn get_session(
 }
 
 /// [POST] /api/auth/:server_id/logoff?uuid=<ID>&ip=<IP>
+/// ```json
+/// {
+///     "x": 0,
+///     "z": 0,
+///     "y": 64,
+///     "dim": "minecraft:overworld"
+/// }
+/// ```
 pub async fn logoff(
     State(state): State<AppState>,
     Path(server_id): Path<Uuid>,
