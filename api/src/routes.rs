@@ -3,9 +3,11 @@ use std::{collections::HashSet, net::Ipv4Addr, time::Duration};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
+    response::IntoResponse,
     Json,
 };
 
+use chrono::{DateTime, Utc};
 use oauth2::{reqwest::async_http_client, AuthorizationCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -16,39 +18,84 @@ use crate::{
     AppState,
 };
 
+pub type Res<T> = Result<Json<T>, ErrKind>;
+
+#[derive(Serialize, Clone)]
+pub struct Err {
+    pub error: String,
+    pub inner: Option<String>,
+}
+
+impl Err {
+    pub fn new(message: impl ToString) -> Self {
+        Self {
+            error: message.to_string(),
+            inner: None,
+        }
+    }
+
+    pub fn with_inner(&mut self, inner: impl ToString) -> Self {
+        self.inner = Some(inner.to_string());
+        self.clone()
+    }
+}
+
+pub enum ErrKind {
+    NotFound(Err),
+    Internal(Err),
+    BadRequest(Err),
+}
+
+impl IntoResponse for ErrKind {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            ErrKind::NotFound(e) => (StatusCode::NOT_FOUND, Json(e)).into_response(),
+            ErrKind::Internal(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(e)).into_response(),
+            ErrKind::BadRequest(e) => (StatusCode::BAD_REQUEST, Json(e)).into_response(),
+        }
+    }
+}
+
 /// [GET] /api/link?state=<>&code=<>
 pub async fn link(
     State(state): State<AppState>,
     Query(link): Query<LinkQueryParams>,
-) -> Result<Json<LinkResult>, StatusCode> {
+) -> Res<LinkResult> {
     let mut data = state.data.lock().await;
     let uuid = data
         .get_uuid_from_nonce(&link.state)
-        .ok_or(StatusCode::NOT_FOUND)?
+        .ok_or(ErrKind::NotFound(Err::new(
+            "Tried getting an user that hasn't started linking yet.",
+        )))?
         .clone();
 
     data.drop_nonce(&link.state);
 
     let cfg = state.config.lock().await;
-    let client =
-        oauth::routes::get_client(cfg.clone()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let client = oauth::routes::get_client(cfg.clone()).map_err(|e| {
+        ErrKind::Internal(Err::new("Error while getting a BasicClient").with_inner(e))
+    })?;
 
     let response = client
         .exchange_code(AuthorizationCode::new(link.code))
         .request_async(async_http_client)
         .await;
-    let token = response.map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    let token = response.map_err(|e| {
+        ErrKind::Internal(Err::new("Couldn't exchange the code for a discord user.").with_inner(e))
+    })?;
 
     let reqwest_client = state.reqwest_client.lock().await;
     let on_discord = oauth::routes::get_guild(&reqwest_client, &token, &cfg)
         .await
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
-    let time = chrono::offset::Utc::now() - on_discord.joined_at;
+        .map_err(|e| {
+            ErrKind::Internal(Err::new("Provided discord User didn't had a valid Guild Member object. Are you on the discord guild?").with_inner(e))
+        })?;
 
     let result = LinkResult {
         discord_id: on_discord.user.id,
         discord_username: on_discord.user.username,
-        is_joined: time.num_days() >= 7,
+        when: on_discord.joined_at,
         minecraft_uuid: uuid,
     };
 
@@ -61,12 +108,13 @@ pub async fn link(
 pub async fn discord(
     State(state): State<AppState>,
     Query(uuid): Query<UuidQueryParam>,
-) -> Result<Json<String>, StatusCode> {
+) -> Res<String> {
     let mut data = state.data.lock().await;
     let cfg = state.config.lock().await;
 
-    let client =
-        oauth::routes::get_client(cfg.clone()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let client = oauth::routes::get_client(cfg.clone()).map_err(|e| {
+        ErrKind::Internal(Err::new("Error while getting a BasicClient").with_inner(e))
+    })?;
 
     let (url, token) = oauth::routes::authorize(&client).url();
 
@@ -76,56 +124,50 @@ pub async fn discord(
 }
 
 /// [GET] /api/users
-pub async fn get_users(State(state): State<AppState>) -> Result<Json<Vec<User>>, StatusCode> {
+pub async fn get_users(State(state): State<AppState>) -> Res<Vec<User>> {
     let data = state.data.lock().await;
     Ok(Json(data.get_users()))
 }
 
 /// [GET] /api/user/:user_id
-pub async fn get_user(
-    State(state): State<AppState>,
-    Path(user_id): Path<Uuid>,
-) -> Result<Json<User>, StatusCode> {
+pub async fn get_user(State(state): State<AppState>, Path(user_id): Path<Uuid>) -> Res<User> {
     let data = state.data.lock().await;
 
-    return match data.get_user(&user_id) {
-        Some(u) => Ok(Json(u.clone())),
-        None => Err(StatusCode::NOT_FOUND),
-    };
+    let u = data
+        .get_user(&user_id)
+        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
+
+    Ok(Json(u.clone()))
 }
 
 /// [POST] /api/user
-pub async fn create_user(
-    State(state): State<AppState>,
-    Json(stub): Json<CreateUser>,
-) -> Result<Json<User>, StatusCode> {
+pub async fn create_user(State(state): State<AppState>, Json(stub): Json<CreateUser>) -> Res<User> {
     let mut data = state.data.lock().await;
     let user = User::from(stub);
 
     if data.add_user(user.clone()) {
-        state
-            .flush(&data)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        state.flush(&data).map_err(|e| {
+            ErrKind::Internal(Err::new("Couldn't flush the data for this user.").with_inner(e))
+        })?;
 
         Ok(Json(user))
     } else {
-        Err(StatusCode::IM_USED)
+        Err(ErrKind::BadRequest(Err::new("This user already exists.")))
     }
 }
 
 /// [GET] /api/servers
-pub async fn get_servers(State(state): State<AppState>) -> Result<Json<Vec<Server>>, StatusCode> {
+pub async fn get_servers(State(state): State<AppState>) -> Res<Vec<Server>> {
     let data = state.data.lock().await;
     Ok(Json(data.get_servers()))
 }
 
 /// [GET] /api/server/:server_id
-pub async fn get_server(
-    State(state): State<AppState>,
-    Path(server_id): Path<Uuid>,
-) -> Result<Json<Server>, StatusCode> {
+pub async fn get_server(State(state): State<AppState>, Path(server_id): Path<Uuid>) -> Res<Server> {
     let data = state.data.lock().await;
-    let server = data.get_server(&server_id).ok_or(StatusCode::NOT_FOUND)?;
+    let server = data
+        .get_server(&server_id)
+        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
     Ok(Json(server.to_owned()))
 }
 
@@ -133,62 +175,56 @@ pub async fn get_server(
 pub async fn create_server(
     State(state): State<AppState>,
     Json(stub): Json<CreateServer>,
-) -> Result<Json<Server>, StatusCode> {
+) -> Res<Server> {
     let mut data = state.data.lock().await;
 
     let server = Server::from(stub);
 
     if data.add_server(server.clone()) {
-        state
-            .flush(&data)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        state.flush(&data).map_err(|e| {
+            ErrKind::Internal(Err::new("Couldn't flush data for Server.").with_inner(e))
+        })?;
 
         Ok(Json(server))
     } else {
-        Err(StatusCode::INTERNAL_SERVER_ERROR)
+        Err(ErrKind::BadRequest(Err::new("Server already exists.")))
     }
 }
 
 /// [PATCH] /api/server/:server_id/enable
-pub async fn enable(
-    State(state): State<AppState>,
-    Path(server_id): Path<Uuid>,
-) -> Result<Json<bool>, StatusCode> {
+pub async fn enable(State(state): State<AppState>, Path(server_id): Path<Uuid>) -> Res<bool> {
     let mut data = state.data.lock().await;
     let mut server = data
         .get_server(&server_id)
-        .ok_or(StatusCode::NOT_FOUND)?
+        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?
         .clone();
 
     server.available = true;
 
     data.update_server(server);
 
-    state
-        .flush(&data)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state.flush(&data).map_err(|e| {
+        ErrKind::Internal(Err::new("Couldn't flush data for Server.").with_inner(e))
+    })?;
 
     Ok(Json(true))
 }
 
 /// [PATCH] /api/server/:server_id/disable
-pub async fn disable(
-    State(state): State<AppState>,
-    Path(server_id): Path<Uuid>,
-) -> Result<Json<bool>, StatusCode> {
+pub async fn disable(State(state): State<AppState>, Path(server_id): Path<Uuid>) -> Res<bool> {
     let mut data = state.data.lock().await;
     let mut server = data
         .get_server(&server_id)
-        .ok_or(StatusCode::NOT_FOUND)?
+        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?
         .clone();
 
     server.available = false;
 
     data.update_server(server);
 
-    state
-        .flush(&data)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state.flush(&data).map_err(|e| {
+        ErrKind::Internal(Err::new("Couldn't flush data for Server.").with_inner(e))
+    })?;
 
     Ok(Json(true))
 }
@@ -197,9 +233,11 @@ pub async fn disable(
 pub async fn get_session(
     State(state): State<AppState>,
     Query(session): Query<SessionQueryParams>,
-) -> Result<Json<bool>, StatusCode> {
+) -> Res<bool> {
     let data = state.data.lock().await;
-    let user = data.get_user(&session.uuid).ok_or(StatusCode::NOT_FOUND)?;
+    let user = data
+        .get_user(&session.uuid)
+        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
 
     Ok(Json(data.has_valid_session(
         user,
@@ -222,17 +260,19 @@ pub async fn logoff(
     Path(server_id): Path<Uuid>,
     Query(session): Query<SessionQueryParams>,
     Json(pos): Json<Pos>,
-) -> Result<Json<bool>, StatusCode> {
+) -> Res<bool> {
     let mut data = state.data.lock().await;
 
-    let server = data.get_server(&server_id).ok_or(StatusCode::NOT_FOUND)?;
+    let server = data
+        .get_server(&server_id)
+        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
     let mut user = data
         .get_user(&session.uuid)
-        .ok_or(StatusCode::NOT_FOUND)?
+        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?
         .clone();
     let mut account = data
         .get_account(&user.uuid)
-        .ok_or(StatusCode::NOT_FOUND)?
+        .ok_or(ErrKind::NotFound(Err::new("Account not found.")))?
         .clone();
 
     user.last_server = Some(server.uuid);
@@ -245,9 +285,9 @@ pub async fn logoff(
         .get(&server_id)
         .unwrap_or(&Duration::default())
         .to_owned();
-    let duration = (now - account.current_join)
-        .to_std()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let duration = (now - account.current_join).to_std().map_err(|e| {
+        ErrKind::Internal(Err::new("Negative duration while calculating playtime.").with_inner(e))
+    })?;
 
     user.playtime.insert(server_id, current_duration + duration);
 
@@ -259,7 +299,7 @@ pub async fn logoff(
 
     state
         .flush(&data)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| ErrKind::Internal(Err::new("Couldn't flush data for User.").with_inner(e)))?;
 
     Ok(Json(true))
 }
@@ -276,24 +316,31 @@ pub async fn login(
     State(state): State<AppState>,
     Path(server_id): Path<Uuid>,
     Json(session): Json<AuthenticationQueryParams>,
-) -> Result<Json<bool>, StatusCode> {
+) -> Res<bool> {
     let mut data = state.data.lock().await;
 
-    let _ = data.get_server(&server_id).ok_or(StatusCode::NOT_FOUND)?;
-    let user = data.get_user(&session.uuid).ok_or(StatusCode::NOT_FOUND)?;
+    let server = data
+        .get_server(&server_id)
+        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
+    let mut user = data
+        .get_user(&session.uuid)
+        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?
+        .clone();
     let mut account = data
         .get_account(&user.uuid)
-        .ok_or(StatusCode::NOT_FOUND)?
+        .ok_or(ErrKind::NotFound(Err::new("Account not found.")))?
         .clone();
 
-    let password =
-        bcrypt::verify(session.password, &account.password).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let password = bcrypt::verify(session.password, &account.password)
+        .map_err(|e| ErrKind::Internal(Err::new(format!("BCrypt Error.")).with_inner(e)))?;
 
     if !password {
         let count = data.wrong_password(&account);
 
         if count >= MAX_ATTEMPTS_PER_ACC {
-            Err(StatusCode::UNAUTHORIZED)
+            Err(ErrKind::BadRequest(Err::new(
+                "Exhausted MAX_ATTEMPTS for this account.",
+            )))
         } else {
             Ok(Json(false))
         }
@@ -303,9 +350,9 @@ pub async fn login(
         account.current_join = chrono::offset::Utc::now();
         data.update_account(account);
 
-        state
-            .flush(&data)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        state.flush(&data).map_err(|e| {
+            ErrKind::Internal(Err::new("Couldn't flush data for User.").with_inner(e))
+        })?;
 
         Ok(Json(true))
     }
@@ -322,12 +369,15 @@ pub async fn login(
 pub async fn create_account(
     State(state): State<AppState>,
     Json(session): Json<AuthenticationQueryParams>,
-) -> Result<Json<bool>, StatusCode> {
+) -> Res<bool> {
     let mut data = state.data.lock().await;
-    let hash =
-        bcrypt::hash(&session.password, 12).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let user = data
+        .get_user(&session.uuid)
+        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
 
-    let user = data.get_user(&session.uuid).ok_or(StatusCode::NOT_FOUND)?;
+    let hash = bcrypt::hash(&session.password, 12)
+        .map_err(|e| ErrKind::Internal(Err::new("BCrypt Error.").with_inner(e)))?;
+
     let mut ips = HashSet::new();
     ips.insert(session.ip);
 
@@ -343,7 +393,7 @@ pub async fn create_account(
 
     state
         .flush(&data)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| ErrKind::Internal(Err::new("Couldn't flush data for User.").with_inner(e)))?;
 
     Ok(Json(result))
 }
@@ -358,33 +408,35 @@ pub async fn create_account(
 pub async fn changepw(
     State(state): State<AppState>,
     Json(session): Json<ChangePasswordQueryParams>,
-) -> Result<Json<bool>, StatusCode> {
+) -> Res<bool> {
     let mut data = state.data.lock().await;
 
     let mut acc = data
         .get_account(&session.uuid)
-        .ok_or(StatusCode::NOT_FOUND)?
+        .ok_or(ErrKind::NotFound(Err::new("Account not found.")))?
         .clone();
-    let matches =
-        bcrypt::verify(session.old, &acc.password).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let matches = bcrypt::verify(session.old, &acc.password)
+        .map_err(|e| ErrKind::Internal(Err::new("BCrypt Error.").with_inner(e)))?;
 
     if matches {
         data.correct_password(&acc);
-        acc.password =
-            bcrypt::hash(session.new, 12).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        acc.password = bcrypt::hash(session.new, 12)
+            .map_err(|e| ErrKind::Internal(Err::new("BCrypt Error.").with_inner(e)))?;
 
         data.invalidate_session(&mut acc);
 
-        state
-            .flush(&data)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        state.flush(&data).map_err(|e| {
+            ErrKind::Internal(Err::new("Couldn't flush data for User.").with_inner(e))
+        })?;
 
         Ok(Json(data.update_account(acc)))
     } else {
         let count = data.wrong_password(&acc);
 
         if count >= MAX_ATTEMPTS_PER_ACC {
-            Err(StatusCode::UNAUTHORIZED)
+            Err(ErrKind::BadRequest(Err::new(
+                "Exhausted MAX_ATTEMPTS for this account.",
+            )))
         } else {
             Ok(Json(false))
         }
@@ -426,6 +478,6 @@ pub struct UuidQueryParam {
 pub struct LinkResult {
     pub discord_id: String,
     pub discord_username: String,
-    pub is_joined: bool,
+    pub when: DateTime<Utc>,
     pub minecraft_uuid: Uuid,
 }
