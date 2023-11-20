@@ -369,12 +369,15 @@ pub async fn login(
 pub async fn create_account(
     State(state): State<AppState>,
     Json(session): Json<AuthenticationQueryParams>,
-) -> Result<Json<bool>, StatusCode> {
+) -> Res<bool> {
     let mut data = state.data.lock().await;
-    let hash =
-        bcrypt::hash(&session.password, 12).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let user = data
+        .get_user(&session.uuid)
+        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
 
-    let user = data.get_user(&session.uuid).ok_or(StatusCode::NOT_FOUND)?;
+    let hash = bcrypt::hash(&session.password, 12)
+        .map_err(|e| ErrKind::Internal(Err::new("BCrypt Error.").with_inner(e)))?;
+
     let mut ips = HashSet::new();
     ips.insert(session.ip);
 
@@ -390,7 +393,7 @@ pub async fn create_account(
 
     state
         .flush(&data)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| ErrKind::Internal(Err::new("Couldn't flush data for User.").with_inner(e)))?;
 
     Ok(Json(result))
 }
