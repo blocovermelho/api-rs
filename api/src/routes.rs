@@ -108,12 +108,13 @@ pub async fn link(
 pub async fn discord(
     State(state): State<AppState>,
     Query(uuid): Query<UuidQueryParam>,
-) -> Result<Json<String>, StatusCode> {
+) -> Res<String> {
     let mut data = state.data.lock().await;
     let cfg = state.config.lock().await;
 
-    let client =
-        oauth::routes::get_client(cfg.clone()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let client = oauth::routes::get_client(cfg.clone()).map_err(|e| {
+        ErrKind::Internal(Err::new("Error while getting a BasicClient").with_inner(e))
+    })?;
 
     let (url, token) = oauth::routes::authorize(&client).url();
 
