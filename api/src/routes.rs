@@ -149,7 +149,7 @@ pub async fn create_server(
     }
 }
 
-/// [POST] /api/server/:server_id/enable
+/// [PATCH] /api/server/:server_id/enable
 pub async fn enable(
     State(state): State<AppState>,
     Path(server_id): Path<Uuid>,
@@ -171,7 +171,7 @@ pub async fn enable(
     Ok(Json(true))
 }
 
-/// [POST] /api/server/:server_id/disable
+/// [PATCH] /api/server/:server_id/disable
 pub async fn disable(
     State(state): State<AppState>,
     Path(server_id): Path<Uuid>,
