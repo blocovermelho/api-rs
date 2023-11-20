@@ -141,21 +141,18 @@ pub async fn get_user(State(state): State<AppState>, Path(user_id): Path<Uuid>) 
 }
 
 /// [POST] /api/user
-pub async fn create_user(
-    State(state): State<AppState>,
-    Json(stub): Json<CreateUser>,
-) -> Result<Json<User>, StatusCode> {
+pub async fn create_user(State(state): State<AppState>, Json(stub): Json<CreateUser>) -> Res<User> {
     let mut data = state.data.lock().await;
     let user = User::from(stub);
 
     if data.add_user(user.clone()) {
-        state
-            .flush(&data)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        state.flush(&data).map_err(|e| {
+            ErrKind::Internal(Err::new("Couldn't flush the data for this user.").with_inner(e))
+        })?;
 
         Ok(Json(user))
     } else {
-        Err(StatusCode::IM_USED)
+        Err(ErrKind::BadRequest(Err::new("This user already exists.")))
     }
 }
 
