@@ -18,6 +18,8 @@ use crate::{
     AppState,
 };
 
+pub type Res<T> = Result<Json<T>, ErrKind>;
+
 #[derive(Serialize, Clone)]
 pub struct Err {
     pub error: String,
