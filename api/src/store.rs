@@ -100,6 +100,10 @@ impl Store {
         }
     }
 
+    pub fn drop_server(&mut self, uuid: &Uuid) -> Option<Server> {
+        self.servers.remove(uuid)
+    }
+
     pub fn add_account(&mut self, account: Account) -> bool {
         match self.get_account(&account.uuid) {
             Some(_) => false,
