@@ -190,6 +190,17 @@ pub async fn get_server(State(state): State<AppState>, Path(server_id): Path<Uui
     Ok(Json(server.to_owned()))
 }
 
+/// [DELETE] /api/server/:user_id
+pub async fn delete_server(State(state): State<AppState>, Path(user): Path<Uuid>) -> Res<Server> {
+    let mut data = state.data.lock().await;
+
+    let u = data
+        .drop_server(&user)
+        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
+
+    Ok(Json(u))
+}
+
 /// [POST] /api/server
 pub async fn create_server(
     State(state): State<AppState>,

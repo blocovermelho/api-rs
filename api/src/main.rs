@@ -6,7 +6,7 @@ use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
 
 use axum::{
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post},
     Router,
 };
 
@@ -159,6 +159,10 @@ async fn main() {
             patch(routes::disable).layer(authenticated.clone()),
         )
         .route("/:server_id", get(routes::get_server))
+        .route(
+            "/:server_id",
+            delete(routes::delete_server).layer(authenticated.clone()),
+        )
         .route(
             "/",
             post(routes::create_server).layer(authenticated.clone()),
