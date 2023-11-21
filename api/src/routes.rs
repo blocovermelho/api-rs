@@ -141,7 +141,10 @@ pub async fn get_user(State(state): State<AppState>, Path(user_id): Path<Uuid>) 
 }
 
 /// [GET] /api/user/exists?uuid=<uuid>
-pub async fn user_exists(State(state): State<AppState>, Query(user_id): Query<UuidQueryParam>) -> Res<bool> {
+pub async fn user_exists(
+    State(state): State<AppState>,
+    Query(user_id): Query<UuidQueryParam>,
+) -> Res<bool> {
     let data = state.data.lock().await;
     let user = data.get_user(&user_id.uuid);
 
