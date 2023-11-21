@@ -428,6 +428,17 @@ pub async fn create_account(
     Ok(Json(result))
 }
 
+/// [DELETE] /api/auth/:user_id
+pub async fn delete_account(State(state): State<AppState>, Path(user): Path<Uuid>) -> Res<bool> {
+    let mut data = state.data.lock().await;
+
+    let _ = data
+        .drop_account(&user)
+        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
+
+    Ok(Json(true))
+}
+
 /// [PATCH] /api/auth/changepw
 /// ```json
 ///     "uuid": "<uuid>"

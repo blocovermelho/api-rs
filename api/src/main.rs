@@ -180,6 +180,7 @@ async fn main() {
     let auth = Router::new()
         .route("/:server_id/logoff", post(routes::logoff))
         .route("/:server_id/login", post(routes::login))
+        .route("/:user_id", delete(routes::delete_account))
         .route("/session", get(routes::get_session))
         .route("/changepw", patch(routes::changepw))
         .route("/ws", get(websocket::handle_socket))
