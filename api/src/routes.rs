@@ -148,6 +148,17 @@ pub async fn user_exists(State(state): State<AppState>, Query(user_id): Query<Uu
     Ok(Json(user.is_some()))
 }
 
+/// [DELETE] /api/user/:user_id
+pub async fn delete_user(State(state): State<AppState>, Path(user): Path<Uuid>) -> Res<User> {
+    let mut data = state.data.lock().await;
+
+    let u = data
+        .drop_user(&user)
+        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
+
+    Ok(Json(u))
+}
+
 /// [POST] /api/user
 pub async fn create_user(State(state): State<AppState>, Json(stub): Json<CreateUser>) -> Res<User> {
     let mut data = state.data.lock().await;
