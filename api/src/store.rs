@@ -86,6 +86,10 @@ impl Store {
         }
     }
 
+    pub fn drop_user(&mut self, uuid: &Uuid) -> Option<User> {
+        self.users.remove(uuid)
+    }
+
     pub fn add_server(&mut self, server: Server) -> bool {
         match self.get_server(&server.uuid) {
             Some(_) => false,
