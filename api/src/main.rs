@@ -6,7 +6,7 @@ use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
 
 use axum::{
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post},
     Router,
 };
 
@@ -160,6 +160,10 @@ async fn main() {
         )
         .route("/:server_id", get(routes::get_server))
         .route(
+            "/:server_id",
+            delete(routes::delete_server).layer(authenticated.clone()),
+        )
+        .route(
             "/",
             post(routes::create_server).layer(authenticated.clone()),
         );
@@ -167,11 +171,16 @@ async fn main() {
     let user = Router::new()
         .route("/exists", get(routes::user_exists))
         .route("/:user_id", get(routes::get_user))
+        .route(
+            "/:user_id",
+            delete(routes::delete_user).layer(authenticated.clone()),
+        )
         .route("/", post(routes::create_user).layer(authenticated.clone()));
 
     let auth = Router::new()
         .route("/:server_id/logoff", post(routes::logoff))
         .route("/:server_id/login", post(routes::login))
+        .route("/:user_id", delete(routes::delete_account))
         .route("/session", get(routes::get_session))
         .route("/changepw", patch(routes::changepw))
         .route("/ws", get(websocket::handle_socket))

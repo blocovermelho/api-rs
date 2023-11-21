@@ -148,6 +148,17 @@ pub async fn user_exists(State(state): State<AppState>, Query(user_id): Query<Uu
     Ok(Json(user.is_some()))
 }
 
+/// [DELETE] /api/user/:user_id
+pub async fn delete_user(State(state): State<AppState>, Path(user): Path<Uuid>) -> Res<User> {
+    let mut data = state.data.lock().await;
+
+    let u = data
+        .drop_user(&user)
+        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
+
+    Ok(Json(u))
+}
+
 /// [POST] /api/user
 pub async fn create_user(State(state): State<AppState>, Json(stub): Json<CreateUser>) -> Res<User> {
     let mut data = state.data.lock().await;
@@ -177,6 +188,17 @@ pub async fn get_server(State(state): State<AppState>, Path(server_id): Path<Uui
         .get_server(&server_id)
         .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
     Ok(Json(server.to_owned()))
+}
+
+/// [DELETE] /api/server/:user_id
+pub async fn delete_server(State(state): State<AppState>, Path(user): Path<Uuid>) -> Res<Server> {
+    let mut data = state.data.lock().await;
+
+    let u = data
+        .drop_server(&user)
+        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
+
+    Ok(Json(u))
 }
 
 /// [POST] /api/server
@@ -404,6 +426,17 @@ pub async fn create_account(
         .map_err(|e| ErrKind::Internal(Err::new("Couldn't flush data for User.").with_inner(e)))?;
 
     Ok(Json(result))
+}
+
+/// [DELETE] /api/auth/:user_id
+pub async fn delete_account(State(state): State<AppState>, Path(user): Path<Uuid>) -> Res<bool> {
+    let mut data = state.data.lock().await;
+
+    let _ = data
+        .drop_account(&user)
+        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
+
+    Ok(Json(true))
 }
 
 /// [PATCH] /api/auth/changepw

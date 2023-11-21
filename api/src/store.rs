@@ -86,6 +86,10 @@ impl Store {
         }
     }
 
+    pub fn drop_user(&mut self, uuid: &Uuid) -> Option<User> {
+        self.users.remove(uuid)
+    }
+
     pub fn add_server(&mut self, server: Server) -> bool {
         match self.get_server(&server.uuid) {
             Some(_) => false,
@@ -96,6 +100,10 @@ impl Store {
         }
     }
 
+    pub fn drop_server(&mut self, uuid: &Uuid) -> Option<Server> {
+        self.servers.remove(uuid)
+    }
+
     pub fn add_account(&mut self, account: Account) -> bool {
         match self.get_account(&account.uuid) {
             Some(_) => false,
@@ -104,6 +112,10 @@ impl Store {
                 true
             }
         }
+    }
+
+    pub fn drop_account(&mut self, uuid: &Uuid) -> Option<Account> {
+        self.accounts.remove(uuid)
     }
 
     pub fn update_user(&mut self, user: User) -> bool {
