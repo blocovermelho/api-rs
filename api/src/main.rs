@@ -178,6 +178,7 @@ async fn main() {
         .route("/", post(routes::create_user).layer(authenticated.clone()));
 
     let auth = Router::new()
+        .route("/exists", get(routes::account_exists))
         .route("/:server_id/logoff", post(routes::logoff))
         .route("/:server_id/login", post(routes::login))
         .route("/:user_id", delete(routes::delete_account))

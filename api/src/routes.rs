@@ -388,6 +388,16 @@ pub async fn login(
     }
 }
 
+/// [GET] /auth/exists?uuid=<uuid>
+pub async fn account_exists(
+    State(state): State<AppState>,
+    Query(account): Query<UuidQueryParam>,
+) -> Res<bool> {
+    let data = state.data.lock().await;
+
+    Ok(Json(data.get_account(&account.uuid).is_some()))
+}
+
 /// [POST] /api/auth
 /// ```json
 /// {
