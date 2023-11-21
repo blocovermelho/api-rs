@@ -114,6 +114,10 @@ impl Store {
         }
     }
 
+    pub fn drop_account(&mut self, uuid: &Uuid) -> Option<Account> {
+        self.accounts.remove(uuid)
+    }
+
     pub fn update_user(&mut self, user: User) -> bool {
         match self.get_user(&user.uuid) {
             Some(a) => {
