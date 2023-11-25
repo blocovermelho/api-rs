@@ -3,6 +3,7 @@ use std::{collections::HashMap, net::Ipv4Addr};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use traits::json::JsonSync;
 
 use crate::models::{Account, Server, User};
 
@@ -17,17 +18,29 @@ pub struct Store {
     current_nonces: HashMap<String, Uuid>,
 }
 
-impl Store {
-    pub fn new() -> Store {
-        Store {
+impl JsonSync for Store {
+    type T = Self;
+
+    fn new() -> Self::T {
+        Self {
             users: HashMap::new(),
             accounts: HashMap::new(),
             servers: HashMap::new(),
             current_attempts: HashMap::new(),
-            current_nonces: HashMap::new(),
+            current_nonces: HashMap::new()
         }
     }
 
+    fn is_empty(this: &Self::T) -> bool {
+        this.users.is_empty() &&
+        this.accounts.is_empty() &&
+        this.servers.is_empty() &&
+        this.current_attempts.is_empty() &&
+        this.current_nonces.is_empty()
+    }
+}
+
+impl Store {
     pub fn get_user(&self, id: &Uuid) -> Option<&User> {
         self.users.get(id)
     }
