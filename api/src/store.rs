@@ -2,8 +2,8 @@ use std::{collections::HashMap, net::Ipv4Addr};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use traits::json::JsonSync;
+use uuid::Uuid;
 
 use crate::models::{Account, Server, User};
 
@@ -27,16 +27,16 @@ impl JsonSync for Store {
             accounts: HashMap::new(),
             servers: HashMap::new(),
             current_attempts: HashMap::new(),
-            current_nonces: HashMap::new()
+            current_nonces: HashMap::new(),
         }
     }
 
     fn is_empty(this: &Self::T) -> bool {
-        this.users.is_empty() &&
-        this.accounts.is_empty() &&
-        this.servers.is_empty() &&
-        this.current_attempts.is_empty() &&
-        this.current_nonces.is_empty()
+        this.users.is_empty()
+            && this.accounts.is_empty()
+            && this.servers.is_empty()
+            && this.current_attempts.is_empty()
+            && this.current_nonces.is_empty()
     }
 }
 

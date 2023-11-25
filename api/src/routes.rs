@@ -159,9 +159,9 @@ pub async fn delete_user(State(state): State<AppState>, Path(user): Path<Uuid>) 
         .drop_user(&user)
         .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
 
-    state.flush(&data).map_err(|e| {
-        ErrKind::Internal(Err::new("Couldn't flush data for User").with_inner(e))
-    })?;
+    state
+        .flush(&data)
+        .map_err(|e| ErrKind::Internal(Err::new("Couldn't flush data for User").with_inner(e)))?;
 
     Ok(Json(u))
 }
@@ -205,9 +205,9 @@ pub async fn delete_server(State(state): State<AppState>, Path(user): Path<Uuid>
         .drop_server(&user)
         .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
 
-    state.flush(&data).map_err(|e| {
-        ErrKind::Internal(Err::new("Couldn't flush data for Server").with_inner(e))
-    })?;
+    state
+        .flush(&data)
+        .map_err(|e| ErrKind::Internal(Err::new("Couldn't flush data for Server").with_inner(e)))?;
 
     Ok(Json(u))
 }
