@@ -1,6 +1,3 @@
-use std::fs::File;
-use std::io::prelude::*;
-
 use std::net::SocketAddr;
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
@@ -54,38 +51,11 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn load(
-        store: Store,
-        path: Option<PathBuf>,
-        config: Config,
-        config_path: Option<PathBuf>,
-    ) -> AppState {
+    pub fn load(path: PathBuf, store: Store, config_path: PathBuf, config: Config) -> AppState {
         AppState {
             data: Arc::new(Mutex::new(store)),
-            path,
-            config: Arc::new(Mutex::new(config)),
-            config_path,
-            reqwest_client: Arc::new(Mutex::new(Client::new())),
-            chs: Arc::new(Channels::new()),
-        }
-    }
-
-    pub fn new() -> AppState {
-        AppState {
-            data: Arc::new(Mutex::new(Store::new())),
-            path: None,
-            config: Arc::new(Mutex::new(Config::empty())),
-            config_path: None,
-            reqwest_client: Arc::new(Mutex::new(Client::new())),
-            chs: Arc::new(Channels::new()),
-        }
-    }
-
-    pub fn file(path: PathBuf, config_path: PathBuf) -> AppState {
-        AppState {
-            data: Arc::new(Mutex::new(Store::new())),
             path: Some(path),
-            config: Arc::new(Mutex::new(Config::empty())),
+            config: Arc::new(Mutex::new(config)),
             config_path: Some(config_path),
             reqwest_client: Arc::new(Mutex::new(Client::new())),
             chs: Arc::new(Channels::new()),
@@ -97,33 +67,9 @@ impl AppState {
             .path
             .clone()
             .expect("Cannot flush state without a path");
-        let str = serde_json::to_string_pretty(data)?;
-        std::fs::write(path, str)?;
+        Store::to_file(data, &path)?;
 
         Ok(())
-    }
-
-    pub fn from(path: &PathBuf, config_path: &PathBuf) -> std::io::Result<AppState> {
-        let mut file = File::open(path)?;
-        let mut str = String::new();
-
-        file.read_to_string(&mut str)?;
-
-        let state = serde_json::from_str(&str)?;
-
-        str = String::new();
-
-        file = File::open(config_path)?;
-        file.read_to_string(&mut str)?;
-
-        let config = serde_json::from_str(&str)?;
-
-        Ok(AppState::load(
-            state,
-            Some(path.to_owned()),
-            config,
-            Some(config_path.to_owned()),
-        ))
     }
 }
 
