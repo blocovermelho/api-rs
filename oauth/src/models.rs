@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use traits::json::JsonSync;
 
 #[derive(Deserialize)]
 pub struct Member {
@@ -21,13 +22,19 @@ pub struct Config {
     pub guild_id: String,
 }
 
-impl Config {
-    pub fn empty() -> Self {
+impl JsonSync for Config {
+    type T = Self;
+
+    fn new() -> Self::T {
         Self {
             client_id: "".to_owned(),
             client_secret: "".to_owned(),
             redirect_url: "".to_owned(),
             guild_id: "".to_owned(),
         }
+    }
+
+    fn is_empty(this: &Self::T) -> bool {
+        this.client_id.is_empty() && this.client_secret.is_empty()
     }
 }
