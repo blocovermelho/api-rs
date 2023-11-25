@@ -20,6 +20,7 @@ use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tower_http::validate_request::ValidateRequestHeaderLayer;
 use tower_http::{timeout::TimeoutLayer, ServiceBuilderExt};
+use traits::json::JsonSync;
 use uuid::Uuid;
 
 use crate::store::Store;
@@ -131,7 +132,20 @@ async fn main() {
     let path = ["data.json"].iter().collect();
     let config_path = ["config.json"].iter().collect();
 
-    let s = AppState::from(&path, &config_path).unwrap();
+    let store = Store::from_file_or_default(&path);
+    let config = Config::from_file_or_default(&config_path);
+
+    if Store::is_empty(&store) {
+        Store::to_file(&store, &path).expect("Error happened while saving store to file.");
+    }
+
+    if Config::is_empty(&config) {
+        Config::to_file(&config, &config_path)
+            .expect("Error happened while saving config to file.");
+        panic!("Please change the configuration file on {:?}.", config_path)
+    }
+
+    let s = AppState::load(path, store, config_path, config);
 
     tracing_subscriber::fmt::init();
 
