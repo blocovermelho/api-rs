@@ -10,6 +10,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use oauth2::{reqwest::async_http_client, AuthorizationCode};
 use serde::{Deserialize, Serialize};
+use serenity::all::{GuildId, RoleId, UserId};
 use uuid::Uuid;
 
 use crate::{
@@ -287,6 +288,34 @@ pub async fn get_session(
     )))
 }
 
+/// [PATCH] /api/auth/:player_id/resume
+pub async fn resume(
+    State(state) : State<AppState>,
+    Path(player_id): Path<Uuid>,
+) -> Res<bool> {
+    let mut data = state.data.lock().await;
+    let cfg = state.config.lock().await;
+    let client = state.discord_client.clone();
+    let mut p = data.get_account(&player_id).ok_or(ErrKind::NotFound(Err::new("Account not found.")))?.clone();
+    let u = data.get_user(&player_id).ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
+
+    p.current_join = chrono::offset::Utc::now();
+
+    let _ = client
+        .http
+        .add_member_role(
+            GuildId::new(cfg.guild_id.parse().unwrap()),
+            UserId::new(u.discord_id.parse().unwrap()),
+            RoleId::new(cfg.role_id.parse().unwrap()),
+            None,
+        )
+        .await;
+
+    data.update_account(p);
+
+    Ok(Json(true))
+}
+
 /// [POST] /api/auth/:server_id/logoff?uuid=<ID>&ip=<IP>
 /// ```json
 /// {
@@ -303,6 +332,8 @@ pub async fn logoff(
     Json(pos): Json<Pos>,
 ) -> Res<bool> {
     let mut data = state.data.lock().await;
+    let cfg = state.config.lock().await;
+    let client = state.discord_client.clone();
 
     let server = data
         .get_server(&server_id)
@@ -335,6 +366,16 @@ pub async fn logoff(
     account.last_login = Some(now);
     account.previous_ips.insert(session.ip);
 
+    let req = client
+        .http
+        .remove_member_role(
+            GuildId::new(cfg.guild_id.parse().unwrap()),
+            UserId::new(user.discord_id.parse().unwrap()),
+            RoleId::new(cfg.role_id.parse().unwrap()),
+            None,
+        )
+        .await;
+
     data.update_account(account);
     data.update_user(user);
 
@@ -359,6 +400,8 @@ pub async fn login(
     Json(session): Json<AuthenticationQueryParams>,
 ) -> Res<bool> {
     let mut data = state.data.lock().await;
+    let cfg = state.config.lock().await;
+    let client = state.discord_client.clone();
 
     let server = data
         .get_server(&server_id)
@@ -390,6 +433,16 @@ pub async fn login(
 
         account.current_join = chrono::offset::Utc::now();
         data.update_account(account);
+
+        let _ = client
+            .http
+            .add_member_role(
+                GuildId::new(cfg.guild_id.parse().unwrap()),
+                UserId::new(user.discord_id.parse().unwrap()),
+                RoleId::new(cfg.role_id.parse().unwrap()),
+                None,
+            )
+            .await;
 
         state.flush(&data).map_err(|e| {
             ErrKind::Internal(Err::new("Couldn't flush data for User.").with_inner(e))

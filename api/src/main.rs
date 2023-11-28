@@ -9,6 +9,7 @@ use axum::{
 
 use bus::OneshotBus;
 use routes::LinkResult;
+use serenity::all::GatewayIntents;
 use tokio::sync::Mutex;
 
 use oauth::models::Config;
@@ -47,11 +48,12 @@ pub struct AppState {
     config: Arc<Mutex<Config>>,
     config_path: Option<PathBuf>,
     reqwest_client: Arc<Mutex<Client>>,
+    discord_client: Arc<serenity::Client>,
     chs: Arc<Channels>,
 }
 
 impl AppState {
-    pub fn load(path: PathBuf, store: Store, config_path: PathBuf, config: Config) -> AppState {
+    pub fn load(path: PathBuf, store: Store, config_path: PathBuf, config: Config, client: serenity::Client) -> AppState {
         AppState {
             data: Arc::new(Mutex::new(store)),
             path: Some(path),
@@ -59,6 +61,7 @@ impl AppState {
             config_path: Some(config_path),
             reqwest_client: Arc::new(Mutex::new(Client::new())),
             chs: Arc::new(Channels::new()),
+            discord_client: Arc::new(client)
         }
     }
 
@@ -91,7 +94,12 @@ async fn main() {
         panic!("Please change the configuration file on {:?}.", config_path)
     }
 
-    let s = AppState::load(path, store, config_path, config);
+
+    let token = std::env::var("DISCORD_BOT_TOKEN").expect("Expected a discord bot token in path.");
+
+    let client = serenity::Client::builder(&token, GatewayIntents::GUILD_MODERATION).await.expect("Error while building client");
+
+    let s = AppState::load(path, store, config_path, config, client);
 
     tracing_subscriber::fmt::init();
 
@@ -142,6 +150,7 @@ async fn main() {
         .route("/:server_id/logoff", post(routes::logoff))
         .route("/:server_id/login", post(routes::login))
         .route("/:user_id", delete(routes::delete_account))
+        .route("/:user_id/resume", patch(routes::resume))
         .route("/session", get(routes::get_session))
         .route("/changepw", patch(routes::changepw))
         .route("/ws", get(websocket::handle_socket))
