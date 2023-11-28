@@ -10,6 +10,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use oauth2::{reqwest::async_http_client, AuthorizationCode};
 use serde::{Deserialize, Serialize};
+use serenity::all::{GuildId, RoleId, UserId};
 use uuid::Uuid;
 
 use crate::{
@@ -293,9 +294,22 @@ pub async fn resume(
     Path(player_id): Path<Uuid>,
 ) -> Res<bool> {
     let mut data = state.data.lock().await;
+    let cfg = state.config.lock().await;
+    let client = state.discord_client.clone();
     let mut p = data.get_account(&player_id).ok_or(ErrKind::NotFound(Err::new("Account not found.")))?.clone();
+    let u = data.get_user(&player_id).ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
 
     p.current_join = chrono::offset::Utc::now();
+
+    let _ = client
+        .http
+        .add_member_role(
+            GuildId::new(cfg.guild_id.parse().unwrap()),
+            UserId::new(u.discord_id.parse().unwrap()),
+            RoleId::new(cfg.role_id.parse().unwrap()),
+            None,
+        )
+        .await;
 
     data.update_account(p);
 
