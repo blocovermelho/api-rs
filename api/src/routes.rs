@@ -287,6 +287,21 @@ pub async fn get_session(
     )))
 }
 
+/// [PATCH] /api/auth/:player_id/resume
+pub async fn resume(
+    State(state) : State<AppState>,
+    Path(player_id): Path<Uuid>,
+) -> Res<bool> {
+    let mut data = state.data.lock().await;
+    let mut p = data.get_account(&player_id).ok_or(ErrKind::NotFound(Err::new("Account not found.")))?.clone();
+
+    p.current_join = chrono::offset::Utc::now();
+
+    data.update_account(p);
+
+    Ok(Json(true))
+}
+
 /// [POST] /api/auth/:server_id/logoff?uuid=<ID>&ip=<IP>
 /// ```json
 /// {
