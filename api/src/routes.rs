@@ -332,6 +332,8 @@ pub async fn logoff(
     Json(pos): Json<Pos>,
 ) -> Res<bool> {
     let mut data = state.data.lock().await;
+    let cfg = state.config.lock().await;
+    let client = state.discord_client.clone();
 
     let server = data
         .get_server(&server_id)
@@ -363,6 +365,16 @@ pub async fn logoff(
 
     account.last_login = Some(now);
     account.previous_ips.insert(session.ip);
+
+    let req = client
+        .http
+        .remove_member_role(
+            GuildId::new(cfg.guild_id.parse().unwrap()),
+            UserId::new(user.discord_id.parse().unwrap()),
+            RoleId::new(cfg.role_id.parse().unwrap()),
+            None,
+        )
+        .await;
 
     data.update_account(account);
     data.update_user(user);
