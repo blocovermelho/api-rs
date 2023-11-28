@@ -20,6 +20,7 @@ pub struct Config {
     pub client_secret: String,
     pub redirect_url: String,
     pub guild_id: String,
+    pub role_id: String,
 }
 
 impl JsonSync for Config {
@@ -31,6 +32,7 @@ impl JsonSync for Config {
             client_secret: "".to_owned(),
             redirect_url: "".to_owned(),
             guild_id: "".to_owned(),
+            role_id: "".to_owned()
         }
     }
 
