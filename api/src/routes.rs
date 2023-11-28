@@ -400,6 +400,8 @@ pub async fn login(
     Json(session): Json<AuthenticationQueryParams>,
 ) -> Res<bool> {
     let mut data = state.data.lock().await;
+    let cfg = state.config.lock().await;
+    let client = state.discord_client.clone();
 
     let server = data
         .get_server(&server_id)
@@ -431,6 +433,16 @@ pub async fn login(
 
         account.current_join = chrono::offset::Utc::now();
         data.update_account(account);
+
+        let _ = client
+            .http
+            .add_member_role(
+                GuildId::new(cfg.guild_id.parse().unwrap()),
+                UserId::new(user.discord_id.parse().unwrap()),
+                RoleId::new(cfg.role_id.parse().unwrap()),
+                None,
+            )
+            .await;
 
         state.flush(&data).map_err(|e| {
             ErrKind::Internal(Err::new("Couldn't flush data for User.").with_inner(e))
