@@ -499,10 +499,6 @@ pub async fn cidr_grace(
 
     let response = data.grace_user(CidrKind::Allowed { user_id: discord_id.id.get(), self_registered: true, time: chrono::offset::Utc::now() });
     
-    if let GraceResponse::Grace(ip) = response {
-        // We need to update the CIDR to reflect this change.
-    }
-
     state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
 
     Ok(Json(response))
