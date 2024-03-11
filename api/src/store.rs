@@ -7,7 +7,7 @@ use textnonce::TextNonce;
 use traits::json::JsonSync;
 use uuid::Uuid;
 
-use crate::{cidr::{decode, encode, get_exact_match, match_with_merge, new_host, try_merge}, models::{Account, BanIssuer, BanResponse, CidrKind, GraceResponse, Server, User}};
+use crate::{cidr::{any_match, decode, encode, get_exact_match, match_with_merge, new_host, try_merge}, models::{Account, BanIssuer, BanResponse, CidrKind, GraceResponse, Server, User}};
 
 pub const MAX_ATTEMPTS_PER_ACC: i32 = 5;
 
@@ -90,7 +90,7 @@ impl Store {
         match self.get_account(&user.uuid) {
             Some(acc) => {
                 let diff = when - acc.last_login.unwrap_or(when);
-                acc.previous_ips.contains(ip) && diff.num_minutes() < 10
+                any_match(&acc.cidr, ip) && diff.num_minutes() < 10
             }
             None => false,
         }

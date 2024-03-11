@@ -34,7 +34,6 @@ pub struct Account {
     #[serde(skip_serializing, skip_deserializing)]
     pub current_join: DateTime<Utc>,
     pub last_login: Option<DateTime<Utc>>,
-    pub previous_ips: HashSet<Ipv4Addr>,
     pub cidr: HashSet<Ipv4Net>
 }
 

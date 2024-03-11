@@ -708,7 +708,6 @@ pub async fn create_account(
         password: hash,
         current_join: chrono::offset::Utc::now(),
         last_login: Some(chrono::offset::Utc::now()),
-        previous_ips: ips,
         cidr: netset
     };
 
