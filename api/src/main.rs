@@ -28,6 +28,7 @@ pub mod models;
 pub mod routes;
 pub mod store;
 pub mod websocket;
+pub mod cidr;
 
 struct Channels {
     links: OneshotBus<Uuid, LinkResult>,
@@ -146,6 +147,13 @@ async fn main() {
         .route("/", post(routes::create_user).layer(authenticated.clone()));
 
     let auth = Router::new()
+        .route("/handshake", post(routes::cidr_handshake))
+        .route("/grace", post(routes::cidr_grace))
+        .route("/ban", post(routes::ban_cidr))
+        .route("/allow", post(routes::allow_cidr))
+        .route("/disallow", post(routes::disallow_cidr))
+        .route("/disallow-ingame", post(routes::disallow_cidr_ingame))
+        .route("/cidr", get(routes::cidr_check))        
         .route("/exists", get(routes::account_exists))
         .route("/:server_id/logoff", post(routes::logoff))
         .route("/:server_id/login", post(routes::login))

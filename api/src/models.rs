@@ -5,6 +5,7 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
+use ipnet::Ipv4Net;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -34,6 +35,7 @@ pub struct Account {
     pub current_join: DateTime<Utc>,
     pub last_login: Option<DateTime<Utc>>,
     pub previous_ips: HashSet<Ipv4Addr>,
+    pub cidr: HashSet<Ipv4Net>
 }
 
 impl From<CreateUser> for User {
@@ -114,4 +116,49 @@ pub enum ModpackSource {
     Modrinth,
     Curseforge,
     Other,
+}
+
+#[derive(Serialize)]
+pub enum CidrResponse {
+    Allowed,
+    Banned,
+    Unknown
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+pub enum CidrKind {
+    /// Iff this CIDR was manually allowed by either the user or an admin.
+    Allowed {
+        user_id: u64,
+        self_registered: bool,
+        time: DateTime<Utc>
+    },
+    /// Iff this CIDR was banned
+    Banned {
+        uuid: Uuid,
+        time: DateTime<Utc>,
+        issuer: BanIssuer,
+        ip: Ipv4Addr
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+pub enum BanIssuer {
+    Manual(Uuid),
+    Automatic
+}
+
+#[derive(Serialize, Clone)]
+pub enum BanResponse {
+    Existing,
+    Merged,
+    New,
+    Invalid
+}
+
+
+#[derive(Serialize, Clone)]
+pub enum GraceResponse {
+    Invalid,
+    Grace(Ipv4Addr)
 }

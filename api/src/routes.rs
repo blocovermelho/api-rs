@@ -8,15 +8,15 @@ use axum::{
 };
 
 use chrono::{DateTime, Utc};
+use ipnet::Ipv4Net;
+use iprange::IpRange;
 use oauth2::{reqwest::async_http_client, AuthorizationCode};
 use serde::{Deserialize, Serialize};
 use serenity::all::{GuildId, RoleId, UserId};
 use uuid::Uuid;
 
 use crate::{
-    models::{Account, CreateServer, CreateUser, Pos, Server, User},
-    store::MAX_ATTEMPTS_PER_ACC,
-    AppState,
+    cidr::{any_match, lowest_common_prefix, try_merge, HOST_PREFIX}, models::{Account, BanIssuer, BanResponse, CidrKind, CidrResponse, CreateServer, CreateUser, GraceResponse, Pos, Server, User}, store::MAX_ATTEMPTS_PER_ACC, AppState
 };
 
 pub type Res<T> = Result<Json<T>, ErrKind>;
@@ -364,7 +364,7 @@ pub async fn logoff(
     user.playtime.insert(server_id, current_duration + duration);
 
     account.last_login = Some(now);
-    account.previous_ips.insert(session.ip);
+    // account.previous_ips.insert(session.ip);
 
     let req = client
         .http
@@ -462,6 +462,220 @@ pub async fn account_exists(
     Ok(Json(data.get_account(&account.uuid).is_some()))
 }
 
+/// [POST] /auth/handshake?id=<id>
+pub async fn cidr_handshake(
+    State(state): State<AppState>,
+    Query(discord_id) : Query<DiscordIdQueryParam>,
+) -> Res<String> {
+    let mut data  = state.data.lock().await;
+    let discord = state.discord_client.clone();
+    let cfg = state.config.lock().await;
+
+    
+    let _ = discord.http.get_member(
+        GuildId::new(cfg.guild_id.parse().expect("Invalid Guild Id")), 
+        discord_id.id
+    ).await.map_err(|_| {
+        ErrKind::Internal(Err::new("Unknown Error"))
+    })?;
+
+    let secret = data.add_handshake(discord_id.id.get());
+
+    state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
+
+    Ok(Json(secret))
+}
+
+/// [POST] /auth/grace?id=<id>
+pub async fn cidr_grace(
+    State(state): State<AppState>,
+    Query(discord_id) : Query<DiscordIdQueryParam>,
+) -> Res<GraceResponse> {
+    let mut data  = state.data.lock().await;
+
+    if !data.has_handshake(discord_id.id.get()) {
+        return Err(ErrKind::BadRequest(Err::new("Unknown Error")));
+    }
+
+    let response = data.grace_user(CidrKind::Allowed { user_id: discord_id.id.get(), self_registered: true, time: chrono::offset::Utc::now() });
+    
+    if let GraceResponse::Grace(ip) = response {
+        // We need to update the CIDR to reflect this change.
+    }
+
+    state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
+
+    Ok(Json(response))
+}
+
+/// [POST] /auth/ban?uuid=<>&ip=<ip>
+/// ```json
+/// "Automatic" |
+/// {
+///    "Manual": "<uuid>"
+/// }
+/// ```
+pub async fn ban_cidr(
+    State(state): State<AppState>,
+    Query(params) : Query<BanCidrQueryParam>,
+    Json(issuer) : Json<BanIssuer>
+) -> Res<BanResponse> {
+    let mut data  = state.data.lock().await;
+    let response = data.ban_cidr(params.ip.to_string(), CidrKind::Banned { uuid: params.uuid, time: chrono::offset::Utc::now(), issuer: issuer, ip: params.ip });
+
+    state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
+
+    Ok(Json(response))
+}
+
+/// [POST] /auth/allow?uuid=<id>&nonce=<nonce>&ip=<ip>
+
+pub async fn allow_cidr(
+    State(state): State<AppState>,
+    Query(params) : Query<AllowCidrQueryParams>,
+) -> Res<bool> {
+    let mut data  = state.data.lock().await;
+    let holder = data.get_handshake_holder(&params.nonce).ok_or(ErrKind::NotFound(Err::new("User not found")))?;
+
+    if holder.uuid != params.uuid {
+        return Err(ErrKind::BadRequest(Err::new("Unknown Error")));
+    }
+
+    let mut account = data.get_account(&holder.uuid)
+    .ok_or(ErrKind::NotFound(Err::new("Account not found")))?
+    .clone();
+
+    let mut new_prefix: Option<u8> = None;
+    let mut net : Option<Ipv4Net> = None;
+
+    for network in account.cidr.clone() {
+        new_prefix = lowest_common_prefix(&network, &params.ip);
+        
+        if new_prefix.is_some() {
+            net = Some(network);
+            break;
+        }
+    }
+
+    if new_prefix.is_some() {
+        let netw = net.unwrap();
+        let addr = netw.addr();
+        account.cidr.remove(&netw);
+        account.cidr.insert(format!("{}/{}", addr, new_prefix.unwrap()).parse().unwrap());
+    } else {
+        account.cidr.insert(format!("{}/{}", params.ip, HOST_PREFIX).parse().unwrap());
+    }
+
+    if let Some(merged) = try_merge(&account.cidr) {
+        account.cidr = merged;
+    }
+
+    data.update_account(account);
+    data.clear_handshake(&params.nonce);
+    state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
+
+    Ok(Json(true))
+}
+
+/// [POST] /auth/disallow?id=<id>&ip=<ip>
+pub async fn disallow_cidr(
+    State(state): State<AppState>,
+    Query(params) : Query<DiscordDenyCidrQueryParams>,
+) -> Res<bool> {
+    let mut data  = state.data.lock().await;
+    let u = data.get_user_from_discord(params.id.get()).ok_or(ErrKind::BadRequest(Err::new("Missing User")))?;
+    let mut a = data.get_account(&u.uuid).ok_or(ErrKind::BadRequest(Err::new("Missing Account")))?.clone(); 
+
+    let mut range: Option<IpRange<Ipv4Net>> = None;
+    let mut selected: Option<Ipv4Net> = None;
+
+    for network in a.cidr.clone() {
+        if ! network.contains(&params.ip) {
+            continue;
+        }
+
+        let mut this = IpRange::new();
+        this.add(network);
+
+        let mut other: IpRange<Ipv4Net> = IpRange::new();
+        other.add(format!("{}/32", &params.ip).parse().unwrap());
+    
+        range = Some(this.exclude(&other));
+        selected = Some(network);
+    };
+
+    if selected.is_some() {
+        a.cidr.remove(&selected.unwrap());
+        for new_net in &range.unwrap() {
+            a.cidr.insert(new_net);
+        }
+    }
+
+    data.update_account(a);
+    state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
+
+    Ok(Json(true))
+}
+
+/// [POST] /auth/disallow-ingame?uuid=<id>&ip=<ip>
+pub async fn disallow_cidr_ingame(
+    State(state): State<AppState>,
+    Query(params) : Query<MinecraftDenyCidrQueryParams>,
+) -> Res<bool> {
+    let mut data  = state.data.lock().await;
+    let mut a = data.get_account(&params.uuid).ok_or(ErrKind::BadRequest(Err::new("Missing Account")))?.clone(); 
+
+    let mut range: Option<IpRange<Ipv4Net>> = None;
+    let mut selected: Option<Ipv4Net> = None;
+
+    for network in a.cidr.clone() {
+        if ! network.contains(&params.ip) {
+            continue;
+        }
+
+        let mut this = IpRange::new();
+        this.add(network);
+
+        let mut other: IpRange<Ipv4Net> = IpRange::new();
+        other.add(format!("{}/32", &params.ip).parse().unwrap());
+    
+        range = Some(this.exclude(&other));
+        selected = Some(network);
+    };
+
+    if selected.is_some() {
+        a.cidr.remove(&selected.unwrap());
+        for new_net in &range.unwrap() {
+            a.cidr.insert(new_net);
+        }
+    }
+
+    data.update_account(a);
+    state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
+
+    Ok(Json(true))
+}
+
+/// [POST] /auth/cidr?uuid=<id>&ip=<ip>
+pub async fn cidr_check(
+    State(state): State<AppState>,
+    Query(params) : Query<CheckCidrQueryParam>,
+) -> Res<CidrResponse> {
+    let data  = state.data.lock().await;
+    let ledger = data.get_all_banned_cidr();
+    if any_match(&ledger, &params.ip) {
+        return Ok(Json(CidrResponse::Banned));
+    }
+
+    let a = data.get_account(&params.uuid).ok_or(ErrKind::BadRequest(Err::new("Missing Account")))?.clone();
+
+    if any_match(&a.cidr, &params.ip) {
+        return Ok(Json(CidrResponse::Allowed));
+    }
+
+    Ok(Json(CidrResponse::Unknown))
+}
+
 /// [POST] /api/auth
 /// ```json
 /// {
@@ -485,12 +699,17 @@ pub async fn create_account(
     let mut ips = HashSet::new();
     ips.insert(session.ip);
 
+    let net = Ipv4Net::new(session.ip, 32).unwrap();
+    let mut netset = HashSet::new();
+    netset.insert(net);
+
     let acc = Account {
         uuid: user.uuid,
         password: hash,
         current_join: chrono::offset::Utc::now(),
         last_login: Some(chrono::offset::Utc::now()),
         previous_ips: ips,
+        cidr: netset
     };
 
     let result = data.add_account(acc);
@@ -591,6 +810,43 @@ pub struct LinkQueryParams {
 #[derive(Deserialize)]
 pub struct UuidQueryParam {
     pub uuid: Uuid,
+}
+
+#[derive(Deserialize)]
+pub struct AllowCidrQueryParams {
+    pub uuid: Uuid,
+    pub nonce: String,
+    pub ip: Ipv4Addr
+}
+
+
+#[derive(Deserialize)]
+pub struct DiscordDenyCidrQueryParams {
+    pub id : UserId,
+    pub ip: Ipv4Addr
+}
+
+#[derive(Deserialize)]
+pub struct MinecraftDenyCidrQueryParams {
+    pub uuid : Uuid,
+    pub ip: Ipv4Addr
+}
+
+#[derive(Deserialize)]
+pub struct CheckCidrQueryParam {
+    pub uuid: Uuid,
+    pub ip: Ipv4Addr
+}
+
+#[derive(Deserialize)]
+pub struct BanCidrQueryParam {
+    pub uuid: Uuid,
+    pub ip: Ipv4Addr
+}
+
+#[derive(Deserialize)]
+pub struct DiscordIdQueryParam {
+    pub id: UserId
 }
 
 #[derive(Serialize, Clone, Debug)]

@@ -1,11 +1,13 @@
-use std::{collections::HashMap, net::Ipv4Addr};
+use std::{collections::{HashMap, HashSet}, net::Ipv4Addr};
 
 use chrono::{DateTime, Utc};
+use ipnet::Ipv4Net;
 use serde::{Deserialize, Serialize};
+use textnonce::TextNonce;
 use traits::json::JsonSync;
 use uuid::Uuid;
 
-use crate::models::{Account, Server, User};
+use crate::{cidr::{decode, encode, get_exact_match, match_with_merge, new_host, try_merge}, models::{Account, BanIssuer, BanResponse, CidrKind, GraceResponse, Server, User}};
 
 pub const MAX_ATTEMPTS_PER_ACC: i32 = 5;
 
@@ -16,6 +18,8 @@ pub struct Store {
     servers: HashMap<Uuid, Server>,
     current_attempts: HashMap<Uuid, i32>,
     current_nonces: HashMap<String, Uuid>,
+    current_handshakes: HashMap<String, u64>,
+    ledger: HashMap<String, Vec<CidrKind>>
 }
 
 impl JsonSync for Store {
@@ -28,6 +32,8 @@ impl JsonSync for Store {
             servers: HashMap::new(),
             current_attempts: HashMap::new(),
             current_nonces: HashMap::new(),
+            current_handshakes: HashMap::new(),
+            ledger: HashMap::new()
         }
     }
 
@@ -37,12 +43,19 @@ impl JsonSync for Store {
             && this.servers.is_empty()
             && this.current_attempts.is_empty()
             && this.current_nonces.is_empty()
+            && this.current_handshakes.is_empty()
+            && this.ledger.is_empty()
     }
 }
 
 impl Store {
     pub fn get_user(&self, id: &Uuid) -> Option<&User> {
         self.users.get(id)
+    }
+
+    pub fn get_user_from_discord(&self, id: u64) -> Option<&User> {
+        let u = self.users.iter().find(|(_, it)| it.discord_id == id.to_string())?;
+        Some(u.1)
     }
 
     pub fn get_users(&self) -> Vec<User> {
@@ -203,5 +216,188 @@ impl Store {
 
     pub fn drop_nonce(&mut self, nonce: &String) {
         self.current_nonces.remove(nonce);
+    }
+
+    pub fn add_handshake(&mut self, id: u64) -> String {
+        let nonce = TextNonce::new().0;
+        self.current_handshakes.insert(nonce.clone(), id);
+        nonce
+    }
+
+    pub fn get_handshake_holder(&self, nonce: &String) -> Option<User> {
+        let uid = self.current_handshakes.get(nonce)?.to_owned();
+        let u = self.get_users().into_iter().find(|i| i.discord_id == uid.clone().to_string())?;
+        Some(u)
+    }
+
+    pub fn clear_handshake(&mut self, nonce: &String) {
+        self.current_handshakes.remove(nonce);
+    }
+
+    pub fn has_handshake(&self, id: u64) -> bool {
+        self.current_handshakes.values().any(|it| it == &id)
+    }
+
+    pub fn get_all_banned_cidr(&self) -> HashSet<Ipv4Net> {
+        self.ledger.keys().map(|f| decode(f).unwrap()).collect()
+    }
+
+    pub fn ban_cidr(&mut self, ip: String, kind: CidrKind) -> BanResponse {
+        match kind {
+            CidrKind::Allowed {..} =>  {
+                BanResponse::Invalid
+            }
+            CidrKind::Banned {..}=> {
+                // Iterate through each legder entry to see if they match the current IP.
+                let keys : HashSet<Ipv4Net> =  self.ledger.keys().map(|it| decode(it).unwrap()).collect();
+                let net : Ipv4Addr = ip.parse().unwrap();
+                
+                // Base-Case: A CIDR that maches that IP already exists
+                if let Some(addr) = get_exact_match(&keys, &net) {
+                    let key = encode(&addr);
+                    let mut entries = self.ledger.get(&key).unwrap().clone();
+                    entries.push(kind);
+
+                    let _ = self.ledger.insert(key, entries);
+                    return BanResponse::Existing;
+                }
+
+                // Here be dragons. 
+                // Case: CIDR-Reduction
+                // There exists a CIDR that can be merged with the current IP
+                if let Some((old, new)) = match_with_merge(&keys, &net) {
+                    let old_key = encode(&old);
+                    let new_key = encode(&new);
+
+                    let mut entries = self.ledger.get(&old_key).unwrap().clone();
+                    entries.push(kind);
+                    let _ = self.ledger.remove(&old_key);
+                    let _ = self.ledger.insert(new_key, entries);
+                    return BanResponse::Merged;
+                }
+                // This one is *brand new*
+                self.ledger.insert(encode(&new_host(&net)), vec![kind]);
+                
+                return BanResponse::New;
+            }
+        }
+    }
+
+    pub fn get_bans(&self, ip: String) -> Option<Vec<CidrKind>> {
+        let keys : HashSet<Ipv4Net> =  self.ledger.keys().map(|it| decode(it).unwrap()).collect();
+        let net : Ipv4Addr = ip.parse().unwrap();
+
+        if let Some(addr) = get_exact_match(&keys, &net) {
+            let key = encode(&addr);
+            let entries = self.ledger.get(&key).unwrap().clone();
+
+            return Some(entries);
+        }
+
+        None
+    }
+
+    pub fn get_last_automatic_ban_key(&self, uuid: &Uuid) -> Option<(String, Ipv4Addr)> {
+        // Get all ip bans for this user which were issued automatically
+        let items : HashMap<&String, &Vec<CidrKind>> = self.ledger.iter().filter(|(k,v)| {
+            let cond = v.iter().any(|entry| {
+                if let CidrKind::Banned { uuid: ban_uuid, time: _, issuer, ip: _ } = entry {
+                    return uuid == ban_uuid && matches!(issuer, BanIssuer::Automatic);
+                } else {
+                    return false;
+                }
+            });
+
+            cond
+        }).collect();
+
+        let mut last_time : DateTime<Utc> = DateTime::UNIX_EPOCH;
+        let mut last_ip : Option<Ipv4Addr> = None;
+        let mut last_key : Option<String> = None; 
+        for (k, entries) in items {
+            for entry in entries {
+                if let CidrKind::Banned { uuid: _, time, ip, issuer: _} = entry {
+                    if last_time < time.clone() {
+                        last_time = time.clone();
+                        last_ip = Some(ip.clone());
+                        last_key = Some(k.clone());
+                    }
+                }
+            }
+        }
+
+        if let Some(key) = last_key {
+            return Some((key, last_ip.unwrap()));
+        }
+        None
+    }
+
+    pub fn grace_user(&mut self, kind: CidrKind) -> GraceResponse {
+        match kind {
+            CidrKind::Allowed { user_id, self_registered: _, time: _ } => {
+                if let Some(user) = self.get_user_from_discord(user_id) {
+                    let uuid = user.uuid;
+                    let last_ban_key = self.get_last_automatic_ban_key(&uuid);
+
+                    if let Some((key,last_ip)) = last_ban_key {
+                        let mut entries = self.ledger.get(&key).unwrap().clone();
+                        entries.retain(|elem| {
+                            if let CidrKind::Banned { uuid: _, time: _, issuer: _, ip } = elem {
+                                ip != &last_ip
+                            } else {
+                                true
+                            }
+                        });
+
+                        if entries.is_empty() {
+                            self.ledger.remove(&key);
+                        } else {
+                            // Base Case: The Set only has one key.
+                            if entries.len() == 1 {
+                                let first = entries.get(0).unwrap();
+                                if let CidrKind::Banned { uuid: _, time: _, issuer: _, ip } = first {
+                                    let host = new_host(ip);
+                                    self.ledger.insert(encode(&host), entries);
+                                    self.ledger.remove(&key);
+                                }
+                                return GraceResponse::Grace(last_ip);
+                            }
+
+                            // Re-evaluate the CIDR based on the entry being removed.
+                            let new_set : HashSet<Ipv4Net> = entries.iter().map(|it| 
+                                if let CidrKind::Banned { uuid: _, time: _, issuer: _, ip } = it {
+                                   return Some(new_host(ip));
+                                } else {
+                                    return None;
+                                }
+                            ).flatten().collect();
+
+                            if let Some(merged) = try_merge(&new_set) {
+                                let arr : Vec<&Ipv4Net> = merged.iter().collect();
+                                // Base Case: Was able to fold completely into a single address.
+                                if merged.len() == 1 {
+                                    let new_net = *arr.first().unwrap();
+                                    self.ledger.insert(encode(new_net), entries);
+                                    return GraceResponse::Grace(last_ip);  
+                                }
+                                
+                                for net in arr {
+                                    self.ledger.insert(encode(net), entries.clone());
+                                }
+
+                                self.ledger.remove(&key); 
+
+                            } else {
+                                self.ledger.insert(key, entries);
+                            }
+                        }
+
+                        return GraceResponse::Grace(last_ip);
+                    }
+                }
+                return GraceResponse::Invalid;
+            },
+            CidrKind::Banned {..} => return GraceResponse::Invalid,
+        }
     }
 }
