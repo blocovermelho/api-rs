@@ -18,7 +18,7 @@ pub struct Store {
     servers: HashMap<Uuid, Server>,
     current_attempts: HashMap<Uuid, i32>,
     current_nonces: HashMap<String, Uuid>,
-    current_handshakes: HashMap<String, u64>,
+    current_handshakes: HashMap<u64, String>,
     ledger: HashMap<String, Vec<CidrKind>>
 }
 
@@ -220,22 +220,22 @@ impl Store {
 
     pub fn add_handshake(&mut self, id: u64) -> String {
         let nonce = TextNonce::new().0;
-        self.current_handshakes.insert(nonce.clone(), id);
+        self.current_handshakes.insert(id, nonce.clone());
         nonce
     }
 
     pub fn get_handshake_holder(&self, nonce: &String) -> Option<User> {
-        let uid = self.current_handshakes.get(nonce)?.to_owned();
+        let (uid,_) = self.current_handshakes.iter().find(|(_, n)| *n == nonce)?;
         let u = self.get_users().into_iter().find(|i| i.discord_id == uid.clone().to_string())?;
         Some(u)
     }
 
-    pub fn clear_handshake(&mut self, nonce: &String) {
-        self.current_handshakes.remove(nonce);
+    pub fn clear_handshake(&mut self, nonce: u64) {
+        self.current_handshakes.remove(&nonce);
     }
 
     pub fn has_handshake(&self, id: u64) -> bool {
-        self.current_handshakes.values().any(|it| it == &id)
+        self.current_handshakes.contains_key(&id)
     }
 
     pub fn get_all_banned_cidr(&self) -> HashSet<Ipv4Net> {

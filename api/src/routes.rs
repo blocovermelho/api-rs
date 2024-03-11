@@ -567,7 +567,9 @@ pub async fn allow_cidr(
     }
 
     data.update_account(account);
-    data.clear_handshake(&params.nonce);
+    let holder = data.get_handshake_holder(&params.nonce).ok_or( ErrKind::NotFound(Err::new("Missing User")))?;
+    let id : u64 = holder.discord_id.parse().unwrap();
+    data.clear_handshake(id);
     state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
 
     Ok(Json(true))
