@@ -669,13 +669,16 @@ pub async fn cidr_check(
 ) -> Res<CidrResponse> {
     let data  = state.data.lock().await;
     let ledger = data.get_all_banned_cidr();
-    if any_match(&ledger, &params.ip) {
+    let a = data.get_account(&params.uuid);
+    let is_banned = any_match(&ledger, &params.ip);
+    // There is likely an idiomatic way to do this
+    let is_allowed = if a.is_some() { any_match(&a.unwrap().cidr, &params.ip) } else { true };
+
+    if is_banned && !is_allowed {
         return Ok(Json(CidrResponse::Banned));
     }
 
-    let a = data.get_account(&params.uuid).ok_or(ErrKind::BadRequest(Err::new("Missing Account")))?.clone();
-
-    if any_match(&a.cidr, &params.ip) {
+    if is_allowed {
         return Ok(Json(CidrResponse::Allowed));
     }
 
