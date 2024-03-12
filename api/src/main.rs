@@ -8,6 +8,7 @@ use axum::{
 };
 
 use bus::OneshotBus;
+use futures::channel::mpsc::{self, UnboundedSender, UnboundedReceiver};
 use routes::LinkResult;
 use serenity::all::GatewayIntents;
 use tokio::sync::Mutex;
@@ -20,6 +21,7 @@ use tower_http::validate_request::ValidateRequestHeaderLayer;
 use tower_http::{timeout::TimeoutLayer, ServiceBuilderExt};
 use traits::json::JsonSync;
 use uuid::Uuid;
+use websocket::MessageOut;
 
 use crate::store::Store;
 
@@ -32,12 +34,19 @@ pub mod cidr;
 
 struct Channels {
     links: OneshotBus<Uuid, LinkResult>,
+    verify: OneshotBus<String, u64>,
+    messages: Arc<(Mutex<UnboundedSender<MessageOut>>, Mutex<UnboundedReceiver<MessageOut>>)>
 }
 
 impl Channels {
     fn new() -> Self {
         Self {
             links: OneshotBus::new(),
+            verify: OneshotBus::new(),
+            messages: {
+                let (tx, rx) = mpsc::unbounded();
+                Arc::new((Mutex::new(tx), Mutex::new(rx)))
+            }
         }
     }
 }
@@ -50,7 +59,7 @@ pub struct AppState {
     config_path: Option<PathBuf>,
     reqwest_client: Arc<Mutex<Client>>,
     discord_client: Arc<serenity::Client>,
-    chs: Arc<Channels>,
+    chs: Arc<Channels>
 }
 
 impl AppState {

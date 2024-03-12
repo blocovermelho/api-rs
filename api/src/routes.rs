@@ -8,6 +8,7 @@ use axum::{
 };
 
 use chrono::{DateTime, Utc};
+use futures::SinkExt;
 use ipnet::Ipv4Net;
 use iprange::IpRange;
 use oauth2::{reqwest::async_http_client, AuthorizationCode};
@@ -16,7 +17,7 @@ use serenity::all::{GuildId, RoleId, UserId};
 use uuid::Uuid;
 
 use crate::{
-    cidr::{any_match, lowest_common_prefix, try_merge, HOST_PREFIX}, models::{Account, BanIssuer, BanResponse, CidrKind, CidrResponse, CreateServer, CreateUser, GraceResponse, Pos, Server, User}, store::MAX_ATTEMPTS_PER_ACC, AppState
+    cidr::{any_match, lowest_common_prefix, try_merge, HOST_PREFIX}, models::{Account, BanIssuer, BanResponse, CidrKind, CidrResponse, CreateServer, CreateUser, GraceResponse, Pos, Server, User}, store::MAX_ATTEMPTS_PER_ACC, websocket::MessageOut, AppState
 };
 
 pub type Res<T> = Result<Json<T>, ErrKind>;
@@ -479,9 +480,16 @@ pub async fn cidr_handshake(
         ErrKind::Internal(Err::new("Unknown Error"))
     })?;
 
+    let user = data.get_user_from_discord(discord_id.id.get())
+    .ok_or(ErrKind::NotFound(Err::new("User not found.")))?.clone();
+
     let secret = data.add_handshake(discord_id.id.get());
 
     state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
+
+    let _ = state.chs.verify.send(secret.clone(), discord_id.id.get()).await;
+    let mut buff = state.chs.messages.0.lock().await;
+    let _ = buff.send(MessageOut::CidrSyn(user.uuid)).await;
 
     Ok(Json(secret))
 }
