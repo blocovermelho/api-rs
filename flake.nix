@@ -19,6 +19,7 @@
             rustup
             openssl
             pkg-config
+            insomnia
           ];
         };
       });
