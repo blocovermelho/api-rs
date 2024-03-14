@@ -101,7 +101,8 @@ pub async fn link(
         minecraft_uuid: uuid,
     };
 
-    let _ = state.chs.links.send(uuid, result.clone()).await;
+    let mut buff = state.chs.messages.0.lock().await;
+    let _ = buff.send(MessageOut::LinkResponse(result.clone())).await;
 
     Ok(Json(result))
 }
