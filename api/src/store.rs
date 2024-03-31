@@ -299,7 +299,7 @@ impl Store {
 
     pub fn get_last_automatic_ban_key(&self, uuid: &Uuid) -> Option<(String, Ipv4Addr)> {
         // Get all ip bans for this user which were issued automatically
-        let items : HashMap<&String, &Vec<CidrKind>> = self.ledger.iter().filter(|(k,v)| {
+        let items : HashMap<&String, &Vec<CidrKind>> = self.ledger.iter().filter(|(_,v)| {
             let cond = v.iter().any(|entry| {
                 if let CidrKind::Banned { uuid: ban_uuid, time: _, issuer, ip: _ } = entry {
                     return uuid == ban_uuid && matches!(issuer, BanIssuer::Automatic);
