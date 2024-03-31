@@ -16,8 +16,6 @@ pub async fn handle_socket(
     ws.on_upgrade(|socket| link_socket(socket, state))
 }
 
-type Sink = SplitSink<WebSocket<MessageOut, MessageIn>, Message<MessageOut>>;
-
 async fn link_socket(socket: WebSocket<MessageOut, MessageIn>, state: AppState) {
     println!("Handling connection to websocket");
     let (mut send, mut recv) = socket.split();
