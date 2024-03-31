@@ -408,7 +408,7 @@ pub async fn login(
     let _ = data
         .get_server(&server_id)
         .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
-    let mut user = data
+    let user = data
         .get_user(&session.uuid)
         .ok_or(ErrKind::NotFound(Err::new("User not found.")))?
         .clone();
