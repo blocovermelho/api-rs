@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use axum::{extract::State, response::IntoResponse};
 use axum_typed_websockets::{Message, WebSocket, WebSocketUpgrade};
-use futures::{stream::SplitSink, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::time::timeout;
 use uuid::Uuid;
