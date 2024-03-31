@@ -53,10 +53,10 @@ async fn link_socket(socket: WebSocket<MessageOut, MessageIn>, state: AppState) 
 
     // If any one of the tasks exit, abort the other.
     tokio::select! {
-        rv_a = (&mut send_task) => {
+        _rv_a = (&mut send_task) => {
             read_task.abort();
         },
-        rv_b = (&mut read_task) => {
+        _rv_b = (&mut read_task) => {
             send_task.abort();
         }
     }
