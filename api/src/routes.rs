@@ -368,7 +368,7 @@ pub async fn logoff(
     account.last_login = Some(now);
     // account.previous_ips.insert(session.ip);
 
-    let req = client
+    let _ = client
         .http
         .remove_member_role(
             GuildId::new(cfg.guild_id.parse().unwrap()),
@@ -405,7 +405,7 @@ pub async fn login(
     let cfg = state.config.lock().await;
     let client = state.discord_client.clone();
 
-    let server = data
+    let _ = data
         .get_server(&server_id)
         .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
     let mut user = data
