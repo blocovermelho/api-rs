@@ -40,7 +40,7 @@ pub trait DataSource {
     async fn update_playtime(&mut self, player_uuid: &Uuid, server_uuid: &Uuid, when: DateTime<Utc>) -> result::PlaytimeUpdate;
     async fn get_playtime(&mut self, player_uuid: &Uuid, server_uuid: &Uuid) -> Option<Duration>;
 
-    async fn add_pronoun(&mut self, player_uuid:&Uuid, pronoun: String) -> Vec<String>;
-    async fn remove_pronoun(&mut self, player_uuid: &Uuid, pronoun: String) -> Vec<String>;
-    async fn update_pronoun(&mut self, player_uuid: &Uuid, old: &String, new: String) -> Vec<String>;
+    async fn add_pronoun(&mut self, player_uuid:&Uuid, pronoun: Pronoun) -> Vec<Pronoun>;
+    async fn remove_pronoun(&mut self, player_uuid: &Uuid, pronoun: Pronoun) -> Vec<Pronoun>;
+    async fn update_pronoun(&mut self, player_uuid: &Uuid, old: &Pronoun, new: Pronoun) -> Vec<Pronoun>;
 }
