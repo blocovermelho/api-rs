@@ -22,15 +22,10 @@ pub(crate) struct AllowList {
     pub(crate) last_join: DateTime<Utc>
 }
 
-pub struct SaveState {
+pub struct SaveData {
     pub user_id: Uuid,
     pub server_id: Uuid,
-    pub viewport: Viewport
-}
-
-pub struct Playtime {
-    pub user_id: Uuid,
-    pub server_id: Uuid,
+    pub viewport: Viewport,
     pub playtime: Duration
 }
 
