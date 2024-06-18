@@ -1,27 +1,65 @@
 {
-  description = "A Nix-flake-based Rust development environment";
-
   inputs = {
-    nixpkgs.url = "nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+    naersk.url = "github:nix-community/naersk";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        flake-utils.follows = "flake-utils";
+      };
+    };
   };
 
-  outputs = { self, nixpkgs }:
-    let
-      supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
-      forEachSupportedSystem = f: nixpkgs.lib.genAttrs supportedSystems (system: f {
-        pkgs = import nixpkgs { inherit system; };
-      });
+  outputs = { self, nixpkgs, flake-utils, naersk, rust-overlay }:
+    flake-utils.lib.eachDefaultSystem (system: let
+      overlays = [ (import rust-overlay) ];
+      # Read from `rust-toolchain.toml` instead of adding `rust-bin.nightly.latest.default` to devShell `buildInputs`
+      rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
+
+      naerskLib = pkgs.callPackage naersk {
+        cargo = rustToolchain;
+        rustc = rustToolchain;
+      };
+
+      pkgs = import nixpkgs {
+        inherit system overlays;
+        config = {
+          allowUnfree = true;
+        };
+      };
+
+
+      # Libraries that are mostly needed for raylib to build
+      libraries = with pkgs; [
+        cmake sqlite
+      ];
+
+      packages = with pkgs; [
+      ];
+
+      # Inputs needed at compile-time
+      nativeBuildInputs = with pkgs; [ rustToolchain ];
+      # Inputs needed at runtime
+      buildInputs = with pkgs; [ ] ++ packages ++ libraries;
     in
     {
-      devShells = forEachSupportedSystem ({ pkgs }: {
+      packages.default = naerskLib.buildPackage {
+         src = ./.;
+      };
+
+      devShells = {
         default = pkgs.mkShell {
-          packages = with pkgs; [
-            rustup
-            openssl
-            pkg-config
-            insomnia
+          inherit buildInputs;
+          nativeBuildInputs = nativeBuildInputs ++ [
+            pkgs.cargo-watch
           ];
+
+          # shellHook = ''
+          # export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath libraries}
+          # '';
         };
-      });
-    };
+      };
+    });
 }
