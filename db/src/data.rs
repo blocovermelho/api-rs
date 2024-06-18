@@ -1,6 +1,7 @@
 use chrono::{DateTime, Duration, Utc};
 use uuid::Uuid;
 use ipnet::Ipv4Net;
+use serde::{Deserialize, Serialize};
 
 pub struct User {
     pub uuid: Uuid,
@@ -56,11 +57,13 @@ pub struct Blacklist {
     pub(crate) subnet: Ipv4Net
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum BanActor {
     AutomatedSystem(String),
     Staff(Uuid)
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Loc {
     pub dim: String,
     pub x: f64,
@@ -68,6 +71,7 @@ pub struct Loc {
     pub z: f64
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Viewport {
     pub loc: Loc,
     pub yaw: f64,
