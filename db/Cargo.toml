@@ -9,3 +9,4 @@ uuid = { version = "1.5.0", features = ["v4", "fast-rng", "serde" ] }
 chrono = { version = "^0.4", features = [ "serde" ] }
 futures = "0.3.30"
 ipnet = "2.9.0"
+serde = { version = "1.0.193", features = ["derive"] }
