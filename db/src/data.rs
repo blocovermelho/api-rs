@@ -78,6 +78,12 @@ pub struct Viewport {
     pub pitch: f64
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct Pronoun {
+    pub pronoun: String,
+    pub color: String
+}
+
 pub mod stub {
     use uuid::Uuid;
     use crate::data::Modpack;
