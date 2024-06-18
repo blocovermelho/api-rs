@@ -1,7 +1,7 @@
 use std::net::Ipv4Addr;
 use chrono::{DateTime, Duration, Utc};
 use uuid::Uuid;
-use crate::data::{BanActor, BanEntry, result, Server, stub, User, Viewport, Pronoun};
+use crate::data::{BanActor, Blacklist, result, Server, stub, User, Viewport, Pronoun};
 
 pub trait DataSource {
     async fn get_user_by_uuid(&self, uuid: &Uuid) -> Option<User>;
@@ -18,7 +18,7 @@ pub trait DataSource {
 
     async fn check_cidr(&self, player_uuid: &Uuid, ip: Ipv4Addr) -> result::CIDRCheck;
     /// Network-wide ban of an IPV4 address
-    async fn ban_ip(&mut self, ip: Ipv4Addr, reason: String, actor: BanActor) -> BanEntry;
+    async fn ban_ip(&mut self, ip: Ipv4Addr, reason: String, actor: BanActor) -> Blacklist;
     /// Network-wide pardon of an IPV4 address
     async fn pardon_ip(&mut self, ip: Ipv4Addr, actor: BanActor) -> result::PardonAttempt;
 

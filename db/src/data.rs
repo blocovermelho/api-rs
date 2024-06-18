@@ -54,7 +54,7 @@ pub enum ModpackSource {
     Other
 }
 
-pub struct BanEntry {
+pub struct Blacklist {
     pub when: DateTime<Utc>,
     pub actor: BanActor,
     pub(crate) subnet: Ipv4Net
@@ -102,7 +102,7 @@ pub mod stub {
 
 pub mod result {
     use uuid::Uuid;
-    use crate::data::{BanEntry, Viewport};
+    use crate::data::{Blacklist, Viewport};
 
     pub enum PasswordCheck {
         Correct,
@@ -118,7 +118,7 @@ pub mod result {
 
     pub enum CIDRCheck {
         /// A malicious actor with multiple join attempts
-        ThreatActor(Vec<BanEntry>),
+        ThreatActor(Vec<Blacklist>),
         /// This happens when an ISP changes your IP, its a normal case
         /// and *should never* be displayed with a ban message.
         NewIp(Uuid),
