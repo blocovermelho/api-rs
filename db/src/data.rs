@@ -18,7 +18,8 @@ pub(crate) struct Account {
 
 pub(crate) struct AllowList {
     pub(crate) uuid: Uuid,
-    pub(crate) ip_range: Vec<Ipv4Net>
+    pub(crate) ip_range: Vec<Ipv4Net>,
+    pub(crate) last_join: DateTime<Utc>
 }
 
 pub struct SaveState {
