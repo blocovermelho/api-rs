@@ -6,6 +6,14 @@ pub struct Sqlite {
     conn: SqliteConnection
 }
 
+impl Sqlite {
+    pub fn new(conn: SqliteConnection) -> Self {
+        Self {
+            conn
+        }
+    }
+}
+
 impl DataSource for Sqlite {
     async fn get_user_by_uuid(&mut self, uuid: &uuid::Uuid) -> Option<crate::data::User> {
         todo!()
