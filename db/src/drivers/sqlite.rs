@@ -1,8 +1,9 @@
 use sqlx::SqliteConnection;
 use tracing::{debug, error};
 
-use crate::interface::DataSource;
+use crate::{data::User, interface::DataSource};
 
+#[derive(Debug)]
 pub struct Sqlite {
     conn: SqliteConnection
 }
@@ -26,8 +27,15 @@ fn ok_or_log<T>(either: Result<T, sqlx::Error>) -> Option<T> {
 }
 
 impl DataSource for Sqlite {
-    async fn get_user_by_uuid(&mut self, uuid: &uuid::Uuid) -> Option<crate::data::User> {
-        todo!()
+
+    #[tracing::instrument]
+    async fn get_user_by_uuid(&mut self, uuid: &uuid::Uuid) -> Option<User> {
+        let query = sqlx::query_as::<_, User>("SELECT * FROM users WHERE uuid == ?")
+        .bind(uuid)
+        .fetch_optional(&mut self.conn)
+        .await;
+        
+        ok_or_log(query).flatten()
     }
 
     async fn get_users_by_discord_id(&mut self, discord_id: String) -> Vec<crate::data::User> {
