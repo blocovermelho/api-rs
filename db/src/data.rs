@@ -38,6 +38,7 @@ pub struct Server {
     pub online: bool
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Modpack {
     pub name: String,
     pub source: ModpackSource,
@@ -45,6 +46,7 @@ pub struct Modpack {
     pub uri: String
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum ModpackSource {
     Modrinth,
     Curseforge,
