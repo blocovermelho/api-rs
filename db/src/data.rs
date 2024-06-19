@@ -4,6 +4,7 @@ use uuid::Uuid;
 use ipnet::Ipv4Net;
 use serde::{Deserialize, Serialize};
 
+#[derive(sqlx::FromRow, Debug)]
 pub struct User {
     pub uuid: Uuid,
     pub username: String,
@@ -13,18 +14,21 @@ pub struct User {
     pub last_server: Option<Uuid>
 }
 
+#[derive(sqlx::FromRow, Debug)]
 pub(crate) struct Account {
     pub(crate) uuid: Uuid,
     pub(crate) password: String,
     pub(crate) current_join: DateTime<Utc>
 }
 
+#[derive(sqlx::FromRow, Debug)]
 pub(crate) struct Allowlist {
     pub(crate) uuid: Uuid,
     pub(crate) ip_range: Json<Vec<Ipv4Net>>,
     pub(crate) last_join: DateTime<Utc>
 }
 
+#[derive(sqlx::FromRow, Debug)]
 pub struct SaveData {
     pub user_id: Uuid,
     pub server_id: Uuid,
@@ -32,6 +36,7 @@ pub struct SaveData {
     pub playtime: Duration
 }
 
+#[derive(sqlx::FromRow, Debug)]
 pub struct Server {
     pub uuid: Uuid,
     pub name: String,
@@ -40,7 +45,7 @@ pub struct Server {
     pub online: bool
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Modpack {
     pub name: String,
     pub source: ModpackSource,
@@ -48,26 +53,27 @@ pub struct Modpack {
     pub uri: String
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum ModpackSource {
     Modrinth,
     Curseforge,
     Other
 }
 
+#[derive(sqlx::FromRow, Debug)]
 pub struct Blacklist {
     pub when: DateTime<Utc>,
     pub actor: BanActor,
     pub(crate) subnet: Ipv4Net
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum BanActor {
     AutomatedSystem(String),
     Staff(Uuid)
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Loc {
     pub dim: String,
     pub x: f64,
@@ -75,14 +81,14 @@ pub struct Loc {
     pub z: f64
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Viewport {
     pub loc: Loc,
     pub yaw: f64,
     pub pitch: f64
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Pronoun {
     pub pronoun: String,
     pub color: String
