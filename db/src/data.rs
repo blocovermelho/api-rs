@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub struct User {
     pub uuid: Uuid,
     pub username: String,
-    pub discord_id: u64,
+    pub discord_id: String,
     pub pronouns: Json<Vec<String>>,
     pub last_server: Option<Uuid>
 }
@@ -94,7 +94,7 @@ pub mod stub {
     pub struct UserStub {
         pub uuid: Uuid,
         pub username: String,
-        pub discord_id: u64
+        pub discord_id: String
     }
 
     pub struct AccountStub {
