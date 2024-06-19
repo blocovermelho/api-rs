@@ -10,7 +10,7 @@ pub struct User {
     pub username: String,
     pub discord_id: String,
     pub created_at: DateTime<Utc>,
-    pub pronouns: Json<Vec<String>>,
+    pub pronouns: Json<Vec<Pronoun>>,
     pub last_server: Option<Uuid>
 }
 
