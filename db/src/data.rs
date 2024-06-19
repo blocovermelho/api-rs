@@ -1,4 +1,5 @@
 use chrono::{DateTime, Duration, Utc};
+use sqlx::types::Json;
 use uuid::Uuid;
 use ipnet::Ipv4Net;
 use serde::{Deserialize, Serialize};
@@ -7,7 +8,7 @@ pub struct User {
     pub uuid: Uuid,
     pub username: String,
     pub discord_id: u64,
-    pub pronouns: Vec<String>,
+    pub pronouns: Json<Vec<String>>,
     pub last_server: Option<Uuid>
 }
 
@@ -19,22 +20,22 @@ pub(crate) struct Account {
 
 pub(crate) struct Allowlist {
     pub(crate) uuid: Uuid,
-    pub(crate) ip_range: Vec<Ipv4Net>,
+    pub(crate) ip_range: Json<Vec<Ipv4Net>>,
     pub(crate) last_join: DateTime<Utc>
 }
 
 pub struct SaveData {
     pub user_id: Uuid,
     pub server_id: Uuid,
-    pub viewport: Viewport,
+    pub viewport: Json<Viewport>,
     pub playtime: Duration
 }
 
 pub struct Server {
     pub uuid: Uuid,
     pub name: String,
-    pub supported_versions: Vec<String>,
-    pub current_modpack: Option<Modpack>,
+    pub supported_versions: Json<Vec<String>>,
+    pub current_modpack: Json<Option<Modpack>>,
     pub online: bool
 }
 
