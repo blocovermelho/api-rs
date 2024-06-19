@@ -1,4 +1,5 @@
 use sqlx::SqliteConnection;
+use tracing::{debug, error};
 
 use crate::interface::DataSource;
 
@@ -11,6 +12,16 @@ impl Sqlite {
         Self {
             conn
         }
+    }
+}
+
+fn ok_or_log<T>(either: Result<T, sqlx::Error>) -> Option<T> {
+    match either {
+        Ok(value) =>  { Some(value) },
+        Err(e) => { 
+            error!("Database Error: {e}");
+            None 
+        },
     }
 }
 
