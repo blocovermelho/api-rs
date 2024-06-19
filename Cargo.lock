@@ -462,6 +462,7 @@ dependencies = [
  "ipnet",
  "serde",
  "sqlx",
+ "tracing",
  "uuid",
 ]
 
