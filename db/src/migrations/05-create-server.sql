@@ -1,4 +1,4 @@
-CREATE TABLE server (
+CREATE TABLE IF NOT EXISTS server (
     uuid TEXT,
     name TEXT unique,
     actor TEXT NOT NULL,

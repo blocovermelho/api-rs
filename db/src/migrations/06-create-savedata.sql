@@ -1,4 +1,4 @@
-CREATE TABLE savedata (
+CREATE TABLE IF NOT EXISTS savedata (
     server_uuid TEXT,
     player_uuid TEXT,
     playtime TEXT,
