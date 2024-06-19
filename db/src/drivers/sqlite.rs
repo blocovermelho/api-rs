@@ -7,11 +7,11 @@ pub struct Sqlite {
 }
 
 impl DataSource for Sqlite {
-    async fn get_user_by_uuid(&self, uuid: &uuid::Uuid) -> Option<crate::data::User> {
+    async fn get_user_by_uuid(&mut self, uuid: &uuid::Uuid) -> Option<crate::data::User> {
         todo!()
     }
 
-    async fn get_users_by_discord_id(&self, discord_id: &usize) -> Vec<crate::data::User> {
+    async fn get_users_by_discord_id(&mut self, discord_id: String) -> Vec<crate::data::User> {
         todo!()
     }
 
@@ -31,7 +31,7 @@ impl DataSource for Sqlite {
         todo!()
     }
 
-    async fn check_password(&self, player_uuid: &uuid::Uuid, password: String) -> crate::data::result::PasswordCheck {
+    async fn check_password(&mut self, player_uuid: &uuid::Uuid, password: String) -> crate::data::result::PasswordCheck {
         todo!()
     }
 
@@ -39,7 +39,7 @@ impl DataSource for Sqlite {
         todo!()
     }
 
-    async fn check_cidr(&self, player_uuid: &uuid::Uuid, ip: std::net::Ipv4Addr) -> crate::data::result::CIDRCheck {
+    async fn check_cidr(&mut self, player_uuid: &uuid::Uuid, ip: std::net::Ipv4Addr) -> crate::data::result::CIDRCheck {
         todo!()
     }
 
@@ -59,7 +59,7 @@ impl DataSource for Sqlite {
         todo!()
     }
 
-    async fn get_server_by_name(&self, name: String) -> Option<crate::data::Server> {
+    async fn get_server_by_name(&mut self, name: String) -> Option<crate::data::Server> {
         todo!()
     }
 
@@ -71,7 +71,7 @@ impl DataSource for Sqlite {
         todo!()
     }
 
-    async fn check_session(&self, player_uuid: &uuid::Uuid, ip: std::net::Ipv4Addr, when: chrono::DateTime<chrono::Utc>) -> crate::data::result::SessionCheck {
+    async fn check_session(&mut self, player_uuid: &uuid::Uuid, ip: std::net::Ipv4Addr, when: chrono::DateTime<chrono::Utc>) -> crate::data::result::SessionCheck {
         todo!()
     }
 
@@ -87,7 +87,7 @@ impl DataSource for Sqlite {
         todo!()
     }
 
-    async fn get_viewport(&self, player_uuid: &uuid::Uuid, server_uuid: &uuid::Uuid) -> Option<crate::data::Viewport> {
+    async fn get_viewport(&mut self, player_uuid: &uuid::Uuid, server_uuid: &uuid::Uuid) -> Option<crate::data::Viewport> {
         todo!()
     }
 
