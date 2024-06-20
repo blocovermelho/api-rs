@@ -63,8 +63,14 @@ impl DataSource for Sqlite {
         ok_or_log(query)
     }
 
-    async fn delete_user(&mut self, uuid: &uuid::Uuid) -> Option<crate::data::User> {
-        todo!()
+    #[tracing::instrument]
+    async fn delete_user(&mut self, uuid: &uuid::Uuid) -> Option<User> {
+        let query = sqlx::query_as::<_, User>("DELETE FROM users WHERE uuid == ? RETURNING *")
+        .bind(uuid)
+        .fetch_one(&mut self.conn)
+        .await;
+
+        ok_or_log(query)
     }
 
     async fn migrate_user(&mut self, from: &uuid::Uuid, into: &uuid::Uuid) -> Option<crate::data::User> {
