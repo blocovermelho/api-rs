@@ -1,6 +1,6 @@
 use chrono::Utc;
 use sqlx::SqliteConnection;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 use crate::{data::User, interface::DataSource};
 
@@ -73,8 +73,52 @@ impl DataSource for Sqlite {
         ok_or_log(query)
     }
 
-    async fn migrate_user(&mut self, from: &uuid::Uuid, into: &uuid::Uuid) -> Option<crate::data::User> {
-        todo!()
+    #[tracing::instrument]
+    async fn migrate_user(&mut self, from: &uuid::Uuid, into: &uuid::Uuid) -> Option<User> {
+        // Should take into consideration the parameters being fumbled. This code can be called from non-rust sources.
+        // This is the reason why `created_at` exists. The old shall give way to the new.
+
+        // An user migration is done in the case where a player decides to change their username.
+        // This can happen for many reasons, one of them being transgender folk removing their deandnames from their old usernames.
+
+        // An example of a migration would be:
+        // ┏━━━━━━━━━━┓       ┏━━━━━━━━━━━━┓
+        // ┃ roridev  ┣━━━━━━━┫ alikindsys ┃
+        // ┗━━━━━━━━━━┛       ┗━━━━━━━━━━━━┛ 
+        // ┋ f33d0bab ┋       ┋  3984dfa8  ┋
+
+        // Where all data which was originally stored under f33d0bab will be transfered over to 3984dfa8 apart from username and uuid.
+        
+        // NOTE: This operation requires two existing accounts to be linked to the same discord account for it to be sucessful. 
+
+        let fromUser = self.get_user_by_uuid(from).await?;
+        let intoUser = self.get_user_by_uuid(into).await?;
+
+        if fromUser.discord_id != intoUser.discord_id {
+            warn!("Tried transfering accounts with mismatched ownership.");
+            return None
+        }
+        
+        // Fumbled! The data will be transfered from `intoUser`'s data, and update `fromUser`'s uuid.
+        if fromUser.created_at > intoUser.created_at {
+            let query = sqlx::query_as::<_,User>("UPDATE users SET created_at = $1, pronouns = $2 WHERE uuid = $3 RETURNING *")
+            .bind(intoUser.created_at)
+            .bind(intoUser.pronouns)
+            .bind(fromUser.uuid)
+            .fetch_one(&mut self.conn)
+            .await;
+
+            ok_or_log(query)
+        } else {
+            let query = sqlx::query_as::<_,User>("UPDATE users SET created_at = $1, pronouns = $2 WHERE uuid = $3 RETURNING *")
+            .bind(fromUser.created_at)
+            .bind(fromUser.pronouns)
+            .bind(intoUser.uuid)
+            .fetch_one(&mut self.conn)
+            .await;
+
+            ok_or_log(query)
+        }
     }
 
     async fn create_account(&mut self, stub: crate::data::stub::AccountStub) -> bool {
