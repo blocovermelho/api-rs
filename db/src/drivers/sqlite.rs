@@ -89,6 +89,14 @@ impl DataSource for Sqlite {
         todo!()
     }
 
+    async fn migrate_account(&mut self, from: &uuid::Uuid, to: &uuid::Uuid) -> bool {
+        todo!()
+    }
+    
+    async fn delete_accound(&mut self, player_uuid: &uuid::Uuid) -> bool {
+        todo!()
+    }
+
     async fn check_cidr(&mut self, player_uuid: &uuid::Uuid, ip: std::net::Ipv4Addr) -> crate::data::result::CIDRCheck {
         todo!()
     }
