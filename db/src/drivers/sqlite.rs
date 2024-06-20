@@ -4,7 +4,7 @@ use chrono::Utc;
 use sqlx::SqliteConnection;
 use tracing::{debug, error, warn};
 
-use crate::{data::User, interface::DataSource};
+use crate::{data::{Account, User}, interface::DataSource};
 
 #[derive(Debug)]
 pub struct Sqlite {
@@ -90,8 +90,24 @@ impl DataSource for Sqlite {
         ok_or_log(query)
     }
 
+    #[tracing::instrument(skip(stub))]
     async fn create_account(&mut self, stub: crate::data::stub::AccountStub) -> bool {
-        todo!()
+        let hash = bcrypt::hash(stub.password, 12);
+        if let Some(pwd) = ok_or_log(hash) {
+            let account = Account { uuid: stub.uuid, password: pwd.to_string(), current_join: Utc::now() };
+
+            let query = sqlx::query_as::<_,Account>("INSERT INTO accounts (uuid, password, current_join) VALUES ($1, $2, $3) RETURNING *")
+            .bind(account.uuid)
+            .bind(account.password)
+            .bind(account.current_join)
+            .fetch_one(&mut self.conn)
+            .await;
+
+
+            ok_or_log(query).is_some()
+        } else {
+            false
+        }
     }
 
     async fn check_password(&mut self, player_uuid: &uuid::Uuid, password: String) -> crate::data::result::PasswordCheck {

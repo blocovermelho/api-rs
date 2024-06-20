@@ -105,6 +105,7 @@ pub mod stub {
         pub discord_id: String
     }
 
+    #[derive(Debug)]
     pub struct AccountStub {
         pub uuid: Uuid,
         pub password: String
