@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use chrono::Utc;
 use sqlx::SqliteConnection;
 use tracing::{debug, error, warn};
@@ -17,11 +19,11 @@ impl Sqlite {
     }
 }
 
-fn ok_or_log<T>(either: Result<T, sqlx::Error>) -> Option<T> {
+fn ok_or_log<T,E>(either: Result<T, E>) -> Option<T>  where E : Display {
     match either {
         Ok(value) =>  { Some(value) },
         Err(e) => { 
-            error!("Database Error: {e}");
+            error!("{e}");
             None 
         },
     }
