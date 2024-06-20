@@ -38,8 +38,14 @@ impl DataSource for Sqlite {
         ok_or_log(query).flatten()
     }
 
-    async fn get_users_by_discord_id(&mut self, discord_id: String) -> Vec<crate::data::User> {
-        todo!()
+    #[tracing::instrument]
+    async fn get_users_by_discord_id(&mut self, discord_id: String) -> Vec<User> {
+        let query = sqlx::query_as::<_, User>("SELECT * FROM users WHERE discord_id == ?")
+        .bind(discord_id)
+        .fetch_all(&mut self.conn)
+        .await;
+
+        ok_or_log(query).unwrap_or_default()
     }
 
     async fn create_user(&mut self, stub: crate::data::stub::UserStub) -> Option<crate::data::User> {
