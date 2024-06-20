@@ -4,7 +4,7 @@ use chrono::Utc;
 use sqlx::SqliteConnection;
 use tracing::{debug, error, warn};
 
-use crate::{data::{Account, User}, interface::DataSource};
+use crate::{data::{result::PasswordCheck, Account, User}, interface::DataSource};
 
 #[derive(Debug)]
 pub struct Sqlite {
@@ -110,8 +110,33 @@ impl DataSource for Sqlite {
         }
     }
 
-    async fn check_password(&mut self, player_uuid: &uuid::Uuid, password: String) -> crate::data::result::PasswordCheck {
-        todo!()
+    #[tracing::instrument(skip(password))]
+    async fn check_password(&mut self, player_uuid: &uuid::Uuid, password: String) -> PasswordCheck {
+        let query = sqlx::query_as::<_,Account>("SELECT * FROM accounts WHERE uuid = ?")
+        .bind(player_uuid)
+        .fetch_one(&mut self.conn)
+        .await;
+
+        let acc = ok_or_log(query);
+        match acc {
+            Some(acc) => {
+                let verify = bcrypt::verify(password, acc.password.as_str());
+                let is_ok = ok_or_log(verify);
+
+                match is_ok {
+                    Some(is_ok) => {
+                        if is_ok {
+                            PasswordCheck::Correct
+                        } else {
+                            // TODO: Implement Attempt Counting
+                            PasswordCheck::InvalidPassword(0)
+                        }
+                    },
+                    None => PasswordCheck::Unregistered,
+                }
+            },
+            None => PasswordCheck::Unregistered,
+        }
     }
 
     async fn modify_password(&mut self, player_uuid: &uuid::Uuid, old_password: String, new_password: String) -> crate::data::result::PasswordModify {
