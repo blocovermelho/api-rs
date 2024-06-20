@@ -1,3 +1,4 @@
+use chrono::Utc;
 use sqlx::SqliteConnection;
 use tracing::{debug, error};
 
@@ -48,8 +49,18 @@ impl DataSource for Sqlite {
         ok_or_log(query).unwrap_or_default()
     }
 
-    async fn create_user(&mut self, stub: crate::data::stub::UserStub) -> Option<crate::data::User> {
-        todo!()
+    #[tracing::instrument]
+    async fn create_user(&mut self, stub: crate::data::stub::UserStub) -> Option<User> {
+        let query = sqlx::query_as::<_, User>("INSERT INTO users (uuid, username, discord_id, created_at, pronouns) VALUES ($1, $2, $3, $4, $5) RETURNING * ")
+        .bind(stub.uuid)
+        .bind(stub.username)
+        .bind(stub.discord_id)
+        .bind(Utc::now())
+        .bind("[]")
+        .fetch_one(&mut self.conn)
+        .await;
+
+        ok_or_log(query)
     }
 
     async fn delete_user(&mut self, uuid: &uuid::Uuid) -> Option<crate::data::User> {

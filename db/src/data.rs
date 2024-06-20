@@ -98,6 +98,7 @@ pub mod stub {
     use uuid::Uuid;
     use crate::data::Modpack;
 
+    #[derive(Debug)]
     pub struct UserStub {
         pub uuid: Uuid,
         pub username: String,
