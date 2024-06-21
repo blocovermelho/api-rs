@@ -33,7 +33,7 @@ impl DataSource for Sqlite {
 
     #[tracing::instrument]
     async fn get_user_by_uuid(&mut self, uuid: &uuid::Uuid) -> Option<User> {
-        let query = sqlx::query_as::<_, User>("SELECT * FROM users WHERE uuid == ?")
+        let query = sqlx::query_as::<_, User>("SELECT * FROM users WHERE uuid = ?")
         .bind(uuid)
         .fetch_optional(&mut self.conn)
         .await;
@@ -43,7 +43,7 @@ impl DataSource for Sqlite {
 
     #[tracing::instrument]
     async fn get_users_by_discord_id(&mut self, discord_id: String) -> Vec<User> {
-        let query = sqlx::query_as::<_, User>("SELECT * FROM users WHERE discord_id == ?")
+        let query = sqlx::query_as::<_, User>("SELECT * FROM users WHERE discord_id = ?")
         .bind(discord_id)
         .fetch_all(&mut self.conn)
         .await;
