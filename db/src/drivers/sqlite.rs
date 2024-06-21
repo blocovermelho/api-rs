@@ -172,8 +172,14 @@ impl DataSource for Sqlite {
         todo!()
     }
     
+    #[tracing::instrument]
     async fn delete_accound(&mut self, player_uuid: &uuid::Uuid) -> bool {
-        todo!()
+        let query = sqlx::query("DELETE FROM accounts WHERE uuid == ?")
+        .bind(player_uuid)
+        .execute(&mut self.conn)
+        .await;
+
+        ok_or_log(query).is_some()
     }
 
     async fn check_cidr(&mut self, player_uuid: &uuid::Uuid, ip: std::net::Ipv4Addr) -> crate::data::result::CIDRCheck {
