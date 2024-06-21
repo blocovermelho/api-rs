@@ -168,8 +168,16 @@ impl DataSource for Sqlite {
         }
     }
 
+    #[tracing::instrument]
+    /// Note: This *only* migrates the password of an account. Not its previous IP login history.
     async fn migrate_account(&mut self, from: &uuid::Uuid, to: &uuid::Uuid) -> bool {
-        todo!()
+        let query = sqlx::query("UPDATE accounts SET password = (SELECT password FROM accounts WHERE uuid = $1) WHERE uuid = $2")
+        .bind(from)
+        .bind(to)
+        .execute(&mut self.conn)
+        .await;
+
+        ok_or_log(query).is_some()
     }
     
     #[tracing::instrument]
