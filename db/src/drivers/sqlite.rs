@@ -181,7 +181,7 @@ impl DataSource for Sqlite {
     }
     
     #[tracing::instrument]
-    async fn delete_accound(&mut self, player_uuid: &uuid::Uuid) -> bool {
+    async fn delete_account(&mut self, player_uuid: &uuid::Uuid) -> bool {
         let query = sqlx::query("DELETE FROM accounts WHERE uuid == ?")
         .bind(player_uuid)
         .execute(&mut self.conn)

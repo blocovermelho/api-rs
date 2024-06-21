@@ -16,7 +16,7 @@ pub trait DataSource {
     async fn check_password(&mut self, player_uuid: &Uuid, password: String) -> result::PasswordCheck;
     async fn modify_password(&mut self, player_uuid: &Uuid, old_password: String, new_password: String) -> result::PasswordModify;
     async fn migrate_account(&mut self, from: &Uuid, to: &Uuid) -> bool;
-    async fn delete_accound(&mut self, player_uuid: &Uuid) -> bool;
+    async fn delete_account(&mut self, player_uuid: &Uuid) -> bool;
 
     async fn check_cidr(&mut self, player_uuid: &Uuid, ip: Ipv4Addr) -> result::CIDRCheck;
     /// Network-wide ban of an IPV4 address
