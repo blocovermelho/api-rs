@@ -4,7 +4,7 @@ use chrono::Utc;
 use sqlx::SqliteConnection;
 use tracing::{debug, error, warn};
 
-use crate::{data::{result::PasswordCheck, Account, User}, interface::DataSource};
+use crate::{data::{result::{PasswordCheck, PasswordModify}, Account, User}, interface::DataSource};
 
 #[derive(Debug)]
 pub struct Sqlite {
@@ -139,8 +139,33 @@ impl DataSource for Sqlite {
         }
     }
 
-    async fn modify_password(&mut self, player_uuid: &uuid::Uuid, old_password: String, new_password: String) -> crate::data::result::PasswordModify {
-        todo!()
+    #[tracing::instrument(skip(old_password, new_password))]
+    async fn modify_password(&mut self, player_uuid: &uuid::Uuid, old_password: String, new_password: String) -> PasswordModify {
+        let check = self.check_password(player_uuid, old_password).await;
+        match check {
+            PasswordCheck::Correct =>  {
+                let hash = bcrypt::hash(new_password, 12);
+                let pwd = ok_or_log(hash);
+                match pwd {
+                    Some(pwd) => {
+                        let query = sqlx::query("UPDATE accounts SET password = $1 WHERE uuid = $2")
+                        .bind(pwd)
+                        .bind(player_uuid)
+                        .execute(&mut self.conn)
+                        .await;
+
+                        return if ok_or_log(query).is_some() {
+                            PasswordModify::Modified
+                        } else {
+                            PasswordModify::Unregistered
+                        }
+                    },
+                    None => PasswordModify::Unregistered,
+                }
+            },
+            PasswordCheck::InvalidPassword(x) => PasswordModify::InvalidPassword(x),
+            PasswordCheck::Unregistered => PasswordModify::Unregistered,
+        }
     }
 
     async fn migrate_account(&mut self, from: &uuid::Uuid, to: &uuid::Uuid) -> bool {
