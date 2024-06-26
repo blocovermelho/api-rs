@@ -1,5 +1,6 @@
 use std::net::Ipv4Addr;
 use chrono::{DateTime, Duration, Utc};
+use ipnet::Ipv4Net;
 use uuid::Uuid;
 use crate::data::{BanActor, Blacklist, result, Server, stub, User, Viewport, Pronoun};
 
@@ -45,4 +46,15 @@ pub trait DataSource {
     async fn add_pronoun(&mut self, player_uuid:&Uuid, pronoun: Pronoun) -> Vec<Pronoun>;
     async fn remove_pronoun(&mut self, player_uuid: &Uuid, pronoun: Pronoun) -> Vec<Pronoun>;
     async fn update_pronoun(&mut self, player_uuid: &Uuid, old: &Pronoun, new: Pronoun) -> Vec<Pronoun>;
+}
+
+pub trait NetworkProvider {
+    fn get_addr(&self) -> Ipv4Addr;
+    fn get_mask(&self) -> u8;
+    fn get_network(&self) -> Ipv4Net {
+        Ipv4Net::new(self.get_addr(), self.get_mask()).unwrap()
+    }
+    fn with_mask(&self, new_mask: u8) -> Ipv4Net {
+        Ipv4Net::new(self.get_addr(), new_mask).unwrap()
+    }
 }
