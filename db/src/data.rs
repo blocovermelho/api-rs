@@ -24,7 +24,7 @@ pub(crate) struct Account {
 #[derive(sqlx::FromRow, Debug)]
 pub(crate) struct Allowlist {
     pub(crate) uuid: Uuid,
-    pub(crate) ip_range: Json<Vec<Ipv4Net>>,
+    pub(crate) ip_range: Json<Ipv4Net>,
     pub(crate) last_join: DateTime<Utc>,
     pub(crate) hits: i64
 }
