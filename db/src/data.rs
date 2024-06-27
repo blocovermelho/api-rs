@@ -65,6 +65,7 @@ pub enum ModpackSource {
 pub struct Blacklist {
     pub when: DateTime<Utc>,
     pub actor: Json<BanActor>,
+    pub hits: i64,
     pub(crate) subnet: Json<Ipv4Net>,
 }
 
