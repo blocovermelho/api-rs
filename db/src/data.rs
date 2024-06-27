@@ -4,6 +4,8 @@ use uuid::Uuid;
 use ipnet::Ipv4Net;
 use serde::{Deserialize, Serialize};
 
+use crate::interface::NetworkProvider;
+
 #[derive(sqlx::FromRow, Debug)]
 pub struct User {
     pub uuid: Uuid,
@@ -67,6 +69,20 @@ pub struct Blacklist {
     pub actor: Json<BanActor>,
     pub hits: i64,
     pub(crate) subnet: Json<Ipv4Net>,
+}
+
+impl NetworkProvider for Blacklist {
+    fn get_addr(&self) -> std::net::Ipv4Addr {
+        self.subnet.0.addr()
+    }
+
+    fn get_mask(&self) -> u8 {
+        self.subnet.0.prefix_len()
+    }
+
+    fn get_network(&self) -> Ipv4Net {
+        self.subnet.0
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
