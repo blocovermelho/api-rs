@@ -301,7 +301,46 @@ impl DataSource for Sqlite {
         reason: String,
         actor: crate::data::BanActor,
     ) -> crate::data::Blacklist {
-        todo!()
+        // We loop through all the banned cidrs, to see if an already existing ban matches the given IP address.
+        let bad_actors =
+            sqlx::query_as::<_, Blacklist>("SELECT * FROM blacklist ORDER BY hits DESC")
+                .fetch_all(&mut self.conn)
+                .await;
+
+        match check_cidr(ok_or_log(bad_actors).unwrap_or_default(), ip) {
+            crate::helper::CidrAction::Match(net) => net,
+            crate::helper::CidrAction::MaskUpdate(net, mask) => {
+                let new_net = net.with_mask(mask);
+                let update = sqlx::query_as::<_, Blacklist>(
+                    "UPDATE blacklist SET subnet = $1 WHERE subnet = $2 RETURNING *",
+                )
+                .bind(Json(new_net))
+                .bind(net.subnet)
+                .fetch_one(&mut self.conn)
+                .await;
+
+                ok_or_log(update).unwrap_or(net)
+            }
+            crate::helper::CidrAction::Unmatched(net) => {
+                let blacklist = Blacklist {
+                    when: Utc::now(),
+                    actor: Json(actor),
+                    hits: 1,
+                    subnet: Json(net),
+                };
+
+                let insert = sqlx::query_as::<_, Blacklist>(
+                    "INSERT INTO blacklist (when, actor, hits, subnet) VALUES ($1, $2, 1, $3) RETURNING *",
+                )
+                .bind(blacklist.when)
+                .bind(blacklist.actor.clone())
+                .bind(blacklist.subnet)
+                .fetch_one(&mut self.conn)
+                .await;
+
+                ok_or_log(insert).unwrap_or(blacklist)
+            }
+        }
     }
 
     async fn pardon_ip(
