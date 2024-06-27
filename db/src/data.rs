@@ -99,10 +99,10 @@ impl NetworkProvider for Blacklist {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum BanActor {
     AutomatedSystem(String),
-    Staff(Uuid)
+    Staff(Uuid),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
