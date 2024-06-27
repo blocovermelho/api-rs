@@ -31,6 +31,20 @@ pub(crate) struct Allowlist {
     pub(crate) hits: i64
 }
 
+impl NetworkProvider for Allowlist {
+    fn get_addr(&self) -> std::net::Ipv4Addr {
+        self.ip_range.0.addr()
+    }
+
+    fn get_mask(&self) -> u8 {
+        self.ip_range.0.prefix_len()
+    }
+
+    fn get_network(&self) -> Ipv4Net {
+        self.ip_range.0
+    }
+}
+
 #[derive(sqlx::FromRow, Debug)]
 pub struct SaveData {
     pub user_id: Uuid,
