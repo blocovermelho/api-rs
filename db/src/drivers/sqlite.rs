@@ -1,15 +1,16 @@
 use std::fmt::Display;
 
 use chrono::Utc;
-use sqlx::SqliteConnection;
+use sqlx::{types::Json, SqliteConnection};
 use tracing::{debug, error, warn};
 
 use crate::{
     data::{
-        result::{PasswordCheck, PasswordModify},
-        Account, User,
+        result::{CIDRCheck, PasswordCheck, PasswordModify},
+        Account, Allowlist, Blacklist, User,
     },
-    interface::DataSource,
+    helper::check_cidr,
+    interface::{DataSource, NetworkProvider},
 };
 
 #[derive(Debug)]
@@ -211,12 +212,87 @@ impl DataSource for Sqlite {
         ok_or_log(query).is_some()
     }
 
-    async fn check_cidr(
-        &mut self,
-        player_uuid: &uuid::Uuid,
-        ip: std::net::Ipv4Addr,
-    ) -> crate::data::result::CIDRCheck {
-        todo!()
+    async fn check_cidr(&mut self, player_uuid: &uuid::Uuid, ip: std::net::Ipv4Addr) -> CIDRCheck {
+        // We first select from the allowlist, to know if the IP is valid for the given player.
+        let query = sqlx::query_as::<_, Allowlist>(
+            "SELECT * FROM allowlist WHERE uuid = $1 SORT BY last_join DESC",
+        )
+        .bind(player_uuid)
+        .fetch_all(&mut self.conn)
+        .await;
+
+        match check_cidr(ok_or_log(query).unwrap_or_default(), ip) {
+            crate::helper::CidrAction::Match(net) => {
+                // Increase the hit count.
+                let update = sqlx::query("UPDATE allowlist SET hits = $1, last_join = $2 WHERE ip_range = $3 AND uuid = $4")
+                    .bind(net.hits + 1)
+                    .bind(Utc::now())
+                    .bind(net.ip_range)
+                    .bind(net.uuid)
+                    .execute(&mut self.conn)
+                    .await;
+
+                ok_or_log(update);
+                CIDRCheck::ValidIp(player_uuid.clone())
+            }
+            crate::helper::CidrAction::MaskUpdate(net, mask) => {
+                // New netmask
+                let new_net = net.with_mask(mask);
+                let update = sqlx::query("UPDATE allowlist SET hits = $1, last_join = $2, ip_range = $3 WHERE uuid = $4 AND ip_range = $5")
+                    .bind(net.hits + 1)
+                    .bind(Utc::now())
+                    .bind(Json(new_net))
+                    .bind(player_uuid)
+                    .bind(net.ip_range)
+                    .execute(&mut self.conn)
+                    .await;
+
+                ok_or_log(update);
+
+                CIDRCheck::ValidIp(player_uuid.clone())
+            }
+            crate::helper::CidrAction::Unmatched(net) => {
+                // Now we need to check against all known bad actors
+                let bad_actors =
+                    sqlx::query_as::<_, Blacklist>("SELECT * FROM blacklist SORT BY hits DESC")
+                        .fetch_all(&mut self.conn)
+                        .await;
+
+                match check_cidr(ok_or_log(bad_actors).unwrap_or_default(), ip) {
+                    crate::helper::CidrAction::Match(inet) => {
+                        let update =
+                            sqlx::query("UPDATE blacklist SET hits = $1 WHERE subnet = $2")
+                                .bind(inet.hits + 1)
+                                .bind(inet.subnet)
+                                .execute(&mut self.conn)
+                                .await;
+
+                        ok_or_log(update);
+
+                        CIDRCheck::ThreatActor(inet)
+                    }
+                    crate::helper::CidrAction::MaskUpdate(inet, mask) => {
+                        let new_subnet = inet.with_mask(mask);
+
+                        let update = sqlx::query(
+                            "UPDATE blacklist SET hits = $1, subnet = $2 WHERE subnet = $1",
+                        )
+                        .bind(inet.hits + 1)
+                        .bind(Json(new_subnet))
+                        .bind(inet.subnet)
+                        .execute(&mut self.conn)
+                        .await;
+
+                        ok_or_log(update);
+
+                        CIDRCheck::ThreatActor(inet)
+                    }
+                    crate::helper::CidrAction::Unmatched(_) => {
+                        CIDRCheck::NewIp(player_uuid.clone())
+                    }
+                }
+            }
+        }
     }
 
     async fn ban_ip(
