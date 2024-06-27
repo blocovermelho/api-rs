@@ -137,7 +137,7 @@ pub mod result {
 
     pub enum CIDRCheck {
         /// A malicious actor with multiple join attempts
-        ThreatActor(Vec<Blacklist>),
+        ThreatActor(Blacklist),
         /// This happens when an ISP changes your IP, its a normal case
         /// and *should never* be displayed with a ban message.
         NewIp(Uuid),
