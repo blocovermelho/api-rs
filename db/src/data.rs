@@ -64,8 +64,8 @@ pub enum ModpackSource {
 #[derive(sqlx::FromRow, Debug)]
 pub struct Blacklist {
     pub when: DateTime<Utc>,
-    pub actor: BanActor,
-    pub(crate) subnet: Ipv4Net
+    pub actor: Json<BanActor>,
+    pub(crate) subnet: Json<Ipv4Net>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
