@@ -221,7 +221,7 @@ impl DataSource for Sqlite {
         .await;
 
         match check_cidr(ok_or_log(query).unwrap_or_default(), ip) {
-            crate::helper::CidrAction::Match(net) => {
+            CidrAction::Match(net) => {
                 // Increase the hit count.
                 let update = sqlx::query("UPDATE allowlist SET hits = $1, last_join = $2 WHERE ip_range = $3 AND uuid = $4")
                     .bind(net.hits + 1)
@@ -234,7 +234,7 @@ impl DataSource for Sqlite {
                 ok_or_log(update);
                 CIDRCheck::ValidIp(player_uuid.clone())
             }
-            crate::helper::CidrAction::MaskUpdate(net, mask) => {
+            CidrAction::MaskUpdate(net, mask) => {
                 // New netmask
                 let new_net = net.with_mask(mask);
                 let update = sqlx::query("UPDATE allowlist SET hits = $1, last_join = $2, ip_range = $3 WHERE uuid = $4 AND ip_range = $5")
@@ -250,7 +250,7 @@ impl DataSource for Sqlite {
 
                 CIDRCheck::ValidIp(player_uuid.clone())
             }
-            crate::helper::CidrAction::Unmatched(net) => {
+            CidrAction::Unmatched(net) => {
                 // Now we need to check against all known bad actors
                 let bad_actors =
                     sqlx::query_as::<_, Blacklist>("SELECT * FROM blacklist SORT BY hits DESC")
@@ -258,7 +258,7 @@ impl DataSource for Sqlite {
                         .await;
 
                 match check_cidr(ok_or_log(bad_actors).unwrap_or_default(), ip) {
-                    crate::helper::CidrAction::Match(inet) => {
+                    CidrAction::Match(inet) => {
                         let update =
                             sqlx::query("UPDATE blacklist SET hits = $1 WHERE subnet = $2")
                                 .bind(inet.hits + 1)
@@ -270,7 +270,7 @@ impl DataSource for Sqlite {
 
                         CIDRCheck::ThreatActor(inet)
                     }
-                    crate::helper::CidrAction::MaskUpdate(inet, mask) => {
+                    CidrAction::MaskUpdate(inet, mask) => {
                         let new_subnet = inet.with_mask(mask);
 
                         let update = sqlx::query(
@@ -286,7 +286,7 @@ impl DataSource for Sqlite {
 
                         CIDRCheck::ThreatActor(inet)
                     }
-                    crate::helper::CidrAction::Unmatched(_) => {
+                    CidrAction::Unmatched(_) => {
                         CIDRCheck::NewIp(player_uuid.clone())
                     }
                 }
@@ -298,7 +298,7 @@ impl DataSource for Sqlite {
         &mut self,
         ip: std::net::Ipv4Addr,
         reason: String,
-        actor: crate::data::BanActor,
+        actor: BanActor,
     ) -> crate::data::Blacklist {
         // We loop through all the banned cidrs, to see if an already existing ban matches the given IP address.
         let bad_actors =
@@ -307,8 +307,8 @@ impl DataSource for Sqlite {
                 .await;
 
         match check_cidr(ok_or_log(bad_actors).unwrap_or_default(), ip) {
-            crate::helper::CidrAction::Match(net) => net,
-            crate::helper::CidrAction::MaskUpdate(net, mask) => {
+            CidrAction::Match(net) => net,
+            CidrAction::MaskUpdate(net, mask) => {
                 let new_net = net.with_mask(mask);
                 let update = sqlx::query_as::<_, Blacklist>(
                     "UPDATE blacklist SET subnet = $1 WHERE subnet = $2 RETURNING *",
@@ -320,7 +320,7 @@ impl DataSource for Sqlite {
 
                 ok_or_log(update).unwrap_or(net)
             }
-            crate::helper::CidrAction::Unmatched(net) => {
+            CidrAction::Unmatched(net) => {
                 let blacklist = Blacklist {
                     when: Utc::now(),
                     actor: Json(actor),
