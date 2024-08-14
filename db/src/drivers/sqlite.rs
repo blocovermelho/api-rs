@@ -6,10 +6,9 @@ use tracing::{debug, error, warn};
 
 use crate::{
     data::{
-        result::{CIDRCheck, PasswordCheck, PasswordModify},
-        Account, Allowlist, Blacklist, User,
+        result::{CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify}, Account, Allowlist, BanActor, Blacklist, User
     },
-    helper::check_cidr,
+    helper::{check_cidr, CidrAction},
     interface::{DataSource, NetworkProvider},
 };
 
@@ -346,9 +345,80 @@ impl DataSource for Sqlite {
     async fn pardon_ip(
         &mut self,
         ip: std::net::Ipv4Addr,
-        actor: crate::data::BanActor,
+        actor: BanActor,
     ) -> crate::data::result::PardonAttempt {
-        todo!()
+        let bad_actors = sqlx::query_as::<_, Blacklist>("SELECT * FROM blacklist ORDER BY hits DESC")
+            .fetch_all(&mut self.conn)
+            .await;
+
+        return match check_cidr(ok_or_log(bad_actors).unwrap_or_default(), ip) {
+            CidrAction::Match(mut net) => {
+                // We're unbanning the block since thats the easiest way to unban an IP address.
+                // Subtracting CIDRs to allow a single IP address explodes the number of subnets badly. We shouldn't do that.
+
+                match net.actor.0 {
+                    BanActor::AutomatedSystem(_) => {
+                        // If the ban was originally issued by an automated system, it can be overridden by either a staff member or an automated system.
+                        // If an automated system tries to pardon an IP adress, it wont override the hitcount.
+                        // A staff call is a manual override which will with one attempt remove the whole block, overriding the hitcount.
+                        match actor {
+                            BanActor::AutomatedSystem(_) => {
+                                let count = net.decrement_hitcount() ;
+                                if count > 0 {
+                                    let query = sqlx::query_as::<_, Blacklist>("UPDATE blacklist SET hits = $1 WHERE subnet = $2 RETURNING *")
+                                        .bind(count)
+                                        .bind(net.subnet)
+                                        .fetch_optional(&mut self.conn)
+                                        .await;
+
+                                    ok_or_log(query);
+
+                                    PardonAttempt::Decreased(count as usize)
+                                } else {
+                                    let query = sqlx::query_as::<_, Blacklist>("DELETE from blacklist WHERE subnet = ? RETURNING *")
+                                        .bind(net.subnet)
+                                        .fetch_optional(&mut self.conn)
+                                        .await;
+
+                                    ok_or_log(query);
+
+                                    PardonAttempt::Accepted
+                                }
+                            },
+                            BanActor::Staff(_) => {
+                                let query = sqlx::query_as::<_, Blacklist>("DELETE from blacklist WHERE subnet = ? RETURNING *")
+                                        .bind(net.subnet)
+                                        .fetch_optional(&mut self.conn)
+                                        .await;
+
+                                    ok_or_log(query);
+
+                                    PardonAttempt::Accepted
+                            },
+                        }
+                    },
+                    BanActor::Staff(_) => {
+                        // A staff issued ban can only be modified by another staffer.
+                        match actor {
+                            BanActor::AutomatedSystem(_) => PardonAttempt::InsufficientPermissions,
+                            BanActor::Staff(_) => {
+                                let query = sqlx::query_as::<_, Blacklist>("DELETE from blacklist WHERE subnet = ? RETURNING *")
+                                        .bind(net.subnet)
+                                        .fetch_optional(&mut self.conn)
+                                        .await;
+
+                                    ok_or_log(query);
+
+                                    PardonAttempt::Accepted
+                            },
+                        }
+                    },
+                } 
+            },
+            CidrAction::MaskUpdate(_,_) => PardonAttempt::NotBanned,
+            CidrAction::Unmatched(_) => PardonAttempt::NotBanned,
+        };
+
     }
 
     async fn create_server(
