@@ -183,7 +183,9 @@ pub mod result {
         NotBanned,
         /// The infraction count was reduced. This IP will only be unbanned after the count
         /// reaches zero, e.g. "Accepted" state.
-        Decreased(usize)
+        Decreased(usize),
+        /// Permission Error: An automated system tried lifting a manually issued ban.
+        InsufficientPermissions,
     }
 
     pub enum SessionCheck {
