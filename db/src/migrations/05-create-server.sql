@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS server (
     name TEXT unique,
     supported_versions TEXT,
     current_modpack TEXT,
-    online INTEGER,
+    online TEXT,
     players TEXT,
 
     PRIMARY KEY (uuid)
