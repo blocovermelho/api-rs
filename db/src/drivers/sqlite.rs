@@ -6,7 +6,9 @@ use tracing::{debug, error, warn};
 
 use crate::{
     data::{
-        result::{CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify}, Account, Allowlist, BanActor, Blacklist, User
+        self,
+        result::{CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify},
+        Account, Allowlist, BanActor, Blacklist, Server, User,
     },
     helper::{check_cidr, CidrAction},
     interface::{DataSource, NetworkProvider},
@@ -421,11 +423,17 @@ impl DataSource for Sqlite {
 
     }
 
-    async fn create_server(
-        &mut self,
-        stub: crate::data::stub::ServerStub,
-    ) -> Option<crate::data::Server> {
-        todo!()
+    async fn create_server(&mut self, stub: data::stub::ServerStub) -> Option<Server> {
+        let query = sqlx::query_as::<_, Server>("INSERT INTO servers (uuid, name, supported_versions, current_modpack, online, players) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *")
+            .bind(Uuid::new_v4())
+            .bind(stub.name)
+            .bind(Json(stub.supported_versions))
+            .bind(Json(stub.current_modpack))
+            .bind(Json(true))
+            .bind(Json("[]"))
+	    .fetch_optional(&mut self.conn).await;
+
+        ok_or_log(query).flatten()
     }
 
     async fn delete_server(&mut self, server_uuid: &uuid::Uuid) -> Option<crate::data::Server> {
