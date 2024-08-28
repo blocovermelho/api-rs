@@ -59,7 +59,8 @@ pub struct Server {
     pub name: String,
     pub supported_versions: Json<Vec<String>>,
     pub current_modpack: Json<Option<Modpack>>,
-    pub online: bool
+    pub online: Json<bool>,
+    pub players: Json<Vec<Uuid>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

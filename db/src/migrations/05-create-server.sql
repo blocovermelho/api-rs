@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS server (
     supported_versions TEXT,
     current_modpack TEXT,
     online INTEGER,
+    players TEXT,
 
     PRIMARY KEY (uuid)
 );
