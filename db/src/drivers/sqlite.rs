@@ -3,6 +3,7 @@ use std::fmt::Display;
 use chrono::Utc;
 use sqlx::{types::Json, SqliteConnection};
 use tracing::{debug, error, warn};
+use uuid::Uuid;
 
 use crate::{
     data::{
@@ -60,7 +61,7 @@ impl DataSource for Sqlite {
     }
 
     #[tracing::instrument]
-    async fn create_user(&mut self, stub: crate::data::stub::UserStub) -> Option<User> {
+    async fn create_user(&mut self, stub: data::stub::UserStub) -> Option<User> {
         let query = sqlx::query_as::<_, User>("INSERT INTO users (uuid, username, discord_id, created_at, pronouns) VALUES ($1, $2, $3, $4, $5) RETURNING * ")
         .bind(stub.uuid)
         .bind(stub.username)
@@ -101,7 +102,7 @@ impl DataSource for Sqlite {
     }
 
     #[tracing::instrument(skip(stub))]
-    async fn create_account(&mut self, stub: crate::data::stub::AccountStub) -> bool {
+    async fn create_account(&mut self, stub: data::stub::AccountStub) -> bool {
         let hash = bcrypt::hash(stub.password, 12);
         if let Some(pwd) = ok_or_log(hash) {
             let account = Account {
@@ -288,9 +289,7 @@ impl DataSource for Sqlite {
 
                         CIDRCheck::ThreatActor(inet)
                     }
-                    CidrAction::Unmatched(_) => {
-                        CIDRCheck::NewIp(player_uuid.clone())
-                    }
+                    CidrAction::Unmatched(_) => CIDRCheck::NewIp(player_uuid.clone()),
                 }
             }
         }
@@ -301,7 +300,7 @@ impl DataSource for Sqlite {
         ip: std::net::Ipv4Addr,
         reason: String,
         actor: BanActor,
-    ) -> crate::data::Blacklist {
+    ) -> data::Blacklist {
         // We loop through all the banned cidrs, to see if an already existing ban matches the given IP address.
         let bad_actors =
             sqlx::query_as::<_, Blacklist>("SELECT * FROM blacklist ORDER BY hits DESC")
@@ -348,10 +347,11 @@ impl DataSource for Sqlite {
         &mut self,
         ip: std::net::Ipv4Addr,
         actor: BanActor,
-    ) -> crate::data::result::PardonAttempt {
-        let bad_actors = sqlx::query_as::<_, Blacklist>("SELECT * FROM blacklist ORDER BY hits DESC")
-            .fetch_all(&mut self.conn)
-            .await;
+    ) -> data::result::PardonAttempt {
+        let bad_actors =
+            sqlx::query_as::<_, Blacklist>("SELECT * FROM blacklist ORDER BY hits DESC")
+                .fetch_all(&mut self.conn)
+                .await;
 
         return match check_cidr(ok_or_log(bad_actors).unwrap_or_default(), ip) {
             CidrAction::Match(mut net) => {
@@ -365,7 +365,7 @@ impl DataSource for Sqlite {
                         // A staff call is a manual override which will with one attempt remove the whole block, overriding the hitcount.
                         match actor {
                             BanActor::AutomatedSystem(_) => {
-                                let count = net.decrement_hitcount() ;
+                                let count = net.decrement_hitcount();
                                 if count > 0 {
                                     let query = sqlx::query_as::<_, Blacklist>("UPDATE blacklist SET hits = $1 WHERE subnet = $2 RETURNING *")
                                         .bind(count)
@@ -377,50 +377,55 @@ impl DataSource for Sqlite {
 
                                     PardonAttempt::Decreased(count as usize)
                                 } else {
-                                    let query = sqlx::query_as::<_, Blacklist>("DELETE from blacklist WHERE subnet = ? RETURNING *")
-                                        .bind(net.subnet)
-                                        .fetch_optional(&mut self.conn)
-                                        .await;
+                                    let query = sqlx::query_as::<_, Blacklist>(
+                                        "DELETE from blacklist WHERE subnet = ? RETURNING *",
+                                    )
+                                    .bind(net.subnet)
+                                    .fetch_optional(&mut self.conn)
+                                    .await;
 
                                     ok_or_log(query);
 
                                     PardonAttempt::Accepted
                                 }
-                            },
+                            }
                             BanActor::Staff(_) => {
-                                let query = sqlx::query_as::<_, Blacklist>("DELETE from blacklist WHERE subnet = ? RETURNING *")
-                                        .bind(net.subnet)
-                                        .fetch_optional(&mut self.conn)
-                                        .await;
+                                let query = sqlx::query_as::<_, Blacklist>(
+                                    "DELETE from blacklist WHERE subnet = ? RETURNING *",
+                                )
+                                .bind(net.subnet)
+                                .fetch_optional(&mut self.conn)
+                                .await;
 
-                                    ok_or_log(query);
+                                ok_or_log(query);
 
-                                    PardonAttempt::Accepted
-                            },
+                                PardonAttempt::Accepted
+                            }
                         }
-                    },
+                    }
                     BanActor::Staff(_) => {
                         // A staff issued ban can only be modified by another staffer.
                         match actor {
                             BanActor::AutomatedSystem(_) => PardonAttempt::InsufficientPermissions,
                             BanActor::Staff(_) => {
-                                let query = sqlx::query_as::<_, Blacklist>("DELETE from blacklist WHERE subnet = ? RETURNING *")
-                                        .bind(net.subnet)
-                                        .fetch_optional(&mut self.conn)
-                                        .await;
+                                let query = sqlx::query_as::<_, Blacklist>(
+                                    "DELETE from blacklist WHERE subnet = ? RETURNING *",
+                                )
+                                .bind(net.subnet)
+                                .fetch_optional(&mut self.conn)
+                                .await;
 
-                                    ok_or_log(query);
+                                ok_or_log(query);
 
-                                    PardonAttempt::Accepted
-                            },
+                                PardonAttempt::Accepted
+                            }
                         }
-                    },
-                } 
-            },
-            CidrAction::MaskUpdate(_,_) => PardonAttempt::NotBanned,
+                    }
+                }
+            }
+            CidrAction::MaskUpdate(_, _) => PardonAttempt::NotBanned,
             CidrAction::Unmatched(_) => PardonAttempt::NotBanned,
         };
-
     }
 
     async fn create_server(&mut self, stub: data::stub::ServerStub) -> Option<Server> {
@@ -436,11 +441,11 @@ impl DataSource for Sqlite {
         ok_or_log(query).flatten()
     }
 
-    async fn delete_server(&mut self, server_uuid: &uuid::Uuid) -> Option<crate::data::Server> {
+    async fn delete_server(&mut self, server_uuid: &uuid::Uuid) -> Option<Server> {
         todo!()
     }
 
-    async fn get_server_by_name(&mut self, name: String) -> Option<crate::data::Server> {
+    async fn get_server_by_name(&mut self, name: String) -> Option<Server> {
         todo!()
     }
 
@@ -448,7 +453,7 @@ impl DataSource for Sqlite {
         &mut self,
         server_uuid: &uuid::Uuid,
         player_uuid: &uuid::Uuid,
-    ) -> crate::data::result::ServerJoin {
+    ) -> data::result::ServerJoin {
         todo!()
     }
 
@@ -456,7 +461,7 @@ impl DataSource for Sqlite {
         &mut self,
         server_uuid: &uuid::Uuid,
         player_uuid: &uuid::Uuid,
-    ) -> crate::data::result::ServerLeave {
+    ) -> data::result::ServerLeave {
         todo!()
     }
 
@@ -465,7 +470,7 @@ impl DataSource for Sqlite {
         player_uuid: &uuid::Uuid,
         ip: std::net::Ipv4Addr,
         when: chrono::DateTime<chrono::Utc>,
-    ) -> crate::data::result::SessionCheck {
+    ) -> data::result::SessionCheck {
         todo!()
     }
 
@@ -473,14 +478,11 @@ impl DataSource for Sqlite {
         &mut self,
         player_uuid: &uuid::Uuid,
         when: chrono::DateTime<chrono::Utc>,
-    ) -> crate::data::result::SessionUpdate {
+    ) -> data::result::SessionUpdate {
         todo!()
     }
 
-    async fn revoke_session(
-        &mut self,
-        player_uuid: &uuid::Uuid,
-    ) -> crate::data::result::SessionRevoke {
+    async fn revoke_session(&mut self, player_uuid: &uuid::Uuid) -> data::result::SessionRevoke {
         todo!()
     }
 
@@ -488,8 +490,8 @@ impl DataSource for Sqlite {
         &mut self,
         player_uuid: &uuid::Uuid,
         server_uuid: &uuid::Uuid,
-        viewport: crate::data::Viewport,
-    ) -> crate::data::result::ViewportUpdate {
+        viewport: data::Viewport,
+    ) -> data::result::ViewportUpdate {
         todo!()
     }
 
@@ -497,7 +499,7 @@ impl DataSource for Sqlite {
         &mut self,
         player_uuid: &uuid::Uuid,
         server_uuid: &uuid::Uuid,
-    ) -> Option<crate::data::Viewport> {
+    ) -> Option<data::Viewport> {
         todo!()
     }
 
@@ -506,7 +508,7 @@ impl DataSource for Sqlite {
         player_uuid: &uuid::Uuid,
         server_uuid: &uuid::Uuid,
         when: chrono::DateTime<chrono::Utc>,
-    ) -> crate::data::result::PlaytimeUpdate {
+    ) -> data::result::PlaytimeUpdate {
         todo!()
     }
 
@@ -521,25 +523,25 @@ impl DataSource for Sqlite {
     async fn add_pronoun(
         &mut self,
         player_uuid: &uuid::Uuid,
-        pronoun: crate::data::Pronoun,
-    ) -> Vec<crate::data::Pronoun> {
+        pronoun: data::Pronoun,
+    ) -> Vec<data::Pronoun> {
         todo!()
     }
 
     async fn remove_pronoun(
         &mut self,
         player_uuid: &uuid::Uuid,
-        pronoun: crate::data::Pronoun,
-    ) -> Vec<crate::data::Pronoun> {
+        pronoun: data::Pronoun,
+    ) -> Vec<data::Pronoun> {
         todo!()
     }
 
     async fn update_pronoun(
         &mut self,
         player_uuid: &uuid::Uuid,
-        old: &crate::data::Pronoun,
-        new: crate::data::Pronoun,
-    ) -> Vec<crate::data::Pronoun> {
+        old: &data::Pronoun,
+        new: data::Pronoun,
+    ) -> Vec<data::Pronoun> {
         todo!()
     }
 }
