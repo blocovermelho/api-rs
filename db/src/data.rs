@@ -1,8 +1,8 @@
 use chrono::{DateTime, Duration, Utc};
-use sqlx::types::Json;
-use uuid::Uuid;
 use ipnet::Ipv4Net;
 use serde::{Deserialize, Serialize};
+use sqlx::types::Json;
+use uuid::Uuid;
 
 use crate::interface::NetworkProvider;
 
@@ -13,14 +13,14 @@ pub struct User {
     pub discord_id: String,
     pub created_at: DateTime<Utc>,
     pub pronouns: Json<Vec<Pronoun>>,
-    pub last_server: Option<Uuid>
+    pub last_server: Option<Uuid>,
 }
 
 #[derive(sqlx::FromRow, Debug)]
 pub(crate) struct Account {
     pub(crate) uuid: Uuid,
     pub(crate) password: String,
-    pub(crate) current_join: DateTime<Utc>
+    pub(crate) current_join: DateTime<Utc>,
 }
 
 #[derive(sqlx::FromRow, Debug)]
@@ -28,7 +28,7 @@ pub(crate) struct Allowlist {
     pub(crate) uuid: Uuid,
     pub(crate) ip_range: Json<Ipv4Net>,
     pub(crate) last_join: DateTime<Utc>,
-    pub(crate) hits: i64
+    pub(crate) hits: i64,
 }
 
 impl NetworkProvider for Allowlist {
@@ -50,7 +50,7 @@ pub struct SaveData {
     pub user_id: Uuid,
     pub server_id: Uuid,
     pub viewport: Json<Viewport>,
-    pub playtime: Duration
+    pub playtime: Duration,
 }
 
 #[derive(sqlx::FromRow, Debug)]
@@ -68,14 +68,14 @@ pub struct Modpack {
     pub name: String,
     pub source: ModpackSource,
     pub version: String,
-    pub uri: String
+    pub uri: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ModpackSource {
     Modrinth,
     Curseforge,
-    Other
+    Other,
 }
 
 #[derive(sqlx::FromRow, Debug)]
@@ -127,37 +127,37 @@ pub struct Loc {
     pub dim: String,
     pub x: f64,
     pub y: f64,
-    pub z: f64
+    pub z: f64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Viewport {
     pub loc: Loc,
     pub yaw: f64,
-    pub pitch: f64
+    pub pitch: f64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Pronoun {
     pub pronoun: String,
-    pub color: String
+    pub color: String,
 }
 
 pub mod stub {
-    use uuid::Uuid;
     use crate::data::Modpack;
+    use uuid::Uuid;
 
     #[derive(Debug)]
     pub struct UserStub {
         pub uuid: Uuid,
         pub username: String,
-        pub discord_id: String
+        pub discord_id: String,
     }
 
     #[derive(Debug)]
     pub struct AccountStub {
         pub uuid: Uuid,
-        pub password: String
+        pub password: String,
     }
 
     pub struct ServerStub {
@@ -168,19 +168,19 @@ pub mod stub {
 }
 
 pub mod result {
-    use uuid::Uuid;
     use crate::data::{Blacklist, Viewport};
+    use uuid::Uuid;
 
     pub enum PasswordCheck {
         Correct,
         InvalidPassword(u64),
-        Unregistered
+        Unregistered,
     }
 
     pub enum PasswordModify {
         Modified,
         InvalidPassword(u64),
-        Unregistered
+        Unregistered,
     }
 
     pub enum CIDRCheck {
@@ -190,7 +190,7 @@ pub mod result {
         /// and *should never* be displayed with a ban message.
         NewIp(Uuid),
         /// Valid login case for that user
-        ValidIp(Uuid)
+        ValidIp(Uuid),
     }
 
     pub enum PardonAttempt {
@@ -208,43 +208,43 @@ pub mod result {
     pub enum SessionCheck {
         Accepted,
         Transfer(Uuid),
-        Expired
+        Expired,
     }
 
     pub enum SessionRevoke {
         Revoked,
-        Error(String)
+        Error(String),
     }
 
     pub enum SessionUpdate {
         Updated,
-        Error(String)
+        Error(String),
     }
 
     pub enum ServerJoin {
         FirstJoin,
-        Resume(Viewport)
+        Resume(Viewport),
     }
 
     pub enum ServerLeave {
         Accepted,
-        NotJoined
+        NotJoined,
     }
 
     pub enum ViewportUpdate {
         InvalidServer,
         InvalidUser,
-        Accepted
+        Accepted,
     }
 
     pub enum PlaytimeUpdate {
         InvalidServer,
         InvalidUser,
-        Accepted
+        Accepted,
     }
 
     pub enum UserAction {
         InvalidUser,
-        Accepted
+        Accepted,
     }
 }
