@@ -211,6 +211,7 @@ pub mod result {
         Accepted,
         Transfer(Uuid),
         Expired,
+        Denied,
     }
 
     pub enum SessionRevoke {
