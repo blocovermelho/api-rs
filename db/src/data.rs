@@ -226,6 +226,8 @@ pub mod result {
     pub enum ServerJoin {
         FirstJoin,
         Resume(Viewport),
+        InvalidServer,
+        InvalidUser
     }
 
     pub enum ServerLeave {
