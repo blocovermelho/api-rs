@@ -52,7 +52,7 @@ pub struct SaveData {
     pub user_id: Uuid,
     pub server_id: Uuid,
     pub viewport: Json<Viewport>,
-    pub playtime: Duration,
+    pub playtime: Json<Duration>,
 }
 
 #[derive(sqlx::FromRow, Debug)]
