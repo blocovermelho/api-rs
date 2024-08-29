@@ -29,6 +29,7 @@ pub trait DataSource {
     async fn create_server(&mut self, stub: stub::ServerStub) -> Option<Server>;
     async fn delete_server(&mut self, server_uuid: &Uuid) -> Option<Server>;
 
+    async fn get_server(&mut self, server_uuid: &Uuid) -> Option<Server>;
     async fn get_server_by_name(&mut self, name: String) -> Option<Server>;
 
     async fn join_server(&mut self, server_uuid: &Uuid, player_uuid: &Uuid) -> result::ServerJoin;

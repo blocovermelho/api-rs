@@ -445,6 +445,10 @@ impl DataSource for Sqlite {
         todo!()
     }
 
+    async fn get_server(&mut self, server_uuid: &uuid::Uuid) -> Option<Server> {
+        todo!()
+    }
+
     async fn get_server_by_name(&mut self, name: String) -> Option<Server> {
         todo!()
     }
