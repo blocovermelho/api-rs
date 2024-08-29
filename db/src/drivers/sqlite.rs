@@ -548,4 +548,12 @@ impl DataSource for Sqlite {
     ) -> Vec<data::Pronoun> {
         todo!()
     }
+
+    async fn create_savedata(
+        &mut self,
+        player_uuid: &Uuid,
+        server_uuid: &Uuid
+    ) -> Option<data::SaveData> {
+        todo!()
+    }
 }

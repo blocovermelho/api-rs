@@ -3,7 +3,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use ipnet::Ipv4Net;
 use uuid::Uuid;
-use crate::data::{BanActor, Blacklist, result, Server, stub, User, Viewport, Pronoun};
+use crate::data::{BanActor, Blacklist, result, Server, stub, User, Viewport, Pronoun, SaveData};
 
 pub trait DataSource {
     async fn get_user_by_uuid(&mut self, uuid: &Uuid) -> Option<User>;
@@ -48,6 +48,8 @@ pub trait DataSource {
     async fn add_pronoun(&mut self, player_uuid:&Uuid, pronoun: Pronoun) -> Vec<Pronoun>;
     async fn remove_pronoun(&mut self, player_uuid: &Uuid, pronoun: Pronoun) -> Vec<Pronoun>;
     async fn update_pronoun(&mut self, player_uuid: &Uuid, old: &Pronoun, new: Pronoun) -> Vec<Pronoun>;
+
+    async fn create_savedata(&mut self, player_uuid: &Uuid, server_uuid: &Uuid) -> Option<SaveData>;
 }
 
 pub trait NetworkProvider {
