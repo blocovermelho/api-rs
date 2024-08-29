@@ -209,7 +209,6 @@ pub mod result {
 
     pub enum SessionCheck {
         Accepted,
-        Transfer(Uuid),
         Expired,
         Denied,
     }
