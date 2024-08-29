@@ -442,7 +442,12 @@ impl DataSource for Sqlite {
     }
 
     async fn delete_server(&mut self, server_uuid: &uuid::Uuid) -> Option<Server> {
-        todo!()
+        let query = sqlx::query_as::<_, Server>("DELETE FROM servers WHERE uuid = ? RETURNING *")
+            .bind(server_uuid)
+            .fetch_optional(&mut self.conn)
+            .await;
+
+        ok_or_log(query).flatten()
     }
 
     async fn get_server(&mut self, server_uuid: &uuid::Uuid) -> Option<Server> {
