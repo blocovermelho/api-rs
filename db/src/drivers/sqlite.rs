@@ -455,7 +455,12 @@ impl DataSource for Sqlite {
     }
 
     async fn get_server_by_name(&mut self, name: String) -> Option<Server> {
-        todo!()
+        let query = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE name = ? RETURNING *")
+            .bind(name)
+            .fetch_optional(&mut self.conn)
+            .await;
+
+        ok_or_log(query).flatten()
     }
 
     async fn join_server(
