@@ -516,7 +516,7 @@ impl DataSource for Sqlite {
         &mut self,
         player_uuid: &uuid::Uuid,
         server_uuid: &uuid::Uuid,
-    ) -> Option<chrono::Duration> {
+    ) -> Option<time::Duration> {
         todo!()
     }
 

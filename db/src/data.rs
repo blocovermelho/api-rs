@@ -1,4 +1,6 @@
-use chrono::{DateTime, Duration, Utc};
+use core::time::{self, Duration};
+
+use chrono::{DateTime, Utc};
 use ipnet::Ipv4Net;
 use serde::{Deserialize, Serialize};
 use sqlx::types::Json;

@@ -1,5 +1,6 @@
 use std::net::Ipv4Addr;
-use chrono::{DateTime, Duration, Utc};
+use std::time::Duration;
+use chrono::{DateTime, Utc};
 use ipnet::Ipv4Net;
 use uuid::Uuid;
 use crate::data::{BanActor, Blacklist, result, Server, stub, User, Viewport, Pronoun};
