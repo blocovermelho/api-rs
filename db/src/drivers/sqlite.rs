@@ -9,9 +9,10 @@ use uuid::Uuid;
 use crate::{
     data::{
         self,
-        result::{CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify},
+        result::{CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify, SessionCheck},
         Account, Allowlist, BanActor, Blacklist, Loc, SaveData, Server, User, Viewport,
     },
+    drivers::MAX_SESSION_TIME_MINUTE,
     helper::{check_cidr, CidrAction},
     interface::{DataSource, NetworkProvider},
 };
@@ -506,7 +507,21 @@ impl DataSource for Sqlite {
         ip: std::net::Ipv4Addr,
         when: chrono::DateTime<chrono::Utc>,
     ) -> data::result::SessionCheck {
-        todo!()
+        let now = Utc::now();
+
+        return match self.check_cidr(player_uuid, ip).await {
+            CIDRCheck::ThreatActor(_) => SessionCheck::Denied,
+            CIDRCheck::NewIp(_) => SessionCheck::Denied,
+            CIDRCheck::ValidIp(net) => {
+                // The IP is validated and refreshed if it could be merged with existing CIDRs
+                let delta = now - net.last_join;
+                if delta.num_minutes() >= MAX_SESSION_TIME_MINUTE {
+                    SessionCheck::Accepted
+                } else {
+                    SessionCheck::Expired
+                }
+            }
+        };
     }
 
     async fn update_session(
