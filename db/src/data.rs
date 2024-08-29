@@ -170,7 +170,7 @@ pub mod stub {
 }
 
 pub mod result {
-    use crate::data::{Blacklist, Viewport};
+    use crate::data::{Allowlist, Blacklist, Viewport};
     use uuid::Uuid;
 
     pub enum PasswordCheck {
@@ -192,7 +192,7 @@ pub mod result {
         /// and *should never* be displayed with a ban message.
         NewIp(Uuid),
         /// Valid login case for that user
-        ValidIp(Uuid),
+        ValidIp(Allowlist),
     }
 
     pub enum PardonAttempt {

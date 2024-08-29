@@ -226,33 +226,48 @@ impl DataSource for Sqlite {
 
         match check_cidr(ok_or_log(query).unwrap_or_default(), ip) {
             CidrAction::Match(net) => {
+                let allowlist = Allowlist {
+                    uuid: net.uuid,
+                    ip_range: net.ip_range,
+                    last_join: Utc::now(),
+                    hits: net.hits + 1,
+                };
+
                 // Increase the hit count.
-                let update = sqlx::query("UPDATE allowlist SET hits = $1, last_join = $2 WHERE ip_range = $3 AND uuid = $4")
-                    .bind(net.hits + 1)
-                    .bind(Utc::now())
-                    .bind(net.ip_range)
-                    .bind(net.uuid)
-                    .execute(&mut self.conn)
+                let update = sqlx::query_as::<_,Allowlist>("UPDATE allowlist SET hits = $1, last_join = $2 WHERE ip_range = $3 AND uuid = $4")
+                    .bind(allowlist.hits)
+                    .bind(allowlist.last_join)
+                    .bind(allowlist.ip_range)
+                    .bind(allowlist.uuid)
+                    .fetch_one(&mut self.conn)
                     .await;
 
                 ok_or_log(update);
-                CIDRCheck::ValidIp(player_uuid.clone())
+                CIDRCheck::ValidIp(allowlist)
             }
             CidrAction::MaskUpdate(net, mask) => {
                 // New netmask
                 let new_net = net.with_mask(mask);
+
+                let allowlist = Allowlist {
+                    uuid: net.uuid,
+                    ip_range: Json(new_net),
+                    last_join: Utc::now(),
+                    hits: net.hits + 1,
+                };
+
                 let update = sqlx::query("UPDATE allowlist SET hits = $1, last_join = $2, ip_range = $3 WHERE uuid = $4 AND ip_range = $5")
-                    .bind(net.hits + 1)
-                    .bind(Utc::now())
-                    .bind(Json(new_net))
-                    .bind(player_uuid)
+                    .bind(allowlist.hits)
+                    .bind(allowlist.last_join)
+                    .bind(allowlist.ip_range)
+                    .bind(allowlist.uuid)
                     .bind(net.ip_range)
                     .execute(&mut self.conn)
                     .await;
 
                 ok_or_log(update);
 
-                CIDRCheck::ValidIp(player_uuid.clone())
+                CIDRCheck::ValidIp(allowlist)
             }
             CidrAction::Unmatched(net) => {
                 // Now we need to check against all known bad actors
