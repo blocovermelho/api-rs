@@ -1,3 +1,4 @@
+use core::time;
 use std::fmt::Display;
 
 use chrono::Utc;
@@ -9,7 +10,7 @@ use crate::{
     data::{
         self,
         result::{CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify},
-        Account, Allowlist, BanActor, Blacklist, Server, User,
+        Account, Allowlist, BanActor, Blacklist, Loc, SaveData, Server, User, Viewport,
     },
     helper::{check_cidr, CidrAction},
     interface::{DataSource, NetworkProvider},
@@ -567,8 +568,21 @@ impl DataSource for Sqlite {
     async fn create_savedata(
         &mut self,
         player_uuid: &Uuid,
-        server_uuid: &Uuid
-    ) -> Option<data::SaveData> {
-        todo!()
+        server_uuid: &Uuid,
+    ) -> Option<SaveData> {
+        let query = sqlx::query_as::<_, SaveData>("INSERT INTO savedata (server_uuid, player_uuid, playtime, viewport) VALUES ($1, $2, $3, $4) RETURNING *")
+            .bind(server_uuid)
+            .bind(player_uuid)
+            .bind(Json(time::Duration::ZERO))
+            .bind(Json(Viewport{ loc: Loc {
+                dim: "minecraft:overworld".to_owned(),
+                x: 0.0,
+                y: 64.0,
+                z: 0.0,
+            }, yaw: 0.0, pitch: 0.0 }))
+            .fetch_optional(&mut self.conn)
+            .await;
+
+        ok_or_log(query).flatten()
     }
 }
