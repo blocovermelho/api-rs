@@ -36,8 +36,8 @@ pub trait DataSource {
     async fn leave_server(&mut self, server_uuid: &Uuid, player_uuid: &Uuid) -> result::ServerLeave;
     async fn check_session(&mut self, player_uuid: &Uuid, ip: Ipv4Addr, when: DateTime<Utc>) -> result::SessionCheck;
 
-    async fn update_session(&mut self, player_uuid: &Uuid, when: DateTime<Utc>) -> result::SessionUpdate;
-    async fn revoke_session(&mut self, player_uuid: &Uuid) -> result::SessionRevoke;
+    async fn update_session(&mut self, player_uuid: &Uuid, ip: Ipv4Addr, when: DateTime<Utc>) -> result::SessionUpdate;
+    async fn revoke_session(&mut self, player_uuid: &Uuid, ip: Ipv4Addr) -> result::SessionRevoke;
 
     async fn update_viewport(&mut self, player_uuid: &Uuid, server_uuid: &Uuid, viewport: Viewport) -> result::ViewportUpdate;
     async fn get_viewport(&mut self, player_uuid: &Uuid, server_uuid: &Uuid) -> Option<Viewport>;

@@ -1,5 +1,5 @@
 use core::time;
-use std::fmt::Display;
+use std::{fmt::Display, net::Ipv4Addr};
 
 use chrono::Utc;
 use sqlx::{types::Json, SqliteConnection};
@@ -525,12 +525,17 @@ impl DataSource for Sqlite {
     async fn update_session(
         &mut self,
         player_uuid: &uuid::Uuid,
+        ip: Ipv4Addr,
         when: chrono::DateTime<chrono::Utc>,
     ) -> data::result::SessionUpdate {
         todo!()
     }
 
-    async fn revoke_session(&mut self, player_uuid: &uuid::Uuid) -> data::result::SessionRevoke {
+    async fn revoke_session(
+        &mut self,
+        player_uuid: &uuid::Uuid,
+        ip: Ipv4Addr,
+    ) -> data::result::SessionRevoke {
         todo!()
     }
 
