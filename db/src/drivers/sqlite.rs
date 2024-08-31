@@ -507,14 +507,12 @@ impl DataSource for Sqlite {
         ip: std::net::Ipv4Addr,
         when: chrono::DateTime<chrono::Utc>,
     ) -> data::result::SessionCheck {
-        let now = Utc::now();
-
         return match self.check_cidr(player_uuid, ip).await {
             CIDRCheck::ThreatActor(_) => SessionCheck::Denied,
             CIDRCheck::NewIp(_) => SessionCheck::Denied,
             CIDRCheck::ValidIp(net) => {
                 // The IP is validated and refreshed if it could be merged with existing CIDRs
-                let delta = now - net.last_join;
+                let delta = when - net.last_join;
                 if delta.num_minutes() >= MAX_SESSION_TIME_MINUTE {
                     SessionCheck::Accepted
                 } else {
