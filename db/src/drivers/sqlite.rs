@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::{
     data::{
         self,
-        result::{CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify, SessionCheck, SessionUpdate},
+        result::{CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify, SessionCheck, SessionRevoke, SessionUpdate},
         Account, Allowlist, BanActor, Blacklist, Loc, SaveData, Server, User, Viewport,
     },
     drivers::MAX_SESSION_TIME_MINUTE,
@@ -552,7 +552,22 @@ impl DataSource for Sqlite {
         player_uuid: &uuid::Uuid,
         ip: Ipv4Addr,
     ) -> data::result::SessionRevoke {
-        todo!()
+        match self.check_cidr(player_uuid, ip).await {
+            CIDRCheck::ThreatActor(_) => SessionRevoke::Error("Threat Actor detected on this IP address. Requires manual intervention. Please forward this to a staff member.".to_owned()),
+            CIDRCheck::NewIp(_) => SessionRevoke::Error("Connection from a new IP address. Cannot revoke a session that wasn't created yet.".to_owned()),
+            CIDRCheck::ValidIp(net) => {
+                let query = sqlx::query_as::<_, Allowlist>("DELETE FROM allowlist WHERE uuid = $1 AND ip_range = $2 RETURNING *")
+                    .bind(net.uuid)
+                    .bind(net.ip_range)
+                    .fetch_one(&mut self.conn)
+                    .await;
+
+                match ok_or_log(query) {
+                    Some(_) => SessionRevoke::Revoked,
+                    None => SessionRevoke::Error("An database error happened while revoking an session".to_owned()),
+                }
+            },
+        }
     }
 
     async fn update_viewport(
