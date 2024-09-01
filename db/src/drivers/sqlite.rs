@@ -11,7 +11,7 @@ use crate::{
         self,
         result::{
             CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify, PlaytimeUpdate, SessionCheck,
-            SessionRevoke, SessionUpdate,
+            SessionRevoke, SessionUpdate, ViewportUpdate,
         },
         Account, Allowlist, BanActor, Blacklist, Loc, SaveData, Server, User, Viewport,
     },
@@ -579,7 +579,19 @@ impl DataSource for Sqlite {
         server_uuid: &uuid::Uuid,
         viewport: data::Viewport,
     ) -> data::result::ViewportUpdate {
-        todo!()
+        let query = sqlx::query("UPDATE savedata SET viewport = $1 WHERE player_uuid = $2 AND server_uuid = $2")
+            .bind(Json(viewport))
+            .bind(player_uuid)
+            .bind(server_uuid)
+            .fetch_one(&mut self.conn)
+            .await;
+
+        //TODO: Make this return more richer errors,
+        //TODO: We basically need a convenience function that returns if users / servers with an UUID exist before attemmpting an update/read to an users' data.
+        match ok_or_log(query) {
+            Some(_) => ViewportUpdate::Accepted,
+            None => ViewportUpdate::Error("A database error happened while updating a viewport.".to_owned()),
+        }
     }
 
     async fn get_viewport(
