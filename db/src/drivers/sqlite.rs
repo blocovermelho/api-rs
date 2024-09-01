@@ -596,7 +596,41 @@ impl DataSource for Sqlite {
         server_uuid: &uuid::Uuid,
         when: chrono::DateTime<chrono::Utc>,
     ) -> data::result::PlaytimeUpdate {
-        todo!()
+        // Get the last joined time for the user from their Allowlists.
+        // diff = now - last_joined
+        // playtime += diff
+        let query = sqlx::query_as::<_, Allowlist>(
+            "SELECT * FROM allowlist WHERE uuid = $1 SORT BY last_join DESC",
+        )
+        .bind(player_uuid)
+        .fetch_one(&mut self.conn)
+        .await;
+
+        match query {
+            Ok(session) => {
+                let diff = when - session.last_join;
+                let playtime = self.get_playtime(player_uuid, server_uuid).await;
+                match playtime {
+                    Some(time) => {
+                        let query = sqlx::query_as::<_, SaveData>("UPDATE savedata SET playtime = $1 WHERE player_uuid = $2 AND server_uuid = $3")
+                            .bind(Json(time + diff.abs().to_std().unwrap()))
+                            .bind(player_uuid)
+                            .bind(server_uuid)
+                            .fetch_one(&mut self.conn)
+                            .await;
+
+                        match query {
+                            Ok(_) => PlaytimeUpdate::Accepted,
+                            Err(_) => PlaytimeUpdate::Error(
+                                "A database error happened while updating a playtime".to_owned(),
+                            ),
+                        }
+                    }
+                    None => PlaytimeUpdate::InvalidServer,
+                }
+            }
+            Err(_) => return PlaytimeUpdate::InvalidUser,
+        }
     }
 
     async fn get_playtime(
