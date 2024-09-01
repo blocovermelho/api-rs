@@ -239,12 +239,14 @@ pub mod result {
         InvalidServer,
         InvalidUser,
         Accepted,
+        Error(String),
     }
 
     pub enum PlaytimeUpdate {
         InvalidServer,
         InvalidUser,
         Accepted,
+        Error(String),
     }
 
     pub enum UserAction {
