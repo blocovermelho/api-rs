@@ -9,7 +9,10 @@ use uuid::Uuid;
 use crate::{
     data::{
         self,
-        result::{CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify, SessionCheck, SessionRevoke, SessionUpdate},
+        result::{
+            CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify, PlaytimeUpdate, SessionCheck,
+            SessionRevoke, SessionUpdate,
+        },
         Account, Allowlist, BanActor, Blacklist, Loc, SaveData, Server, User, Viewport,
     },
     drivers::MAX_SESSION_TIME_MINUTE,
