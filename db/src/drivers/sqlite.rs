@@ -579,7 +579,7 @@ impl DataSource for Sqlite {
         server_uuid: &uuid::Uuid,
         viewport: data::Viewport,
     ) -> data::result::ViewportUpdate {
-        let query = sqlx::query("UPDATE savedata SET viewport = $1 WHERE player_uuid = $2 AND server_uuid = $2")
+        let query = sqlx::query("UPDATE savedata SET viewport = $1 WHERE player_uuid = $2 AND server_uuid = $2 RETURNING *")
             .bind(Json(viewport))
             .bind(player_uuid)
             .bind(server_uuid)
@@ -632,7 +632,7 @@ impl DataSource for Sqlite {
                 let playtime = self.get_playtime(player_uuid, server_uuid).await;
                 match playtime {
                     Some(time) => {
-                        let query = sqlx::query_as::<_, SaveData>("UPDATE savedata SET playtime = $1 WHERE player_uuid = $2 AND server_uuid = $3")
+                        let query = sqlx::query_as::<_, SaveData>("UPDATE savedata SET playtime = $1 WHERE player_uuid = $2 AND server_uuid = $3 RETURNING *")
                             .bind(Json(time + diff.abs().to_std().unwrap()))
                             .bind(player_uuid)
                             .bind(server_uuid)
