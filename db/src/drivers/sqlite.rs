@@ -604,7 +604,15 @@ impl DataSource for Sqlite {
         player_uuid: &uuid::Uuid,
         server_uuid: &uuid::Uuid,
     ) -> Option<time::Duration> {
-        todo!()
+        let query = sqlx::query_as::<_, SaveData>(
+            "SELECT * FROM savedata WHERE player_uuid = $1 AND server_uuid = $2",
+        )
+        .bind(player_uuid)
+        .bind(server_uuid)
+        .fetch_optional(&mut self.conn)
+        .await;
+
+        ok_or_log(query).flatten().map(|x| x.playtime.0)
     }
 
     async fn add_pronoun(
