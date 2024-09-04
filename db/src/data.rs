@@ -254,6 +254,8 @@ pub mod result {
     pub enum ServerLeave {
         Accepted,
         NotJoined,
+        InvalidServer,
+        InvalidUser
     }
 
     pub enum ViewportUpdate {
