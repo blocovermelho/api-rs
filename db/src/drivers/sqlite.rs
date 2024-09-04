@@ -219,6 +219,7 @@ impl DataSource for Sqlite {
         ok_or_log(query).is_some()
     }
 
+    #[tracing::instrument(skip(ip))]
     async fn check_cidr(&mut self, player_uuid: &uuid::Uuid, ip: std::net::Ipv4Addr) -> CIDRCheck {
         // We first select from the allowlist, to know if the IP is valid for the given player.
         let query = sqlx::query_as::<_, Allowlist>(
@@ -315,6 +316,7 @@ impl DataSource for Sqlite {
         }
     }
 
+    #[tracing::instrument(skip(ip))]
     async fn ban_ip(
         &mut self,
         ip: std::net::Ipv4Addr,
@@ -363,6 +365,7 @@ impl DataSource for Sqlite {
         }
     }
 
+    #[tracing::instrument(skip(ip))]
     async fn pardon_ip(
         &mut self,
         ip: std::net::Ipv4Addr,
@@ -448,6 +451,7 @@ impl DataSource for Sqlite {
         };
     }
 
+    #[tracing::instrument]
     async fn create_server(&mut self, stub: data::stub::ServerStub) -> Option<Server> {
         let query = sqlx::query_as::<_, Server>("INSERT INTO servers (uuid, name, supported_versions, current_modpack, online, players) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *")
             .bind(Uuid::new_v4())
@@ -461,6 +465,7 @@ impl DataSource for Sqlite {
         ok_or_log(query).flatten()
     }
 
+    #[tracing::instrument]
     async fn delete_server(&mut self, server_uuid: &uuid::Uuid) -> Option<Server> {
         let query = sqlx::query_as::<_, Server>("DELETE FROM servers WHERE uuid = ? RETURNING *")
             .bind(server_uuid)
@@ -470,6 +475,7 @@ impl DataSource for Sqlite {
         ok_or_log(query).flatten()
     }
 
+    #[tracing::instrument]
     async fn get_server(&mut self, server_uuid: &uuid::Uuid) -> Option<Server> {
         let query = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE uuid = ? RETURNING *")
             .bind(server_uuid)
@@ -479,6 +485,7 @@ impl DataSource for Sqlite {
         ok_or_log(query).flatten()
     }
 
+    #[tracing::instrument]
     async fn get_server_by_name(&mut self, name: String) -> Option<Server> {
         let query = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE name = ? RETURNING *")
             .bind(name)
@@ -488,6 +495,7 @@ impl DataSource for Sqlite {
         ok_or_log(query).flatten()
     }
 
+    #[tracing::instrument]
     async fn join_server(
         &mut self,
         server_uuid: &uuid::Uuid,
@@ -496,6 +504,7 @@ impl DataSource for Sqlite {
         todo!()
     }
 
+    #[tracing::instrument]
     async fn leave_server(
         &mut self,
         server_uuid: &uuid::Uuid,
@@ -504,6 +513,7 @@ impl DataSource for Sqlite {
         todo!()
     }
 
+    #[tracing::instrument(skip(ip))]
     async fn check_session(
         &mut self,
         player_uuid: &uuid::Uuid,
@@ -525,6 +535,7 @@ impl DataSource for Sqlite {
         };
     }
 
+    #[tracing::instrument(skip(ip))]
     async fn update_session(
         &mut self,
         player_uuid: &uuid::Uuid,
@@ -550,6 +561,7 @@ impl DataSource for Sqlite {
         }
     }
 
+    #[tracing::instrument(skip(ip))]
     async fn revoke_session(
         &mut self,
         player_uuid: &uuid::Uuid,
@@ -573,6 +585,7 @@ impl DataSource for Sqlite {
         }
     }
 
+    #[tracing::instrument]
     async fn update_viewport(
         &mut self,
         player_uuid: &uuid::Uuid,
@@ -610,6 +623,7 @@ impl DataSource for Sqlite {
         ok_or_log(query).flatten().map(|x| x.viewport.0)
     }
 
+    #[tracing::instrument]
     async fn update_playtime(
         &mut self,
         player_uuid: &uuid::Uuid,
@@ -653,6 +667,7 @@ impl DataSource for Sqlite {
         }
     }
 
+    #[tracing::instrument]
     async fn get_playtime(
         &mut self,
         player_uuid: &uuid::Uuid,
@@ -669,6 +684,7 @@ impl DataSource for Sqlite {
         ok_or_log(query).flatten().map(|x| x.playtime.0)
     }
 
+    #[tracing::instrument]
     async fn add_pronoun(
         &mut self,
         player_uuid: &uuid::Uuid,
@@ -690,6 +706,7 @@ impl DataSource for Sqlite {
         ok_or_log(query).map(|x| x.pronouns.0).unwrap_or_default()
     }
 
+    #[tracing::instrument]
     async fn remove_pronoun(
         &mut self,
         player_uuid: &uuid::Uuid,
@@ -711,6 +728,7 @@ impl DataSource for Sqlite {
         ok_or_log(query).map(|x| x.pronouns.0).unwrap_or_default()
     }
 
+    #[tracing::instrument]
     async fn update_pronoun(
         &mut self,
         player_uuid: &uuid::Uuid,
@@ -734,6 +752,7 @@ impl DataSource for Sqlite {
         ok_or_log(query).map(|x| x.pronouns.0).unwrap_or_default()
     }
 
+    #[tracing::instrument]
     async fn create_savedata(
         &mut self,
         player_uuid: &Uuid,
