@@ -11,4 +11,5 @@ futures = "0.3.30"
 ipnet = "2.9.0"
 serde = { version = "1.0.193", features = ["derive"] }
 tracing = "0.1"
+tracing-subscriber = { version = "0.3.18", features = ["fmt"] }
 bcrypt = "0.15.0"

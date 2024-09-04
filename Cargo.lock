@@ -463,6 +463,7 @@ dependencies = [
  "serde",
  "sqlx",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 
