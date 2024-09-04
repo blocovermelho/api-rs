@@ -176,7 +176,7 @@ pub mod stub {
         }
     }
 
-    #[derive(Clone)]
+    #[derive(Debug, Clone)]
     pub struct ServerStub {
         pub name: String,
         pub supported_versions: Vec<String>,
