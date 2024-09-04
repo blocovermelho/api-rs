@@ -674,7 +674,20 @@ impl DataSource for Sqlite {
         player_uuid: &uuid::Uuid,
         pronoun: data::Pronoun,
     ) -> Vec<data::Pronoun> {
-        todo!()
+        let mut pronouns = match self.get_user_by_uuid(player_uuid).await {
+            Some(u) => u.pronouns.0,
+            None => vec![],
+        };
+
+        pronouns.push(pronoun);
+
+        let query = sqlx::query_as::<_,User>("UPDATE users SET pronouns = $1 WHERE uuid = $2 RETURNING *")
+            .bind(Json(pronouns))
+            .bind(player_uuid)
+            .fetch_one(&mut self.conn)
+            .await;
+
+        ok_or_log(query).map(|x| x.pronouns.0).unwrap_or_default()
     }
 
     async fn remove_pronoun(
