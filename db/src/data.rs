@@ -149,7 +149,7 @@ pub mod stub {
     use crate::data::Modpack;
     use uuid::Uuid;
 
-    use super::User;
+    use super::{Account, User};
 
     #[derive(Debug)]
     pub struct UserStub {
@@ -168,6 +168,12 @@ pub mod stub {
     pub struct AccountStub {
         pub uuid: Uuid,
         pub password: String,
+    }
+
+    impl PartialEq<Account> for AccountStub {
+        fn eq(&self, other: &Account) -> bool {
+            self.uuid == other.uuid
+        }
     }
 
     pub struct ServerStub {
