@@ -65,7 +65,7 @@ pub struct Server {
     pub players: Json<Vec<Uuid>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Modpack {
     pub name: String,
     pub source: ModpackSource,
@@ -73,7 +73,7 @@ pub struct Modpack {
     pub uri: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ModpackSource {
     Modrinth,
     Curseforge,
@@ -151,7 +151,7 @@ pub mod stub {
 
     use super::{Account, Server, User};
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct UserStub {
         pub uuid: Uuid,
         pub username: String,
@@ -164,7 +164,7 @@ pub mod stub {
         }
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct AccountStub {
         pub uuid: Uuid,
         pub password: String,
@@ -176,6 +176,7 @@ pub mod stub {
         }
     }
 
+    #[derive(Clone)]
     pub struct ServerStub {
         pub name: String,
         pub supported_versions: Vec<String>,
