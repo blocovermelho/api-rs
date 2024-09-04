@@ -11,7 +11,7 @@ use crate::{
         self,
         result::{
             CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify, PlaytimeUpdate, ServerJoin,
-            SessionCheck, SessionRevoke, SessionUpdate, ViewportUpdate,
+            ServerLeave, SessionCheck, SessionRevoke, SessionUpdate, ViewportUpdate,
         },
         Account, Allowlist, BanActor, Blacklist, Loc, SaveData, Server, User, Viewport,
     },
@@ -541,7 +541,28 @@ impl DataSource for Sqlite {
         server_uuid: &uuid::Uuid,
         player_uuid: &uuid::Uuid,
     ) -> data::result::ServerLeave {
-        todo!()
+        match self.get_user_by_uuid(player_uuid).await {
+            Some(u) => match self.get_server(server_uuid).await {
+                Some(mut s) => {
+                    if !s.players.contains(player_uuid) {
+                        ServerLeave::NotJoined
+                    } else {
+                        s.players.retain(|x| x != player_uuid);
+                        let query = sqlx::query("UPDATE servers SET players = $1 WHERE uuid = $2")
+                            .bind(Json(s.players))
+                            .bind(server_uuid)
+                            .execute(&mut self.conn)
+                            .await;
+
+                        ok_or_log(query);
+
+                        ServerLeave::Accepted
+                    }
+                }
+                None => ServerLeave::InvalidServer,
+            },
+            None => ServerLeave::InvalidUser,
+        }
     }
 
     #[tracing::instrument(skip(ip))]
