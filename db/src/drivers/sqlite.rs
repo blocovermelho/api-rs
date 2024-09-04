@@ -10,8 +10,8 @@ use crate::{
     data::{
         self,
         result::{
-            CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify, PlaytimeUpdate, SessionCheck,
-            SessionRevoke, SessionUpdate, ViewportUpdate,
+            CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify, PlaytimeUpdate, ServerJoin,
+            SessionCheck, SessionRevoke, SessionUpdate, ViewportUpdate,
         },
         Account, Allowlist, BanActor, Blacklist, Loc, SaveData, Server, User, Viewport,
     },
@@ -501,7 +501,38 @@ impl DataSource for Sqlite {
         server_uuid: &uuid::Uuid,
         player_uuid: &uuid::Uuid,
     ) -> data::result::ServerJoin {
-        todo!()
+        match self.get_user_by_uuid(player_uuid).await {
+            Some(u) => {
+                match self.get_server(server_uuid).await {
+                    Some(mut s) => {
+                        // We need to check if the user is already added to the server.
+                        // If thats the case, it is a ServerJoin::Resume
+
+                        if !s.players.contains(player_uuid) {
+                            s.players.push(player_uuid.clone());
+
+                            // Then we update the database with the new player.
+                            let query =
+                                sqlx::query("UPDATE servers SET players = $1 WHERE uuid = $2")
+                                    .bind(Json(s.players))
+                                    .bind(server_uuid)
+                                    .execute(&mut self.conn)
+                                    .await;
+
+                            ok_or_log(query);
+                        }
+
+                        if let Some(viewport) = self.get_viewport(player_uuid, server_uuid).await {
+                            ServerJoin::Resume(viewport)
+                        } else {
+                            ServerJoin::FirstJoin
+                        }
+                    }
+                    None => ServerJoin::InvalidServer,
+                }
+            }
+            None => ServerJoin::InvalidUser,
+        }
     }
 
     #[tracing::instrument]
