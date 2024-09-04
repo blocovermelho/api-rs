@@ -149,11 +149,19 @@ pub mod stub {
     use crate::data::Modpack;
     use uuid::Uuid;
 
+    use super::User;
+
     #[derive(Debug)]
     pub struct UserStub {
         pub uuid: Uuid,
         pub username: String,
         pub discord_id: String,
+    }
+
+    impl PartialEq<User> for UserStub {
+        fn eq(&self, other: &User) -> bool {
+            self.uuid == other.uuid && self.discord_id == other.discord_id && self.username == other.username
+        }
     }
 
     #[derive(Debug)]
