@@ -149,7 +149,7 @@ pub mod stub {
     use crate::data::Modpack;
     use uuid::Uuid;
 
-    use super::{Account, User};
+    use super::{Account, Server, User};
 
     #[derive(Debug)]
     pub struct UserStub {
@@ -180,6 +180,12 @@ pub mod stub {
         pub name: String,
         pub supported_versions: Vec<String>,
         pub current_modpack: Option<Modpack>,
+    }
+
+    impl PartialEq<Server> for ServerStub {
+        fn eq(&self, other: &Server) -> bool {
+            self.name == other.name && self.supported_versions == other.supported_versions.0
+        }
     }
 }
 
