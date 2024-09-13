@@ -1,24 +1,21 @@
 use core::time;
-use std::{fmt::Display, net::Ipv4Addr};
+use std::{fmt::Display, net::Ipv4Addr, time::Duration};
 
 use chrono::Utc;
 use sqlx::{types::Json, SqliteConnection};
-use tracing::{debug, error, warn};
+use tracing::error;
 use uuid::Uuid;
 
 use crate::{
     data::{
         self,
-        result::{
-            CIDRCheck, PardonAttempt, PasswordCheck, PasswordModify, PlaytimeUpdate, ServerJoin,
-            ServerLeave, SessionCheck, SessionRevoke, SessionUpdate, ViewportUpdate,
-        },
+        result::{ServerJoin, ServerLeave},
         Account, Allowlist, BanActor, Blacklist, Loc, SaveData, Server, User, Viewport,
     },
-    drivers::MAX_SESSION_TIME_MINUTE,
-    helper::{check_cidr, CidrAction},
-    interface::{DataSource, NetworkProvider},
+    interface::DataSource,
 };
+
+use super::err::{base, DriverError, Response};
 
 #[derive(Debug)]
 pub struct Sqlite {
@@ -31,42 +28,58 @@ impl Sqlite {
     }
 }
 
-fn ok_or_log<T, E>(either: Result<T, E>) -> Option<T>
+fn map_or_log<T, E, F>(either: Result<T, E>, err: F) -> Result<T, F>
 where
     E: Display,
 {
     match either {
-        Ok(value) => Some(value),
+        Ok(value) => Ok(value),
         Err(e) => {
             error!("{e}");
-            None
+            Err(err)
         }
     }
 }
 
 impl DataSource for Sqlite {
+    /// Gets an [User] by its Uuid.
+    ///
+    /// Returns an [`base::NotFoundError::User`] wrapped inside a [`DriverError::DatabaseError`] if a user with the given uuid can't be found.
     #[tracing::instrument]
-    async fn get_user_by_uuid(&mut self, uuid: &uuid::Uuid) -> Option<User> {
+    async fn get_user_by_uuid(&mut self, uuid: &uuid::Uuid) -> Response<User> {
         let query = sqlx::query_as::<_, User>("SELECT * FROM users WHERE uuid = ?")
             .bind(uuid)
-            .fetch_optional(&mut self.conn)
+            .fetch_one(&mut self.conn)
             .await;
 
-        ok_or_log(query).flatten()
+        map_or_log(
+            query,
+            DriverError::DatabaseError(base::NotFoundError::User(uuid.clone())),
+        )
     }
 
+    /// Gets *all* [`User`]s registered to an Discord account.
+    ///
+    /// ### Note: Multiple users can share the same Discord account.
+    /// Returns an [`base::NotFoundError::DiscordAccount`] wrapped inside a [`DriverError::DatabaseError`] if no users can be found for the given discord id.
     #[tracing::instrument]
-    async fn get_users_by_discord_id(&mut self, discord_id: String) -> Vec<User> {
+    async fn get_users_by_discord_id(&mut self, discord_id: String) -> Response<Vec<User>> {
         let query = sqlx::query_as::<_, User>("SELECT * FROM users WHERE discord_id = ?")
             .bind(discord_id)
             .fetch_all(&mut self.conn)
             .await;
 
-        ok_or_log(query).unwrap_or_default()
+        map_or_log(
+            query,
+            DriverError::DatabaseError(base::NotFoundError::DiscordAccount),
+        )
     }
 
+    /// Creates a new [`User`]
+    ///
+    /// Returns [`DriverError::DuplicateKeyInsertion`] if an user with the provided uuid already exists.
     #[tracing::instrument]
-    async fn create_user(&mut self, stub: data::stub::UserStub) -> Option<User> {
+    async fn create_user(&mut self, stub: data::stub::UserStub) -> Response<User> {
         let query = sqlx::query_as::<_, User>("INSERT INTO users (uuid, username, discord_id, created_at, pronouns) VALUES ($1, $2, $3, $4, $5) RETURNING * ")
         .bind(stub.uuid)
         .bind(stub.username)
@@ -76,152 +89,163 @@ impl DataSource for Sqlite {
         .fetch_one(&mut self.conn)
         .await;
 
-        ok_or_log(query)
+        map_or_log(query, DriverError::DuplicateKeyInsertion)
     }
 
+    /// Deletes an [`User`] given its uuid, returning the deleted User.
+    ///
+    /// Returns an [`base::NotFoundError::User`] wrapped inside a [`DriverError::DatabaseError`] if a user with the given uuid can't be found.
     #[tracing::instrument]
-    async fn delete_user(&mut self, uuid: &uuid::Uuid) -> Option<User> {
+    async fn delete_user(&mut self, uuid: &uuid::Uuid) -> Response<User> {
         let query = sqlx::query_as::<_, User>("DELETE FROM users WHERE uuid == ? RETURNING *")
             .bind(uuid)
             .fetch_one(&mut self.conn)
             .await;
 
-        ok_or_log(query)
+        map_or_log(
+            query,
+            DriverError::DatabaseError(base::NotFoundError::User(uuid.clone())),
+        )
     }
 
     #[tracing::instrument]
-    async fn migrate_user(&mut self, from: &uuid::Uuid, into: &uuid::Uuid) -> Option<User> {
-        let fromUser = self.get_user_by_uuid(from).await?;
-        let intoUser = self.get_user_by_uuid(into).await?;
+    /// Migrates an [`User`]'s metadata to a new User, returing the "merged" User.
+    ///
+    /// Returns an [`base::NotFoundError::User`] wrapped inside a [`DriverError::DatabaseError`] if either user with the provided uuid can't be found.  
+    /// Returns an [`DriverError::Unreachable`] if something *bad* happens.
+    /// ### Note: Using [`DriverError::Unreachable`] is justified since all inputs were validated prior to running the query.
+    async fn migrate_user(&mut self, from: &uuid::Uuid, into: &uuid::Uuid) -> Response<User> {
+        let from_user = self.get_user_by_uuid(from).await?;
+        let into_user = self.get_user_by_uuid(into).await?;
 
         let query = sqlx::query_as::<_, User>(
             "UPDATE users SET created_at = $1, pronouns = $2 WHERE uuid = $3 RETURNING *",
         )
-        .bind(fromUser.created_at)
-        .bind(fromUser.pronouns)
-        .bind(intoUser.uuid)
+        .bind(from_user.created_at)
+        .bind(from_user.pronouns)
+        .bind(into_user.uuid)
         .fetch_one(&mut self.conn)
         .await;
 
-        ok_or_log(query)
+        map_or_log(query, DriverError::Unreachable)
     }
 
+    /// Creates an [`Account`] returning the unit value if it succeeds.
+    ///
+    /// ### Warning: This function expects a salted/hashed password since it *does not* do any hashing/salting itself.
+    /// Returns [`DriverError::DuplicateKeyInsertion`] if an account with said uuid already exists.
     #[tracing::instrument(skip(stub))]
-    async fn create_account(&mut self, stub: data::stub::AccountStub) -> bool {
-        let hash = bcrypt::hash(stub.password, 12);
-        if let Some(pwd) = ok_or_log(hash) {
-            let account = Account {
-                uuid: stub.uuid,
-                password: pwd.to_string(),
-                current_join: Utc::now(),
-            };
+    async fn create_account(&mut self, stub: data::stub::AccountStub) -> Response<()> {
+        let query = sqlx::query_as::<_, Account>(
+            "INSERT INTO accounts (uuid, password, current_join) VALUES ($1, $2, $3) RETURNING *",
+        )
+        .bind(stub.uuid)
+        .bind(stub.password)
+        .bind(Utc::now())
+        .fetch_one(&mut self.conn)
+        .await;
 
-            let query = sqlx::query_as::<_,Account>("INSERT INTO accounts (uuid, password, current_join) VALUES ($1, $2, $3) RETURNING *")
-            .bind(account.uuid)
-            .bind(account.password)
-            .bind(account.current_join)
+        map_or_log(query.map(|_| ()), DriverError::DuplicateKeyInsertion)
+    }
+
+    /// Gets an [`Account`] retuning the Account if it succeds.
+    ///
+    /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if an account with the given uuid can't be found.
+    #[tracing::instrument]
+    async fn get_account(&mut self, uuid: &Uuid) -> Response<Account> {
+        let query = sqlx::query_as::<_, Account>("SELECT * FROM accounts WHERE uuid = ?")
+            .bind(uuid)
             .fetch_one(&mut self.conn)
             .await;
 
-            ok_or_log(query).is_some()
-        } else {
-            false
-        }
+        map_or_log(
+            query,
+            DriverError::DatabaseError(base::NotFoundError::Account(uuid.clone())),
+        )
     }
 
+    /// Updates an [`Account`]'s password..
+    ///
+    /// ### Warning: This function expects a salted/hashed password since it *does not* do any hashing/salting itself.
+    /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if an account with the given uuid can't be found.
     #[tracing::instrument(skip(password))]
-    async fn check_password(
+    async fn update_password(
         &mut self,
         player_uuid: &uuid::Uuid,
         password: String,
-    ) -> PasswordCheck {
-        let query = sqlx::query_as::<_, Account>("SELECT * FROM accounts WHERE uuid = ?")
+    ) -> Response<()> {
+        let query = sqlx::query("UPDATE accounts SET password = $1 WHERE uuid = $2")
+            .bind(password)
             .bind(player_uuid)
-            .fetch_one(&mut self.conn)
+            .execute(&mut self.conn)
             .await;
 
-        let acc = ok_or_log(query);
-        match acc {
-            Some(acc) => {
-                let verify = bcrypt::verify(password, acc.password.as_str());
-                let is_ok = ok_or_log(verify);
-
-                match is_ok {
-                    Some(is_ok) => {
-                        if is_ok {
-                            PasswordCheck::Correct
-                        } else {
-                            // TODO: Implement Attempt Counting
-                            PasswordCheck::InvalidPassword(0)
-                        }
-                    }
-                    None => PasswordCheck::Unregistered,
-                }
-            }
-            None => PasswordCheck::Unregistered,
-        }
+        map_or_log(
+            query.map(|_| ()),
+            DriverError::DatabaseError(base::NotFoundError::Account(player_uuid.clone())),
+        )
     }
 
-    #[tracing::instrument(skip(old_password, new_password))]
-    async fn modify_password(
-        &mut self,
-        player_uuid: &uuid::Uuid,
-        old_password: String,
-        new_password: String,
-    ) -> PasswordModify {
-        let check = self.check_password(player_uuid, old_password).await;
-        match check {
-            PasswordCheck::Correct => {
-                let hash = bcrypt::hash(new_password, 12);
-                let pwd = ok_or_log(hash);
-                match pwd {
-                    Some(pwd) => {
-                        let query =
-                            sqlx::query("UPDATE accounts SET password = $1 WHERE uuid = $2")
-                                .bind(pwd)
-                                .bind(player_uuid)
-                                .execute(&mut self.conn)
-                                .await;
-
-                        return if ok_or_log(query).is_some() {
-                            PasswordModify::Modified
-                        } else {
-                            PasswordModify::Unregistered
-                        };
-                    }
-                    None => PasswordModify::Unregistered,
-                }
-            }
-            PasswordCheck::InvalidPassword(x) => PasswordModify::InvalidPassword(x),
-            PasswordCheck::Unregistered => PasswordModify::Unregistered,
-        }
-    }
+    /// Migrates an [`Account`]'s password to a new Account, returing the unit value on success.
+    ///
+    /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if either account with the provided uuid can't be found.  
+    /// Returns an [`DriverError::Unreachable`] if something *bad* happens.
+    /// ### Note: Using [`DriverError::Unreachable`] is justified since all inputs were validated prior to running the query.
 
     #[tracing::instrument]
-    /// Note: This *only* migrates the password of an account. Not its previous IP login history.
-    async fn migrate_account(&mut self, from: &uuid::Uuid, to: &uuid::Uuid) -> bool {
+    async fn migrate_account(&mut self, from: &uuid::Uuid, to: &uuid::Uuid) -> Response<()> {
+        let from = self.get_account(from).await?;
+        let to = self.get_account(to).await?;
+
         let query = sqlx::query("UPDATE accounts SET password = (SELECT password FROM accounts WHERE uuid = $1) WHERE uuid = $2")
-        .bind(from)
-        .bind(to)
+        .bind(from.uuid)
+        .bind(to.uuid)
         .execute(&mut self.conn)
         .await;
 
-        ok_or_log(query).is_some()
+        map_or_log(query.map(|_| ()), DriverError::Unreachable)
     }
 
+    /// Deletes an [`Account`] given its uuid, returning the unit value on success.
+    ///
+    /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if an account with the given uuid can't be found.
     #[tracing::instrument]
-    async fn delete_account(&mut self, player_uuid: &uuid::Uuid) -> bool {
+    async fn delete_account(&mut self, player_uuid: &uuid::Uuid) -> Response<()> {
         let query = sqlx::query("DELETE FROM accounts WHERE uuid == ?")
             .bind(player_uuid)
             .execute(&mut self.conn)
             .await;
 
-        ok_or_log(query).is_some()
+        map_or_log(
+            query.map(|_| ()),
+            DriverError::DatabaseError(base::NotFoundError::Account(player_uuid.clone())),
+        )
     }
 
+    /// Creates an [`AllowlistEntry`] given its uuid and ip address, returning the AllowlistEntry.
+    ///
+    /// Returns an [`DriverError::DuplicateKeyInsertion`] if an account with the given uuid or ip address can be found.
     #[tracing::instrument(skip(ip))]
-    async fn check_cidr(&mut self, player_uuid: &uuid::Uuid, ip: std::net::Ipv4Addr) -> CIDRCheck {
-        // We first select from the allowlist, to know if the IP is valid for the given player.
+    async fn create_allowlist(&mut self, player_uuid: &Uuid, ip: Ipv4Addr) -> Response<Allowlist> {
+        let query = sqlx::query_as::<_, Allowlist>(
+            "INSERT INTO allowlist (uuid, base_ip, mask, last_join, hits) VALUES ($1, $2, $3, $4, $5) RETURNING *"
+        )
+        .bind(player_uuid)
+        .bind(ip.to_bits())
+        .bind(32)
+        .bind(Utc::now())
+        .bind(1)
+        .fetch_one(&mut self.conn)
+        .await;
+
+        map_or_log(query, DriverError::DuplicateKeyInsertion)
+    }
+
+    /// Gets *ALL* [`AllowlistEntry`]s assigned to a user, sorted by how recently they were used.
+    ///
+    /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if an account with the given uuid can't be found.
+    #[tracing::instrument]
+    async fn get_allowlists(&mut self, player_uuid: &Uuid) -> Response<Vec<Allowlist>> {
         let query = sqlx::query_as::<_, Allowlist>(
             "SELECT * FROM allowlist WHERE uuid = $1 SORT BY last_join DESC",
         )
@@ -229,230 +253,223 @@ impl DataSource for Sqlite {
         .fetch_all(&mut self.conn)
         .await;
 
-        match check_cidr(ok_or_log(query).unwrap_or_default(), ip) {
-            CidrAction::Match(net) => {
-                let allowlist = Allowlist {
-                    uuid: net.uuid,
-                    ip_range: net.ip_range,
-                    last_join: Utc::now(),
-                    hits: net.hits + 1,
-                };
-
-                // Increase the hit count.
-                let update = sqlx::query_as::<_,Allowlist>("UPDATE allowlist SET hits = $1, last_join = $2 WHERE ip_range = $3 AND uuid = $4")
-                    .bind(allowlist.hits)
-                    .bind(allowlist.last_join)
-                    .bind(allowlist.ip_range)
-                    .bind(allowlist.uuid)
-                    .fetch_one(&mut self.conn)
-                    .await;
-
-                ok_or_log(update);
-                CIDRCheck::ValidIp(allowlist)
-            }
-            CidrAction::MaskUpdate(net, mask) => {
-                // New netmask
-                let new_net = net.with_mask(mask);
-
-                let allowlist = Allowlist {
-                    uuid: net.uuid,
-                    ip_range: Json(new_net),
-                    last_join: Utc::now(),
-                    hits: net.hits + 1,
-                };
-
-                let update = sqlx::query("UPDATE allowlist SET hits = $1, last_join = $2, ip_range = $3 WHERE uuid = $4 AND ip_range = $5")
-                    .bind(allowlist.hits)
-                    .bind(allowlist.last_join)
-                    .bind(allowlist.ip_range)
-                    .bind(allowlist.uuid)
-                    .bind(net.ip_range)
-                    .execute(&mut self.conn)
-                    .await;
-
-                ok_or_log(update);
-
-                CIDRCheck::ValidIp(allowlist)
-            }
-            CidrAction::Unmatched(net) => {
-                // Now we need to check against all known bad actors
-                let bad_actors =
-                    sqlx::query_as::<_, Blacklist>("SELECT * FROM blacklist SORT BY hits DESC")
-                        .fetch_all(&mut self.conn)
-                        .await;
-
-                match check_cidr(ok_or_log(bad_actors).unwrap_or_default(), ip) {
-                    CidrAction::Match(inet) => {
-                        let update =
-                            sqlx::query("UPDATE blacklist SET hits = $1 WHERE subnet = $2")
-                                .bind(inet.hits + 1)
-                                .bind(inet.subnet)
-                                .execute(&mut self.conn)
-                                .await;
-
-                        ok_or_log(update);
-
-                        CIDRCheck::ThreatActor(inet)
-                    }
-                    CidrAction::MaskUpdate(inet, mask) => {
-                        let new_subnet = inet.with_mask(mask);
-
-                        let update = sqlx::query(
-                            "UPDATE blacklist SET hits = $1, subnet = $2 WHERE subnet = $1",
-                        )
-                        .bind(inet.hits + 1)
-                        .bind(Json(new_subnet))
-                        .bind(inet.subnet)
-                        .execute(&mut self.conn)
-                        .await;
-
-                        ok_or_log(update);
-
-                        CIDRCheck::ThreatActor(inet)
-                    }
-                    CidrAction::Unmatched(_) => CIDRCheck::NewIp(player_uuid.clone()),
-                }
-            }
-        }
+        map_or_log(
+            query,
+            DriverError::DatabaseError(base::NotFoundError::Account(player_uuid.clone())),
+        )
     }
 
+    /// Gets *ANY* [`AllowlistEntry`]s assigned to a user that match the provided ip address, sorted by how recently they were used.
+    ///
+    /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if an account with the given uuid can't be found.
     #[tracing::instrument(skip(ip))]
-    async fn ban_ip(
+    async fn get_allowlists_with_ip(
         &mut self,
-        ip: std::net::Ipv4Addr,
-        reason: String,
-        actor: BanActor,
-    ) -> data::Blacklist {
-        // We loop through all the banned cidrs, to see if an already existing ban matches the given IP address.
-        let bad_actors =
-            sqlx::query_as::<_, Blacklist>("SELECT * FROM blacklist ORDER BY hits DESC")
-                .fetch_all(&mut self.conn)
-                .await;
+        player_uuid: &Uuid,
+        ip: Ipv4Addr,
+    ) -> Response<Vec<Allowlist>> {
+        let query = sqlx::query_as::<_, Allowlist>(
+            "SELECT * FROM allowlist WHERE uuid = $1 AND ($2 & (-1 << (32 - mask))) = (base_ip & (-1 << (32 - mask))) SORT BY last_join DESC"
+        )
+        .bind(player_uuid)
+        .bind(ip.to_bits())
+        .fetch_all(&mut self.conn)
+        .await;
 
-        match check_cidr(ok_or_log(bad_actors).unwrap_or_default(), ip) {
-            CidrAction::Match(net) => net,
-            CidrAction::MaskUpdate(net, mask) => {
-                let new_net = net.with_mask(mask);
-                let update = sqlx::query_as::<_, Blacklist>(
-                    "UPDATE blacklist SET subnet = $1 WHERE subnet = $2 RETURNING *",
-                )
-                .bind(Json(new_net))
-                .bind(net.subnet)
-                .fetch_one(&mut self.conn)
-                .await;
-
-                ok_or_log(update).unwrap_or(net)
-            }
-            CidrAction::Unmatched(net) => {
-                let blacklist = Blacklist {
-                    when: Utc::now(),
-                    actor: Json(actor),
-                    hits: 1,
-                    subnet: Json(net),
-                };
-
-                let insert = sqlx::query_as::<_, Blacklist>(
-                    "INSERT INTO blacklist (when, actor, hits, subnet) VALUES ($1, $2, 1, $3) RETURNING *",
-                )
-                .bind(blacklist.when)
-                .bind(blacklist.actor.clone())
-                .bind(blacklist.subnet)
-                .fetch_one(&mut self.conn)
-                .await;
-
-                ok_or_log(insert).unwrap_or(blacklist)
-            }
-        }
+        map_or_log(
+            query,
+            DriverError::DatabaseError(base::NotFoundError::Account(player_uuid.clone())),
+        )
     }
 
+    /// Gets *ANY* [`AllowlistEntry`]s assigned to a user that match the provided ip range, sorted by how recently they were used.
+    ///
+    /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if an account with the given uuid can't be found.
     #[tracing::instrument(skip(ip))]
-    async fn pardon_ip(
+    async fn get_allowlists_with_range(
         &mut self,
-        ip: std::net::Ipv4Addr,
-        actor: BanActor,
-    ) -> data::result::PardonAttempt {
-        let bad_actors =
-            sqlx::query_as::<_, Blacklist>("SELECT * FROM blacklist ORDER BY hits DESC")
-                .fetch_all(&mut self.conn)
-                .await;
+        player_uuid: &Uuid,
+        ip: Ipv4Addr,
+        mask: u8,
+    ) -> Response<Vec<Allowlist>> {
+        let query = sqlx::query_as::<_, Allowlist>(
+            "SELECT * FROM allowlist WHERE uuid = $1 AND ($2 & (-1 << (32 - $3))) = (base_ip & (-1 << (32 - $3))) SORT BY last_join DESC"
+        )
+        .bind(player_uuid)
+        .bind(ip.to_bits())
+        .bind(mask)
+        .fetch_all(&mut self.conn)
+        .await;
 
-        return match check_cidr(ok_or_log(bad_actors).unwrap_or_default(), ip) {
-            CidrAction::Match(mut net) => {
-                // We're unbanning the block since thats the easiest way to unban an IP address.
-                // Subtracting CIDRs to allow a single IP address explodes the number of subnets badly. We shouldn't do that.
-
-                match net.actor.0 {
-                    BanActor::AutomatedSystem(_) => {
-                        // If the ban was originally issued by an automated system, it can be overridden by either a staff member or an automated system.
-                        // If an automated system tries to pardon an IP adress, it wont override the hitcount.
-                        // A staff call is a manual override which will with one attempt remove the whole block, overriding the hitcount.
-                        match actor {
-                            BanActor::AutomatedSystem(_) => {
-                                let count = net.decrement_hitcount();
-                                if count > 0 {
-                                    let query = sqlx::query_as::<_, Blacklist>("UPDATE blacklist SET hits = $1 WHERE subnet = $2 RETURNING *")
-                                        .bind(count)
-                                        .bind(net.subnet)
-                                        .fetch_optional(&mut self.conn)
-                                        .await;
-
-                                    ok_or_log(query);
-
-                                    PardonAttempt::Decreased(count as usize)
-                                } else {
-                                    let query = sqlx::query_as::<_, Blacklist>(
-                                        "DELETE from blacklist WHERE subnet = ? RETURNING *",
-                                    )
-                                    .bind(net.subnet)
-                                    .fetch_optional(&mut self.conn)
-                                    .await;
-
-                                    ok_or_log(query);
-
-                                    PardonAttempt::Accepted
-                                }
-                            }
-                            BanActor::Staff(_) => {
-                                let query = sqlx::query_as::<_, Blacklist>(
-                                    "DELETE from blacklist WHERE subnet = ? RETURNING *",
-                                )
-                                .bind(net.subnet)
-                                .fetch_optional(&mut self.conn)
-                                .await;
-
-                                ok_or_log(query);
-
-                                PardonAttempt::Accepted
-                            }
-                        }
-                    }
-                    BanActor::Staff(_) => {
-                        // A staff issued ban can only be modified by another staffer.
-                        match actor {
-                            BanActor::AutomatedSystem(_) => PardonAttempt::InsufficientPermissions,
-                            BanActor::Staff(_) => {
-                                let query = sqlx::query_as::<_, Blacklist>(
-                                    "DELETE from blacklist WHERE subnet = ? RETURNING *",
-                                )
-                                .bind(net.subnet)
-                                .fetch_optional(&mut self.conn)
-                                .await;
-
-                                ok_or_log(query);
-
-                                PardonAttempt::Accepted
-                            }
-                        }
-                    }
-                }
-            }
-            CidrAction::MaskUpdate(_, _) => PardonAttempt::NotBanned,
-            CidrAction::Unmatched(_) => PardonAttempt::NotBanned,
-        };
+        map_or_log(
+            query,
+            DriverError::DatabaseError(base::NotFoundError::Account(player_uuid.clone())),
+        )
     }
 
+    /// Bumps the `hits` field of an [`AllowlistEntry`].
+    ///
+    /// Also updates the `last_joined` field to `Utc::now`.  
+    /// Returns an [DriverError::Unreachable] if something *bad* happens.  
+    /// ### Note: The use of unreachable is justified since this function should be used for modifying already existing input.
     #[tracing::instrument]
-    async fn create_server(&mut self, stub: data::stub::ServerStub) -> Option<Server> {
+    async fn bump_allowlist(&mut self, entry: Allowlist) -> Response<()> {
+        let query = sqlx::query(
+            "UPDATE allowlist SET hits = $1, last_joined = $2 WHERE uuid = $3 AND base_ip = $4",
+        )
+        .bind(entry.hits + 1)
+        .bind(Utc::now())
+        .bind(entry.uuid)
+        .bind(entry.base_ip)
+        .execute(&mut self.conn)
+        .await;
+
+        map_or_log(query.map(|_| ()), DriverError::Unreachable)
+    }
+
+    /// Broadens the network mask of an [`AllowlistEntry`].
+    ///
+    /// Returns an [DriverError::Unreachable] if something *bad* happens.  
+    /// ### Note: The use of unreachable is justified since this function should be used for modifying already existing input.
+    #[tracing::instrument]
+    async fn broaden_allowlist_mask(&mut self, entry: Allowlist, new_mask: u8) -> Response<()> {
+        let query = sqlx::query("UPDATE allowlist SET mask = $1 WHERE uuid = $2 AND base_ip = $3")
+            .bind(new_mask)
+            .bind(entry.uuid)
+            .bind(entry.base_ip)
+            .execute(&mut self.conn)
+            .await;
+
+        map_or_log(query.map(|_| ()), DriverError::Unreachable)
+    }
+
+    /// Deletes an *existing* [`AllowlistEntry`].
+    ///
+    /// Returns an [DriverError::Unreachable] if something *bad* happens.  
+    /// ### Note: The use of unreachable is justified since this function should be used for modifying already existing input.
+    #[tracing::instrument]
+    async fn delete_allowlist(&mut self, entry: Allowlist) -> Response<()> {
+        let query =
+            sqlx::query("DELETE FROM allowlist WHERE uuid = $1 AND base_ip = $2 AND mask = $3")
+                .bind(entry.uuid)
+                .bind(entry.base_ip)
+                .bind(entry.mask)
+                .execute(&mut self.conn)
+                .await;
+
+        map_or_log(query.map(|_| ()), DriverError::Unreachable)
+    }
+
+    /// Returns all [`BLacklistEntry`] that match the given IP address.
+    ///
+    /// Returns an [`base::NotFoundError::BlacklistEntry`] wrapped inside a [`DriverError::DatabaseError`] if an entry with the given IP Address can't be found.
+    #[tracing::instrument(skip(ip))]
+    async fn get_blacklists(&mut self, ip: Ipv4Addr) -> Response<Vec<Blacklist>> {
+        let query = sqlx::query_as::<_,Blacklist>(
+            "SELECT * FROM blacklist WHERE ($1 & (-1 << (32 - mask))) = (base_ip & (-1 << (32 - mask))) SORT BY hits DESC"
+        )
+        .bind(ip.to_bits())
+        .fetch_all(&mut self.conn)
+        .await;
+
+        map_or_log(
+            query,
+            DriverError::DatabaseError(base::NotFoundError::BlacklistEntry),
+        )
+    }
+
+    /// Returns all [`BLacklistEntry`] that match the given IP range.
+    ///
+    /// Returns an [`base::NotFoundError::BlacklistEntry`] wrapped inside a [`DriverError::DatabaseError`] if an entry with the given IP Address can't be found.
+    #[tracing::instrument(skip(ip))]
+    async fn get_blacklists_with_range(
+        &mut self,
+        ip: Ipv4Addr,
+        mask: u8,
+    ) -> Response<Vec<Blacklist>> {
+        let query = sqlx::query_as::<_,Blacklist>(
+            "SELECT * FROM blacklist WHERE ($1 & (-1 << (32 - $2))) = (base_ip & (-1 << (32 - $2))) SORT BY hits DESC"
+        )
+        .bind(ip.to_bits())
+        .fetch_all(&mut self.conn)
+        .await;
+
+        map_or_log(
+            query,
+            DriverError::DatabaseError(base::NotFoundError::BlacklistEntry),
+        )
+    }
+
+    /// Creates an [`BlacklistEntry`] given its IP address and [`BanActor`], returning the BlacklistEntry.
+    ///
+    /// ### Note: This function doesn't check for matches when inserting the new entry. Please check if a match already exists with [`DataSource::get_blacklists`] or [`DataSource::get_blacklists_with_range`] before creating a new entry.
+    /// Returns an [`DriverError::DuplicateKeyInsertion`] if an entry with that IP address already exists.
+    #[tracing::instrument(skip(ip))]
+    async fn create_blacklist(&mut self, ip: Ipv4Addr, actor: BanActor) -> Response<Blacklist> {
+        let query = sqlx::query_as::<_, Blacklist>(
+            "INSERT INTO blacklist (base_ip, mask, created_at, actor, hits) VALUES ($1, $2, $3, $4, $5) RETURNING *"
+        )
+        .bind(ip.to_bits())
+        .bind(32)
+        .bind(Utc::now())
+        .bind(Json(actor))
+        .bind(1)
+        .fetch_one(&mut self.conn)
+        .await;
+
+        map_or_log(query, DriverError::DuplicateKeyInsertion)
+    }
+
+    /// Bumps the `hits` field of an [`BlacklistEntry`].
+    ///
+    /// Returns an [DriverError::Unreachable] if something *bad* happens.  
+    /// ### Note: The use of unreachable is justified since this function should be used for modifying already existing input.
+    #[tracing::instrument]
+    async fn bump_blacklist(&mut self, entry: Blacklist) -> Response<()> {
+        let query = sqlx::query("UPDATE blacklist SET hits = $1 WHERE base_ip = $2 AND mask = $3")
+            .bind(entry.hits + 1)
+            .bind(entry.base_ip)
+            .bind(entry.mask)
+            .fetch_one(&mut self.conn)
+            .await;
+
+        map_or_log(query.map(|_| ()), DriverError::Unreachable)
+    }
+
+    /// Broadens the network mask of an [`BlacklistEntry`].
+    ///
+    /// Returns an [DriverError::Unreachable] if something *bad* happens.  
+    /// ### Note: The use of unreachable is justified since this function should be used for modifying already existing input.
+    async fn broaden_blacklist_mask(&mut self, entry: Blacklist, new_mask: u8) -> Response<()> {
+        let query = sqlx::query("UPDATE blacklist SET mask = $1 WHERE base_ip = $2 AND mask = $3")
+            .bind(new_mask)
+            .bind(entry.base_ip)
+            .bind(entry.mask)
+            .fetch_one(&mut self.conn)
+            .await;
+
+        map_or_log(query.map(|_| ()), DriverError::Unreachable)
+    }
+
+    /// Deletes an *existing* [`BlacklistEntry`].
+    ///
+    /// Returns an [DriverError::Unreachable] if something *bad* happens.  
+    /// ### Note: The use of unreachable is justified since this function should be used for modifying already existing input.
+    async fn delete_blacklist(&mut self, entry: Blacklist) -> Response<()> {
+        let query = sqlx::query("DELETE FROM blacklist WHERE base_ip = $1 AND mask = $2")
+            .bind(entry.base_ip)
+            .bind(entry.mask)
+            .execute(&mut self.conn)
+            .await;
+
+        map_or_log(query.map(|_| ()), DriverError::Unreachable)
+    }
+
+    /// Creates an [`Server`] returning the created server if it succeeds.
+    ///
+    /// Returns [`DriverError::DuplicateKeyInsertion`] if an server with said name already exists.
+    #[tracing::instrument]
+    async fn create_server(&mut self, stub: data::stub::ServerStub) -> Response<Server> {
         let query = sqlx::query_as::<_, Server>("INSERT INTO servers (uuid, name, supported_versions, current_modpack, online, players) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *")
             .bind(Uuid::new_v4())
             .bind(stub.name)
@@ -460,39 +477,57 @@ impl DataSource for Sqlite {
             .bind(Json(stub.current_modpack))
             .bind(Json(true))
             .bind(Json("[]"))
-	    .fetch_optional(&mut self.conn).await;
+	    .fetch_one(&mut self.conn).await;
 
-        ok_or_log(query).flatten()
+        map_or_log(query, DriverError::DuplicateKeyInsertion)
     }
 
+    /// Deletes an [`Server`] given its uuid, returning the deleted value on success.
+    ///
+    /// Returns an [`base::NotFoundError::Server`] wrapped inside a [`DriverError::DatabaseError`] if an server with the given uuid can't be found.
     #[tracing::instrument]
-    async fn delete_server(&mut self, server_uuid: &uuid::Uuid) -> Option<Server> {
+    async fn delete_server(&mut self, server_uuid: &uuid::Uuid) -> Response<Server> {
         let query = sqlx::query_as::<_, Server>("DELETE FROM servers WHERE uuid = ? RETURNING *")
             .bind(server_uuid)
-            .fetch_optional(&mut self.conn)
+            .fetch_one(&mut self.conn)
             .await;
 
-        ok_or_log(query).flatten()
+        map_or_log(
+            query,
+            DriverError::DatabaseError(base::NotFoundError::Server),
+        )
     }
 
+    /// Gets an [`Server`] given its uuid.
+    ///
+    /// Returns an [`base::NotFoundError::Server`] wrapped inside a [`DriverError::DatabaseError`] if an server with the given uuid can't be found.
     #[tracing::instrument]
-    async fn get_server(&mut self, server_uuid: &uuid::Uuid) -> Option<Server> {
-        let query = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE uuid = ? RETURNING *")
+    async fn get_server(&mut self, server_uuid: &uuid::Uuid) -> Response<Server> {
+        let query = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE uuid = ?")
             .bind(server_uuid)
-            .fetch_optional(&mut self.conn)
+            .fetch_one(&mut self.conn)
             .await;
 
-        ok_or_log(query).flatten()
+        map_or_log(
+            query,
+            DriverError::DatabaseError(base::NotFoundError::Server),
+        )
     }
 
+    /// Gets an [`Server`] given its name.
+    ///
+    /// Returns an [`base::NotFoundError::Server`] wrapped inside a [`DriverError::DatabaseError`] if an server with the given name can't be found.
     #[tracing::instrument]
-    async fn get_server_by_name(&mut self, name: String) -> Option<Server> {
-        let query = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE name = ? RETURNING *")
+    async fn get_server_by_name(&mut self, name: String) -> Response<Server> {
+        let query = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE name = ?")
             .bind(name)
-            .fetch_optional(&mut self.conn)
+            .fetch_one(&mut self.conn)
             .await;
 
-        ok_or_log(query).flatten()
+        map_or_log(
+            query,
+            DriverError::DatabaseError(base::NotFoundError::Server),
+        )
     }
 
     #[tracing::instrument]
@@ -500,38 +535,25 @@ impl DataSource for Sqlite {
         &mut self,
         server_uuid: &uuid::Uuid,
         player_uuid: &uuid::Uuid,
-    ) -> data::result::ServerJoin {
-        match self.get_user_by_uuid(player_uuid).await {
-            Some(u) => {
-                match self.get_server(server_uuid).await {
-                    Some(mut s) => {
-                        // We need to check if the user is already added to the server.
-                        // If thats the case, it is a ServerJoin::Resume
+    ) -> Response<ServerJoin> {
+        let _ = self.get_user_by_uuid(player_uuid).await?;
+        let mut server = self.get_server(server_uuid).await?;
 
-                        if !s.players.contains(player_uuid) {
-                            s.players.push(player_uuid.clone());
+        if !server.players.contains(player_uuid) {
+            server.players.push(player_uuid.clone());
+            let query = sqlx::query("UPDATE servers SET players = $1 WHERE uuid = $2")
+                .bind(Json(server.players))
+                .bind(server_uuid)
+                .execute(&mut self.conn)
+                .await;
 
-                            // Then we update the database with the new player.
-                            let query =
-                                sqlx::query("UPDATE servers SET players = $1 WHERE uuid = $2")
-                                    .bind(Json(s.players))
-                                    .bind(server_uuid)
-                                    .execute(&mut self.conn)
-                                    .await;
+            map_or_log(query, DriverError::Unreachable)?;
+        }
 
-                            ok_or_log(query);
-                        }
-
-                        if let Some(viewport) = self.get_viewport(player_uuid, server_uuid).await {
-                            ServerJoin::Resume(viewport)
-                        } else {
-                            ServerJoin::FirstJoin
-                        }
-                    }
-                    None => ServerJoin::InvalidServer,
-                }
-            }
-            None => ServerJoin::InvalidUser,
+        if let Some(viewport) = self.get_viewport(player_uuid, server_uuid).await.ok() {
+            Ok(ServerJoin::Resume(viewport))
+        } else {
+            Ok(ServerJoin::FirstJoin)
         }
     }
 
@@ -540,100 +562,24 @@ impl DataSource for Sqlite {
         &mut self,
         server_uuid: &uuid::Uuid,
         player_uuid: &uuid::Uuid,
-    ) -> data::result::ServerLeave {
-        match self.get_user_by_uuid(player_uuid).await {
-            Some(u) => match self.get_server(server_uuid).await {
-                Some(mut s) => {
-                    if !s.players.contains(player_uuid) {
-                        ServerLeave::NotJoined
-                    } else {
-                        s.players.retain(|x| x != player_uuid);
-                        let query = sqlx::query("UPDATE servers SET players = $1 WHERE uuid = $2")
-                            .bind(Json(s.players))
-                            .bind(server_uuid)
-                            .execute(&mut self.conn)
-                            .await;
+    ) -> Response<ServerLeave> {
+        let _ = self.get_user_by_uuid(player_uuid).await?;
+        let mut server = self.get_server(server_uuid).await?;
 
-                        ok_or_log(query);
+        if !server.players.contains(player_uuid) {
+            Ok(ServerLeave::NotJoined)
+        } else {
+            server.players.retain(|x| x != player_uuid);
+            let query = sqlx::query("UPDATE servers SET players = $1 WHERE uuid = $2")
+                .bind(Json(server.players))
+                .bind(server_uuid)
+                .execute(&mut self.conn)
+                .await;
 
-                        ServerLeave::Accepted
-                    }
-                }
-                None => ServerLeave::InvalidServer,
-            },
-            None => ServerLeave::InvalidUser,
-        }
-    }
-
-    #[tracing::instrument(skip(ip))]
-    async fn check_session(
-        &mut self,
-        player_uuid: &uuid::Uuid,
-        ip: std::net::Ipv4Addr,
-        when: chrono::DateTime<chrono::Utc>,
-    ) -> data::result::SessionCheck {
-        return match self.check_cidr(player_uuid, ip).await {
-            CIDRCheck::ThreatActor(_) => SessionCheck::Denied,
-            CIDRCheck::NewIp(_) => SessionCheck::Denied,
-            CIDRCheck::ValidIp(net) => {
-                // The IP is validated and refreshed if it could be merged with existing CIDRs
-                let delta = when - net.last_join;
-                if delta.num_minutes() >= MAX_SESSION_TIME_MINUTE {
-                    SessionCheck::Accepted
-                } else {
-                    SessionCheck::Expired
-                }
-            }
-        };
-    }
-
-    #[tracing::instrument(skip(ip))]
-    async fn update_session(
-        &mut self,
-        player_uuid: &uuid::Uuid,
-        ip: Ipv4Addr,
-        when: chrono::DateTime<chrono::Utc>,
-    ) -> data::result::SessionUpdate {
-        match self.check_cidr(player_uuid, ip).await {
-            CIDRCheck::ThreatActor(_) => SessionUpdate::Error("Threat Actor detected on this IP address. Requires manual intervention. Please forward this to a staff member.".to_owned()),
-            CIDRCheck::NewIp(_) => SessionUpdate::Error("Connection from a new IP address. Cannot update a session that wasn't created yet.".to_owned()),
-            CIDRCheck::ValidIp(net) => {
-                let query = sqlx::query_as::<_, Allowlist>("UPDATE allowlist SET last_join = $1 WHERE uuid = $2 AND ip_range = $3 RETURNING *")
-                    .bind(when)
-                    .bind(net.uuid)
-                    .bind(net.ip_range)
-                    .fetch_one(&mut self.conn)
-                    .await;
-
-                match ok_or_log(query) {
-                    Some(_) => SessionUpdate::Updated,
-                    None => SessionUpdate::Error("An database error happened while updating an session.".to_owned()),
-                }
-            },
-        }
-    }
-
-    #[tracing::instrument(skip(ip))]
-    async fn revoke_session(
-        &mut self,
-        player_uuid: &uuid::Uuid,
-        ip: Ipv4Addr,
-    ) -> data::result::SessionRevoke {
-        match self.check_cidr(player_uuid, ip).await {
-            CIDRCheck::ThreatActor(_) => SessionRevoke::Error("Threat Actor detected on this IP address. Requires manual intervention. Please forward this to a staff member.".to_owned()),
-            CIDRCheck::NewIp(_) => SessionRevoke::Error("Connection from a new IP address. Cannot revoke a session that wasn't created yet.".to_owned()),
-            CIDRCheck::ValidIp(net) => {
-                let query = sqlx::query_as::<_, Allowlist>("DELETE FROM allowlist WHERE uuid = $1 AND ip_range = $2 RETURNING *")
-                    .bind(net.uuid)
-                    .bind(net.ip_range)
-                    .fetch_one(&mut self.conn)
-                    .await;
-
-                match ok_or_log(query) {
-                    Some(_) => SessionRevoke::Revoked,
-                    None => SessionRevoke::Error("An database error happened while revoking an session".to_owned()),
-                }
-            },
+            map_or_log(
+                query.map(|_| ServerLeave::Accepted),
+                DriverError::Unreachable,
+            )
         }
     }
 
@@ -643,36 +589,51 @@ impl DataSource for Sqlite {
         player_uuid: &uuid::Uuid,
         server_uuid: &uuid::Uuid,
         viewport: data::Viewport,
-    ) -> data::result::ViewportUpdate {
-        let query = sqlx::query("UPDATE savedata SET viewport = $1 WHERE player_uuid = $2 AND server_uuid = $2 RETURNING *")
-            .bind(Json(viewport))
-            .bind(player_uuid)
-            .bind(server_uuid)
-            .fetch_one(&mut self.conn)
-            .await;
+    ) -> Response<Viewport> {
+        let _ = self.get_user_by_uuid(player_uuid).await?;
+        let _ = self.get_server(server_uuid).await?;
 
-        //TODO: Make this return more richer errors,
-        //TODO: We basically need a convenience function that returns if users / servers with an UUID exist before attemmpting an update/read to an users' data.
-        match ok_or_log(query) {
-            Some(_) => ViewportUpdate::Accepted,
-            None => ViewportUpdate::Error("A database error happened while updating a viewport.".to_owned()),
-        }
+        let query = sqlx::query_as::<_,SaveData>(
+            "UPDATE savedata SET viewport = $1 WHERE player_uuid = $2 AND server_uuid = $2 RETURNING *"
+        )
+        .bind(Json(viewport))
+        .bind(player_uuid)
+        .bind(server_uuid)
+        .fetch_one(&mut self.conn)
+        .await;
+
+        map_or_log(
+            query.map(|x| x.viewport.0),
+            DriverError::DatabaseError(base::NotFoundError::UserData {
+                server_uuid: server_uuid.clone(),
+                player_uuid: player_uuid.clone(),
+            }),
+        )
     }
 
     async fn get_viewport(
         &mut self,
         player_uuid: &uuid::Uuid,
         server_uuid: &uuid::Uuid,
-    ) -> Option<data::Viewport> {
+    ) -> Response<Viewport> {
+        let _ = self.get_user_by_uuid(player_uuid).await?;
+        let _ = self.get_server(server_uuid).await?;
+
         let query = sqlx::query_as::<_, SaveData>(
             "SELECT * FROM savedata WHERE player_uuid = $1 AND server_uuid = $2",
         )
         .bind(player_uuid)
         .bind(server_uuid)
-        .fetch_optional(&mut self.conn)
+        .fetch_one(&mut self.conn)
         .await;
 
-        ok_or_log(query).flatten().map(|x| x.viewport.0)
+        map_or_log(
+            query.map(|x| x.viewport.0),
+            DriverError::DatabaseError(base::NotFoundError::UserData {
+                server_uuid: server_uuid.clone(),
+                player_uuid: player_uuid.clone(),
+            }),
+        )
     }
 
     #[tracing::instrument]
@@ -680,43 +641,27 @@ impl DataSource for Sqlite {
         &mut self,
         player_uuid: &uuid::Uuid,
         server_uuid: &uuid::Uuid,
-        when: chrono::DateTime<chrono::Utc>,
-    ) -> data::result::PlaytimeUpdate {
-        // Get the last joined time for the user from their Allowlists.
-        // diff = now - last_joined
-        // playtime += diff
-        let query = sqlx::query_as::<_, Allowlist>(
-            "SELECT * FROM allowlist WHERE uuid = $1 SORT BY last_join DESC",
+        new_duration: Duration,
+    ) -> Response<()> {
+        let _ = self.get_user_by_uuid(player_uuid).await?;
+        let _ = self.get_server(server_uuid).await?;
+
+        let query = sqlx::query_as::<_, SaveData>(
+            "UPDATE savedata SET playtime = $1 WHERE player_uuid = $2 AND server_uuid = $3 RETURNING *"
         )
+        .bind(Json(new_duration))
         .bind(player_uuid)
+        .bind(server_uuid)
         .fetch_one(&mut self.conn)
         .await;
 
-        match query {
-            Ok(session) => {
-                let diff = when - session.last_join;
-                let playtime = self.get_playtime(player_uuid, server_uuid).await;
-                match playtime {
-                    Some(time) => {
-                        let query = sqlx::query_as::<_, SaveData>("UPDATE savedata SET playtime = $1 WHERE player_uuid = $2 AND server_uuid = $3 RETURNING *")
-                            .bind(Json(time + diff.abs().to_std().unwrap()))
-                            .bind(player_uuid)
-                            .bind(server_uuid)
-                            .fetch_one(&mut self.conn)
-                            .await;
-
-                        match query {
-                            Ok(_) => PlaytimeUpdate::Accepted,
-                            Err(_) => PlaytimeUpdate::Error(
-                                "A database error happened while updating a playtime".to_owned(),
-                            ),
-                        }
-                    }
-                    None => PlaytimeUpdate::InvalidServer,
-                }
-            }
-            Err(_) => return PlaytimeUpdate::InvalidUser,
-        }
+        map_or_log(
+            query.map(|_| ()),
+            DriverError::DatabaseError(base::NotFoundError::UserData {
+                server_uuid: server_uuid.clone(),
+                player_uuid: player_uuid.clone(),
+            }),
+        )
     }
 
     #[tracing::instrument]
@@ -724,16 +669,25 @@ impl DataSource for Sqlite {
         &mut self,
         player_uuid: &uuid::Uuid,
         server_uuid: &uuid::Uuid,
-    ) -> Option<time::Duration> {
+    ) -> Response<time::Duration> {
+        let _ = self.get_user_by_uuid(player_uuid).await?;
+        let _ = self.get_server(server_uuid).await?;
+
         let query = sqlx::query_as::<_, SaveData>(
             "SELECT * FROM savedata WHERE player_uuid = $1 AND server_uuid = $2",
         )
         .bind(player_uuid)
         .bind(server_uuid)
-        .fetch_optional(&mut self.conn)
+        .fetch_one(&mut self.conn)
         .await;
 
-        ok_or_log(query).flatten().map(|x| x.playtime.0)
+        map_or_log(
+            query.map(|x| x.playtime.0),
+            DriverError::DatabaseError(base::NotFoundError::UserData {
+                server_uuid: server_uuid.clone(),
+                player_uuid: player_uuid.clone(),
+            }),
+        )
     }
 
     #[tracing::instrument]
@@ -741,21 +695,18 @@ impl DataSource for Sqlite {
         &mut self,
         player_uuid: &uuid::Uuid,
         pronoun: data::Pronoun,
-    ) -> Vec<data::Pronoun> {
-        let mut pronouns = match self.get_user_by_uuid(player_uuid).await {
-            Some(u) => u.pronouns.0,
-            None => vec![],
-        };
-
+    ) -> Response<Vec<data::Pronoun>> {
+        let mut pronouns = self.get_user_by_uuid(player_uuid).await?.pronouns;
         pronouns.push(pronoun);
 
-        let query = sqlx::query_as::<_,User>("UPDATE users SET pronouns = $1 WHERE uuid = $2 RETURNING *")
-            .bind(Json(pronouns))
-            .bind(player_uuid)
-            .fetch_one(&mut self.conn)
-            .await;
+        let query =
+            sqlx::query_as::<_, User>("UPDATE users SET pronouns = $1 WHERE uuid = $2 RETURNING *")
+                .bind(Json(pronouns))
+                .bind(player_uuid)
+                .fetch_one(&mut self.conn)
+                .await;
 
-        ok_or_log(query).map(|x| x.pronouns.0).unwrap_or_default()
+        map_or_log(query.map(|x| x.pronouns.0), DriverError::Unreachable)
     }
 
     #[tracing::instrument]
@@ -763,21 +714,18 @@ impl DataSource for Sqlite {
         &mut self,
         player_uuid: &uuid::Uuid,
         pronoun: data::Pronoun,
-    ) -> Vec<data::Pronoun> {
-        let mut pronouns = match self.get_user_by_uuid(player_uuid).await {
-            Some(u) => u.pronouns.0,
-            None => vec![],
-        };
-
+    ) -> Response<Vec<data::Pronoun>> {
+        let mut pronouns = self.get_user_by_uuid(player_uuid).await?.pronouns;
         pronouns.retain(|x| x.pronoun != pronoun.pronoun);
 
-        let query = sqlx::query_as::<_,User>("UPDATE users SET pronouns = $1 WHERE uuid = $2 RETURNING *")
-            .bind(Json(pronouns))
-            .bind(player_uuid)
-            .fetch_one(&mut self.conn)
-            .await;
+        let query =
+            sqlx::query_as::<_, User>("UPDATE users SET pronouns = $1 WHERE uuid = $2 RETURNING *")
+                .bind(Json(pronouns))
+                .bind(player_uuid)
+                .fetch_one(&mut self.conn)
+                .await;
 
-        ok_or_log(query).map(|x| x.pronouns.0).unwrap_or_default()
+        map_or_log(query.map(|x| x.pronouns.0), DriverError::Unreachable)
     }
 
     #[tracing::instrument]
@@ -786,22 +734,19 @@ impl DataSource for Sqlite {
         player_uuid: &uuid::Uuid,
         old: &data::Pronoun,
         new: data::Pronoun,
-    ) -> Vec<data::Pronoun> {
-        let mut pronouns = match self.get_user_by_uuid(player_uuid).await {
-            Some(u) => u.pronouns.0,
-            None => vec![],
-        };
-
+    ) -> Response<Vec<data::Pronoun>> {
+        let mut pronouns = self.get_user_by_uuid(player_uuid).await?.pronouns;
         pronouns.retain(|x| x.pronoun != old.pronoun);
         pronouns.push(new);
 
-        let query = sqlx::query_as::<_,User>("UPDATE users SET pronouns = $1 WHERE uuid = $2 RETURNING *")
-        .bind(Json(pronouns))
-        .bind(player_uuid)
-        .fetch_one(&mut self.conn)
-        .await;
+        let query =
+            sqlx::query_as::<_, User>("UPDATE users SET pronouns = $1 WHERE uuid = $2 RETURNING *")
+                .bind(Json(pronouns))
+                .bind(player_uuid)
+                .fetch_one(&mut self.conn)
+                .await;
 
-        ok_or_log(query).map(|x| x.pronouns.0).unwrap_or_default()
+        map_or_log(query.map(|x| x.pronouns.0), DriverError::Unreachable)
     }
 
     #[tracing::instrument]
@@ -809,7 +754,7 @@ impl DataSource for Sqlite {
         &mut self,
         player_uuid: &Uuid,
         server_uuid: &Uuid,
-    ) -> Option<SaveData> {
+    ) -> Response<SaveData> {
         let query = sqlx::query_as::<_, SaveData>("INSERT INTO savedata (server_uuid, player_uuid, playtime, viewport) VALUES ($1, $2, $3, $4) RETURNING *")
             .bind(server_uuid)
             .bind(player_uuid)
@@ -820,9 +765,9 @@ impl DataSource for Sqlite {
                 y: 64.0,
                 z: 0.0,
             }, yaw: 0.0, pitch: 0.0 }))
-            .fetch_optional(&mut self.conn)
+            .fetch_one(&mut self.conn)
             .await;
 
-        ok_or_log(query).flatten()
+        map_or_log(query, DriverError::DuplicateKeyInsertion)
     }
 }
