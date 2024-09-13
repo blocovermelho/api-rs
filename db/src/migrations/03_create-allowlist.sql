@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS allowlist (
     uuid TEXT NOT NULL,
-    ip_range TEXT NOT NULL,
+    base_ip INTEGER NOT NULL,
+    mask INTEGER NOT NULL,
     last_join DATE,
     hits INTEGER,
 

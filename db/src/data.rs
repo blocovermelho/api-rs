@@ -1,4 +1,5 @@
 use core::time::{self, Duration};
+use std::net::Ipv4Addr;
 
 use chrono::{DateTime, Utc};
 use ipnet::Ipv4Net;
@@ -28,22 +29,23 @@ pub(crate) struct Account {
 #[derive(sqlx::FromRow, Debug)]
 pub(crate) struct Allowlist {
     pub(crate) uuid: Uuid,
-    pub(crate) ip_range: Json<Ipv4Net>,
+    pub(crate) base_ip: u32,
+    pub(crate) mask: u8,
     pub(crate) last_join: DateTime<Utc>,
     pub(crate) hits: i64,
 }
 
 impl NetworkProvider for Allowlist {
     fn get_addr(&self) -> std::net::Ipv4Addr {
-        self.ip_range.0.addr()
+        Ipv4Addr::from_bits(self.base_ip)
     }
 
     fn get_mask(&self) -> u8 {
-        self.ip_range.0.prefix_len()
+        self.mask
     }
 
     fn get_network(&self) -> Ipv4Net {
-        self.ip_range.0
+        Ipv4Net::new(self.get_addr(), self.mask).unwrap()
     }
 }
 
@@ -85,20 +87,21 @@ pub struct Blacklist {
     pub when: DateTime<Utc>,
     pub actor: Json<BanActor>,
     pub hits: i64,
-    pub(crate) subnet: Json<Ipv4Net>,
+    pub(crate) base_ip: u32,
+    pub(crate) mask: u8,
 }
 
 impl NetworkProvider for Blacklist {
     fn get_addr(&self) -> std::net::Ipv4Addr {
-        self.subnet.0.addr()
+        Ipv4Addr::from_bits(self.base_ip)
     }
 
     fn get_mask(&self) -> u8 {
-        self.subnet.0.prefix_len()
+        self.mask
     }
 
     fn get_network(&self) -> Ipv4Net {
-        self.subnet.0
+        Ipv4Net::new(self.get_addr(), self.mask).unwrap()
     }
 }
 

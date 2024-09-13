@@ -1,8 +1,9 @@
 CREATE TABLE IF NOT EXISTS blacklist (
-    subnet TEXT UNIQUE,
+    base_ip INTEGER UNIQUE,
+    mask INTEGER UNIQUE,
     created_at DATE,
     actor TEXT NOT NULL,
     hits INTEGER, 
 
-    PRIMARY KEY (subnet)
+    PRIMARY KEY (base_ip, mask)
 );
