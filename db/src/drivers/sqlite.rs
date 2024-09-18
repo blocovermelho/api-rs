@@ -530,6 +530,11 @@ impl DataSource for Sqlite {
         )
     }
 
+    /// Adds an [`User`] to an [`Server`] if it wasn't already there, returning an [`data::result::ServerJoin`] if the user was added successfully.
+    /// 
+    /// Returns:
+    /// - [`base::NotFoundError`] if either [`User`] or [`Server`] don't exist.
+    /// - [`DriverError::Unreachable`] if something *bad* happened.
     #[tracing::instrument]
     async fn join_server(
         &mut self,
@@ -557,6 +562,11 @@ impl DataSource for Sqlite {
         }
     }
 
+    /// Removes an [`User`] to an [`Server`] if it wasn't already there, returning an [`data::result::ServerLeave`] if the user was removed successfully.
+    /// 
+    /// Returns:
+    /// - [`base::NotFoundError`] if either [`User`] or [`Server`] don't exist.
+    /// - [`DriverError::Unreachable`] if something *bad* happened.
     #[tracing::instrument]
     async fn leave_server(
         &mut self,
@@ -583,6 +593,11 @@ impl DataSource for Sqlite {
         }
     }
 
+    /// Updates an [`User`]'s [`Viewport`] for a given [`Server`], returning the updated [`Viewport`].
+    /// 
+    /// Returns:
+    /// - [`base::NotFoundError`] if either [`User`] or [`Server`] don't exist.
+    /// - [`base::NotFoundError::UserData`] if the [`UserData`] for the following User/Server pair didn't exist.
     #[tracing::instrument]
     async fn update_viewport(
         &mut self,
@@ -611,6 +626,11 @@ impl DataSource for Sqlite {
         )
     }
 
+    /// Gets an [`User`]'s [`Viewport`] for a given [`Server`].
+    /// 
+    /// Returns:
+    /// - [`base::NotFoundError`] if either [`User`] or [`Server`] don't exist.
+    /// - [`base::NotFoundError::UserData`] if the [`UserData`] for the following User/Server pair didn't exist.
     async fn get_viewport(
         &mut self,
         player_uuid: &uuid::Uuid,
@@ -636,6 +656,11 @@ impl DataSource for Sqlite {
         )
     }
 
+    /// Updates an [`User`]'s playtime for a given [`Server`].
+    /// 
+    /// Returns:
+    /// - [`base::NotFoundError`] if either [`User`] or [`Server`] don't exist.
+    /// - [`base::NotFoundError::UserData`] if the [`UserData`] for the following User/Server pair didn't exist.
     #[tracing::instrument]
     async fn update_playtime(
         &mut self,
@@ -664,6 +689,11 @@ impl DataSource for Sqlite {
         )
     }
 
+    /// Gets an [`User`]'s playtime for a given [`Server`]. Returns a [`std::time::Duration`] representing the current playtime.
+    /// 
+    /// Returns:
+    /// - [`base::NotFoundError`] if either [`User`] or [`Server`] don't exist.
+    /// - [`base::NotFoundError::UserData`] if the [`UserData`] for the following User/Server pair didn't exist.
     #[tracing::instrument]
     async fn get_playtime(
         &mut self,
@@ -690,6 +720,11 @@ impl DataSource for Sqlite {
         )
     }
 
+    /// Adds an [`Pronoun`] for an [`User`].
+    /// 
+    /// Returns:
+    /// - [`base::NotFoundError`] if the [`User`] don't exist.
+    /// - [`DriverError::Unreachable`] if something *bad* happened.
     #[tracing::instrument]
     async fn add_pronoun(
         &mut self,
@@ -709,6 +744,11 @@ impl DataSource for Sqlite {
         map_or_log(query.map(|x| x.pronouns.0), DriverError::Unreachable)
     }
 
+    /// Removes an [`Pronoun`] for an [`User`].
+    /// 
+    /// Returns:
+    /// - [`base::NotFoundError`] if the [`User`] don't exist.
+    /// - [`DriverError::Unreachable`] if something *bad* happened.
     #[tracing::instrument]
     async fn remove_pronoun(
         &mut self,
@@ -728,6 +768,11 @@ impl DataSource for Sqlite {
         map_or_log(query.map(|x| x.pronouns.0), DriverError::Unreachable)
     }
 
+    /// Updates an existing [`Pronoun`] for an [`User`].
+    /// 
+    /// Returns:
+    /// - [`base::NotFoundError`] if the [`User`] don't exist.
+    /// - [`DriverError::Unreachable`] if something *bad* happened.
     #[tracing::instrument]
     async fn update_pronoun(
         &mut self,
@@ -749,6 +794,10 @@ impl DataSource for Sqlite {
         map_or_log(query.map(|x| x.pronouns.0), DriverError::Unreachable)
     }
 
+    /// Creates a [`SaveData`] for an [`User`] / [`Server`] pair.
+    /// 
+    /// Returns:
+    /// - [`DriverError::DuplicateKeyInsertion`] if that user/server pair already existed.
     #[tracing::instrument]
     async fn create_savedata(
         &mut self,
