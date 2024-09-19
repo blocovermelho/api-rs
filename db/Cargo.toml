@@ -12,4 +12,5 @@ ipnet = "2.9.0"
 serde = { version = "1.0.193", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.18", features = ["fmt"] }
+test-log = { version = "0.2.16", features = ["trace"] }
 bcrypt = "0.15.0"
