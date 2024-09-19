@@ -57,7 +57,7 @@ pub struct SaveData {
     pub playtime: Json<Duration>,
 }
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(sqlx::FromRow, Debug, PartialEq)]
 pub struct Server {
     pub uuid: Uuid,
     pub name: String,
@@ -67,7 +67,7 @@ pub struct Server {
     pub players: Json<Vec<Uuid>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Modpack {
     pub name: String,
     pub source: ModpackSource,
@@ -75,7 +75,7 @@ pub struct Modpack {
     pub uri: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum ModpackSource {
     Modrinth,
     Curseforge,
