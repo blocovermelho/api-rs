@@ -85,6 +85,25 @@ async fn get_users_by_discord_id(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result
 // UPDATE
 
 #[test(sqlx::test(migrations = "src/migrations"))]
+async fn migrate_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let old_uuid = offline_uuid("roridev");
+    let new_uuid = offline_uuid("alikindsys");
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let old_stub = UserStub { uuid: old_uuid, username: "roridev".to_owned(), discord_id: "-Discord ID-".to_owned() };
+    let new_stub = UserStub { uuid: new_uuid, username: "alikindsys".to_owned(), discord_id: "-Discord ID-".to_owned() };
+
+    let old = db.create_user(old_stub).await.unwrap();
+    db.create_user(new_stub).await.unwrap();
+    let migrated = db.migrate_user(&old_uuid, &new_uuid).await.unwrap();
+
+    assert_eq!(migrated.created_at, old.created_at);
+    assert_eq!(migrated.uuid, new_uuid);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
 async fn add_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let uuid = Uuid::new_v4();
     let mut db = get_wrapper(pool).await.unwrap();
