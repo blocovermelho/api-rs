@@ -476,7 +476,7 @@ impl DataSource for Sqlite {
             .bind(Json(stub.supported_versions))
             .bind(Json(stub.current_modpack))
             .bind(Json(true))
-            .bind(Json("[]"))
+            .bind("[]")
 	    .fetch_one(&mut self.conn).await;
 
         map_or_log(query, DriverError::DuplicateKeyInsertion)
