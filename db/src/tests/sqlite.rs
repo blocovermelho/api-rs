@@ -8,6 +8,16 @@ async fn get_wrapper(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<Sqlite> {
     Ok(Sqlite::new(pool.acquire().await?.detach()))
 }
 
+fn offline_uuid(name: &'static str) -> Uuid {
+    let string = "OfflinePlayer:".to_owned() + name;
+    let mut hash = md5::compute(string).0;
+
+    hash[6] = hash[6] & 0x0f | 0x30; // uuid version 3
+    hash[8] = hash[8] & 0x3f | 0x80; // RFC4122 variant
+
+    Uuid::from_bytes(hash)
+}
+
 // CREATE
 
 #[test(sqlx::test(migrations = "src/migrations"))]
