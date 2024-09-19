@@ -2,7 +2,19 @@
 use test_log::test;
 use uuid::Uuid;
 
-use crate::{data::{stub::UserStub, Pronoun}, drivers::{err::{DriverError, Response}, sqlite::Sqlite}, interface::DataSource};
+use crate::{
+    data::{
+        result::{ServerJoin, ServerLeave},
+        stub::{ServerStub, UserStub},
+        Pronoun,
+    },
+    drivers::{
+        err::{DriverError, Response},
+        sqlite::Sqlite,
+    },
+    interface::DataSource,
+};
+
 
 async fn get_wrapper(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<Sqlite> {
     Ok(Sqlite::new(pool.acquire().await?.detach()))
@@ -34,6 +46,23 @@ async fn create_user(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let save = db.create_user(stub.clone()).await.unwrap();
 
     assert_eq!(stub, save);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn create_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let stub = ServerStub {
+        name: "Servidor de Teste".to_owned(),
+        supported_versions: vec!["1.21.0".to_owned()],
+        current_modpack: None,
+    };
+
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let save = db.create_server(stub.clone()).await.unwrap();
+
+    assert_eq!(stub, save);
+
     Ok(())
 }
 
@@ -79,6 +108,41 @@ async fn get_users_by_discord_id(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result
     let save = db.get_users_by_discord_id(discord_id).await.unwrap();
 
     assert_eq!(save.len(), 2);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_server_by_uuid(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let stub = ServerStub {
+        name: "Servidor de Teste".to_owned(),
+        supported_versions: vec!["1.21.0".to_owned()],
+        current_modpack: None,
+    };
+
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let save = db.create_server(stub.clone()).await.unwrap();
+    let read = db.get_server(&save.uuid).await.unwrap();
+
+    assert_eq!(save, read);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_server_by_name(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let stub = ServerStub {
+        name: "Servidor de Teste".to_owned(),
+        supported_versions: vec!["1.21.0".to_owned()],
+        current_modpack: None,
+    };
+
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let save = db.create_server(stub.clone()).await.unwrap();
+    let read = db.get_server_by_name(stub.name).await.unwrap();
+
+    assert_eq!(save, read);
+
     Ok(())
 }
 
@@ -172,6 +236,65 @@ async fn update_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     Ok(())
 }
 
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn join_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    // This is moderately annoying since we have to create both an user and a server.
+    let user_stub = UserStub {
+        uuid: Uuid::new_v4(),
+        username: "alikindsys".to_owned(),
+        discord_id: "-Discord ID-".to_owned(),
+    };
+
+    let server_stub = ServerStub {
+        name: "Servidor de Teste".to_owned(),
+        supported_versions: vec!["1.21.0".to_owned()],
+        current_modpack: None,
+    };
+
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let user = db.create_user(user_stub).await.unwrap();
+    let server = db.create_server(server_stub).await.unwrap();
+
+    let res = db.join_server(&server.uuid, &user.uuid).await.unwrap();
+    let new_server = db.get_server(&server.uuid).await.unwrap();
+
+    assert!(matches!(res, ServerJoin::FirstJoin));
+    assert!(new_server.players.contains(&user.uuid));
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn leave_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    // This is moderately annoying since we have to create both an user and a server.
+    let user_stub = UserStub {
+        uuid: Uuid::new_v4(),
+        username: "alikindsys".to_owned(),
+        discord_id: "-Discord ID-".to_owned(),
+    };
+
+    let server_stub = ServerStub {
+        name: "Servidor de Teste".to_owned(),
+        supported_versions: vec!["1.21.0".to_owned()],
+        current_modpack: None,
+    };
+
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let user = db.create_user(user_stub).await.unwrap();
+    let server = db.create_server(server_stub).await.unwrap();
+
+    db.join_server(&server.uuid, &user.uuid).await.unwrap();
+    let res = db.leave_server(&server.uuid, &user.uuid).await.unwrap();
+    let new_server = db.get_server(&server.uuid).await.unwrap();
+
+    assert!(matches!(res, ServerLeave::Accepted));
+    assert!(!new_server.players.contains(&user.uuid));
+
+    Ok(())
+}
+
 // DELETE
 
 #[test(sqlx::test(migrations = "src/migrations"))]
@@ -192,3 +315,21 @@ async fn delete_user(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     Ok(())
 }
 
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn delete_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let stub = ServerStub {
+        name: "Servidor de Teste".to_owned(),
+        supported_versions: vec!["1.21.0".to_owned()],
+        current_modpack: None,
+    };
+
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let save = db.create_server(stub.clone()).await.unwrap();
+    let read = db.delete_server(&save.uuid).await.unwrap();
+
+    assert_eq!(stub, save);
+    assert_eq!(save, read);
+
+    Ok(())
+}
