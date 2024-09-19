@@ -8,6 +8,7 @@ pub mod err {
         use uuid::Uuid;
 
         /// When information can't be found on the database.
+        #[derive(Debug)]
         pub enum NotFoundError {
             Server, // Equivalent to: Server{Join,Leave}::InvalidServer, {Viewport,Playtime}Update::InvalidServer
             User(Uuid), // Equivalent to: Server{Join,Leave}::InvalidUser, {Viewport,Playtime}Update::InvalidUser
@@ -20,16 +21,19 @@ pub mod err {
         }
 
         /// When user input is invalid.
+        #[derive(Debug)]
         pub enum InvalidError {
             Password, // Equivalent to: Password{Check,Modify}::InvalidPassword
             OldPassword, // Didn't exist.
         }
 
+        #[derive(Debug)]
         pub enum PermissionError {
             AutomatedSystem, // Equivalent to: PardonAttempt::InsufficientPermissions
         }
     }
 
+    #[derive(Debug)]
     pub enum DriverError {
         DatabaseError(base::NotFoundError),
         DuplicateKeyInsertion,
