@@ -142,7 +142,7 @@ pub struct Viewport {
     pub pitch: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Pronoun {
     pub pronoun: String,
     pub color: String,
