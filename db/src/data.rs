@@ -127,7 +127,7 @@ pub enum BanActor {
     Staff(Uuid),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Loc {
     pub dim: String,
     pub x: f64,
@@ -146,7 +146,7 @@ impl Default for Loc {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Viewport {
     pub loc: Loc,
     pub yaw: f64,
