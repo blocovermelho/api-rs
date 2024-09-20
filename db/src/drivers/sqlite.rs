@@ -612,7 +612,7 @@ impl DataSource for Sqlite {
         let _ = self.get_server(server_uuid).await?;
 
         let query = sqlx::query_as::<_,SaveData>(
-            "UPDATE savedata SET viewport = $1 WHERE player_uuid = $2 AND server_uuid = $2 RETURNING *"
+            "UPDATE savedata SET viewport = $1 WHERE player_uuid = $2 AND server_uuid = $3 RETURNING *"
         )
         .bind(Json(viewport))
         .bind(player_uuid)
