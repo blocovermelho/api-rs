@@ -5,6 +5,6 @@ CREATE TABLE IF NOT EXISTS allowlist (
     last_join DATE,
     hits INTEGER,
 
-    FOREIGN KEY (uuid) REFERENCES user(uuid),
+    FOREIGN KEY (uuid) REFERENCES users(uuid),
     PRIMARY KEY (uuid, last_join)
 );
