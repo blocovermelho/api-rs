@@ -227,10 +227,13 @@ impl DataSource for Sqlite {
     /// Returns an [`DriverError::DuplicateKeyInsertion`] if an account with the given uuid or ip address can be found.
     #[tracing::instrument(skip(ip))]
     async fn create_allowlist(&mut self, player_uuid: &Uuid, ip: Ipv4Addr) -> Response<Allowlist> {
+        let user = self.get_user_by_uuid(player_uuid).await?;
+
         let query = sqlx::query_as::<_, Allowlist>(
-            "INSERT INTO allowlist (uuid, base_ip, mask, last_join, hits) VALUES ($1, $2, $3, $4, $5) RETURNING *"
+            "INSERT INTO allowlist (uuid, discord_id, base_ip, mask, last_join, hits) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
         )
         .bind(player_uuid)
+        .bind(user.discord_id)
         .bind(ip.to_bits())
         .bind(32)
         .bind(Utc::now())
