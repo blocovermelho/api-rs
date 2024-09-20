@@ -29,7 +29,6 @@ pub(crate) struct Account {
 #[derive(sqlx::FromRow, Debug)]
 pub(crate) struct Allowlist {
     pub(crate) uuid: Uuid,
-    pub(crate) discord_id: String,
     pub(crate) base_ip: u32,
     pub(crate) mask: u8,
     pub(crate) last_join: DateTime<Utc>,
@@ -54,7 +53,6 @@ impl NetworkProvider for Allowlist {
 pub struct SaveData {
     pub player_uuid: Uuid,
     pub server_uuid: Uuid,
-    pub player_discord_id: String,
     pub viewport: Json<Viewport>,
     pub playtime: Json<Duration>,
 }

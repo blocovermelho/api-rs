@@ -810,10 +810,9 @@ impl DataSource for Sqlite {
         let user = self.get_user_by_uuid(player_uuid).await?;
         let _ = self.get_server(server_uuid).await?;
 
-        let query = sqlx::query_as::<_, SaveData>("INSERT INTO savedata (server_uuid, player_uuid, player_discord_id, playtime, viewport) VALUES ($1, $2, $3, $4, $5) RETURNING *")
+        let query = sqlx::query_as::<_, SaveData>("INSERT INTO savedata (server_uuid, player_uuid, playtime, viewport) VALUES ($1, $2, $3, $4) RETURNING *")
             .bind(server_uuid)
             .bind(player_uuid)
-            .bind(user.discord_id)
             .bind(Json(time::Duration::ZERO))
             .bind(Json(Viewport::default()))
             .fetch_one(&mut self.conn)

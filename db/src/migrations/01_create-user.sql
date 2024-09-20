@@ -6,5 +6,5 @@ CREATE TABLE IF NOT EXISTS users (
     pronouns TEXT,
     last_server TEXT,
 
-    PRIMARY KEY (uuid, discord_id)
+    PRIMARY KEY (uuid)
 );
