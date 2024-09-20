@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 // Unit Tests for the Sqlite Driver.
 use test_log::test;
 use uuid::Uuid;
@@ -6,7 +8,7 @@ use crate::{
     data::{
         result::{ServerJoin, ServerLeave},
         stub::{ServerStub, UserStub},
-        Pronoun,
+        Loc, Pronoun, Server, User, Viewport,
     },
     drivers::{
         err::{DriverError, Response},
@@ -28,6 +30,26 @@ fn offline_uuid(name: &'static str) -> Uuid {
     hash[8] = hash[8] & 0x3f | 0x80; // RFC4122 variant
 
     Uuid::from_bytes(hash)
+}
+
+async fn mock_user(db: &mut Sqlite) -> User {
+    let stub = UserStub {
+        uuid: Uuid::new_v4(),
+        username: "alikindsys".to_owned(),
+        discord_id: "-Discord ID-".to_owned(),
+    };
+
+    db.create_user(stub.clone()).await.unwrap()
+}
+
+async fn mock_server(db: &mut Sqlite) -> Server {
+    let stub = ServerStub {
+        name: "Servidor de Teste".to_owned(),
+        supported_versions: vec!["1.21.0".to_owned()],
+        current_modpack: None,
+    };
+
+    db.create_server(stub).await.unwrap()
 }
 
 // CREATE
@@ -62,6 +84,21 @@ async fn create_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let save = db.create_server(stub.clone()).await.unwrap();
 
     assert_eq!(stub, save);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn create_savedata(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let user = mock_user(&mut db).await;
+    let server = mock_server(&mut db).await;
+
+    let savedata = db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
+
+    assert_eq!(savedata.server_uuid, server.uuid);
+    assert_eq!(savedata.player_uuid, user.uuid);
 
     Ok(())
 }
@@ -142,6 +179,38 @@ async fn get_server_by_name(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> 
     let read = db.get_server_by_name(stub.name).await.unwrap();
 
     assert_eq!(save, read);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_viewport(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let user = mock_user(&mut db).await;
+    let server = mock_server(&mut db).await;
+
+    db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
+
+    let viewport = db.get_viewport(&user.uuid, &server.uuid).await.unwrap();
+
+    assert_eq!(viewport, Viewport::default());
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_playtime(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let user = mock_user(&mut db).await;
+    let server = mock_server(&mut db).await;
+
+    db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
+
+    let playtime = db.get_playtime(&user.uuid, &server.uuid).await.unwrap();
+
+    assert_eq!(playtime, std::time::Duration::ZERO);
 
     Ok(())
 }
@@ -291,6 +360,58 @@ async fn leave_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 
     assert!(matches!(res, ServerLeave::Accepted));
     assert!(!new_server.players.contains(&user.uuid));
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn update_viewport(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let user = mock_user(&mut db).await;
+    let server = mock_server(&mut db).await;
+
+    db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
+
+    let viewport = Viewport {
+        loc: Loc {
+            dim: "minecraft:overworld".to_owned(),
+            x: 69.0,
+            y: 69.0,
+            z: 69.0,
+        },
+        yaw: 69.0,
+        pitch: 69.0,
+    };
+
+    let save = db
+        .update_viewport(&user.uuid, &server.uuid, viewport.clone())
+        .await
+        .unwrap();
+
+    assert_eq!(save, viewport);
+    assert_ne!(save, Viewport::default());
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn update_playtime(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let user = mock_user(&mut db).await;
+    let server = mock_server(&mut db).await;
+
+    db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
+
+    db.update_playtime(&user.uuid, &server.uuid, Duration::from_secs_f32(69.0))
+        .await
+        .unwrap();
+
+    let save = db.get_playtime(&user.uuid, &server.uuid).await.unwrap();
+
+    assert_ne!(save, Duration::ZERO);
+    assert_eq!(save, Duration::from_secs_f32(69.0));
 
     Ok(())
 }
