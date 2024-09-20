@@ -135,11 +135,32 @@ pub struct Loc {
     pub z: f64,
 }
 
+impl Default for Loc {
+    fn default() -> Self {
+        Self {
+            dim: "minecraft:overworld".to_owned(),
+            x: 0.0,
+            y: 64.0,
+            z: 0.0,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Viewport {
     pub loc: Loc,
     pub yaw: f64,
     pub pitch: f64,
+}
+
+impl Default for Viewport {
+    fn default() -> Self {
+        Self {
+            loc: Loc::default(),
+            yaw: 0.0,
+            pitch: 0.0,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
