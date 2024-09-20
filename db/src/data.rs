@@ -51,8 +51,9 @@ impl NetworkProvider for Allowlist {
 
 #[derive(sqlx::FromRow, Debug)]
 pub struct SaveData {
-    pub user_id: Uuid,
-    pub server_id: Uuid,
+    pub player_uuid: Uuid,
+    pub server_uuid: Uuid,
+    pub player_discord_id: String,
     pub viewport: Json<Viewport>,
     pub playtime: Json<Duration>,
 }
