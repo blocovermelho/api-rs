@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS allowlist (
-    uuid TEXT NOT NULL,
+    uuid TEXT NOT NULL UNIQUE,
     discord_id TEXT NOT NULL,
     base_ip INTEGER NOT NULL,
     mask INTEGER NOT NULL,

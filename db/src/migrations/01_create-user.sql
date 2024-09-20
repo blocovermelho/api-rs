@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS users (
-    uuid TEXT NOT NULL,
+    uuid TEXT NOT NULL UNIQUE,
     discord_id TEXT NOT NULL,
     username TEXT UNIQUE,
     created_at DATE,
