@@ -4,8 +4,8 @@ CREATE TABLE IF NOT EXISTS savedata (
     playtime TEXT,
     viewport TEXT,
 
-    FOREIGN KEY (server_uuid) REFERENCES server(uuid),
-    FOREIGN KEY (player_uuid) REFERENCES user(uuid),
+    FOREIGN KEY (server_uuid) REFERENCES servers (uuid),
+    FOREIGN KEY (player_uuid) REFERENCES users (uuid),
 
     PRIMARY KEY (server_uuid, player_uuid)
 );

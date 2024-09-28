@@ -51,13 +51,13 @@ impl NetworkProvider for Allowlist {
 
 #[derive(sqlx::FromRow, Debug)]
 pub struct SaveData {
-    pub user_id: Uuid,
-    pub server_id: Uuid,
+    pub player_uuid: Uuid,
+    pub server_uuid: Uuid,
     pub viewport: Json<Viewport>,
     pub playtime: Json<Duration>,
 }
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(sqlx::FromRow, Debug, PartialEq)]
 pub struct Server {
     pub uuid: Uuid,
     pub name: String,
@@ -67,7 +67,7 @@ pub struct Server {
     pub players: Json<Vec<Uuid>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Modpack {
     pub name: String,
     pub source: ModpackSource,
@@ -75,7 +75,7 @@ pub struct Modpack {
     pub uri: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum ModpackSource {
     Modrinth,
     Curseforge,
@@ -84,7 +84,7 @@ pub enum ModpackSource {
 
 #[derive(sqlx::FromRow, Debug)]
 pub struct Blacklist {
-    pub when: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
     pub actor: Json<BanActor>,
     pub hits: i64,
     pub(crate) base_ip: u32,
@@ -127,7 +127,7 @@ pub enum BanActor {
     Staff(Uuid),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Loc {
     pub dim: String,
     pub x: f64,
@@ -135,14 +135,35 @@ pub struct Loc {
     pub z: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+impl Default for Loc {
+    fn default() -> Self {
+        Self {
+            dim: "minecraft:overworld".to_owned(),
+            x: 0.0,
+            y: 64.0,
+            z: 0.0,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Viewport {
     pub loc: Loc,
     pub yaw: f64,
     pub pitch: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+impl Default for Viewport {
+    fn default() -> Self {
+        Self {
+            loc: Loc::default(),
+            yaw: 0.0,
+            pitch: 0.0,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Pronoun {
     pub pronoun: String,
     pub color: String,

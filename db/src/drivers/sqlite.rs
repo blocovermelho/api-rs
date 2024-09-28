@@ -188,16 +188,16 @@ impl DataSource for Sqlite {
 
     /// Migrates an [`Account`]'s password to a new Account, returing the unit value on success.
     ///
-    /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if either account with the provided uuid can't be found.  
+    /// Returns an [`base::NotFoundError::User`] wrapped inside a [`DriverError::DatabaseError`] if either user with the provided uuid can't be found.  
     /// Returns an [`DriverError::Unreachable`] if something *bad* happens.
     /// ### Note: Using [`DriverError::Unreachable`] is justified since all inputs were validated prior to running the query.
 
     #[tracing::instrument]
     async fn migrate_account(&mut self, from: &uuid::Uuid, to: &uuid::Uuid) -> Response<()> {
-        let from = self.get_account(from).await?;
-        let to = self.get_account(to).await?;
+        let from = self.get_user_by_uuid(from).await?;
+        let to = self.get_user_by_uuid(to).await?;
 
-        let query = sqlx::query("UPDATE accounts SET password = (SELECT password FROM accounts WHERE uuid = $1) WHERE uuid = $2")
+        let query = sqlx::query("UPDATE accounts SET uuid = $2 WHERE uuid = $1")
         .bind(from.uuid)
         .bind(to.uuid)
         .execute(&mut self.conn)
@@ -227,6 +227,8 @@ impl DataSource for Sqlite {
     /// Returns an [`DriverError::DuplicateKeyInsertion`] if an account with the given uuid or ip address can be found.
     #[tracing::instrument(skip(ip))]
     async fn create_allowlist(&mut self, player_uuid: &Uuid, ip: Ipv4Addr) -> Response<Allowlist> {
+        let user = self.get_account(player_uuid).await?;
+
         let query = sqlx::query_as::<_, Allowlist>(
             "INSERT INTO allowlist (uuid, base_ip, mask, last_join, hits) VALUES ($1, $2, $3, $4, $5) RETURNING *"
         )
@@ -247,7 +249,7 @@ impl DataSource for Sqlite {
     #[tracing::instrument]
     async fn get_allowlists(&mut self, player_uuid: &Uuid) -> Response<Vec<Allowlist>> {
         let query = sqlx::query_as::<_, Allowlist>(
-            "SELECT * FROM allowlist WHERE uuid = $1 SORT BY last_join DESC",
+            "SELECT * FROM allowlist WHERE uuid = $1 ORDER BY last_join DESC",
         )
         .bind(player_uuid)
         .fetch_all(&mut self.conn)
@@ -269,7 +271,7 @@ impl DataSource for Sqlite {
         ip: Ipv4Addr,
     ) -> Response<Vec<Allowlist>> {
         let query = sqlx::query_as::<_, Allowlist>(
-            "SELECT * FROM allowlist WHERE uuid = $1 AND ($2 & (-1 << (32 - mask))) = (base_ip & (-1 << (32 - mask))) SORT BY last_join DESC"
+            "SELECT * FROM allowlist WHERE uuid = $1 AND ($2 & (-1 << (32 - mask))) = (base_ip & (-1 << (32 - mask))) ORDER BY last_join DESC"
         )
         .bind(player_uuid)
         .bind(ip.to_bits())
@@ -293,7 +295,7 @@ impl DataSource for Sqlite {
         mask: u8,
     ) -> Response<Vec<Allowlist>> {
         let query = sqlx::query_as::<_, Allowlist>(
-            "SELECT * FROM allowlist WHERE uuid = $1 AND ($2 & (-1 << (32 - $3))) = (base_ip & (-1 << (32 - $3))) SORT BY last_join DESC"
+            "SELECT * FROM allowlist WHERE uuid = $1 AND ($2 & (-1 << (32 - $3))) = (base_ip & (-1 << (32 - $3))) ORDER BY last_join DESC"
         )
         .bind(player_uuid)
         .bind(ip.to_bits())
@@ -309,13 +311,13 @@ impl DataSource for Sqlite {
 
     /// Bumps the `hits` field of an [`AllowlistEntry`].
     ///
-    /// Also updates the `last_joined` field to `Utc::now`.  
+    /// Also updates the `last_join` field to `Utc::now`.  
     /// Returns an [DriverError::Unreachable] if something *bad* happens.  
     /// ### Note: The use of unreachable is justified since this function should be used for modifying already existing input.
     #[tracing::instrument]
     async fn bump_allowlist(&mut self, entry: Allowlist) -> Response<()> {
         let query = sqlx::query(
-            "UPDATE allowlist SET hits = $1, last_joined = $2 WHERE uuid = $3 AND base_ip = $4",
+            "UPDATE allowlist SET hits = $1, last_join = $2 WHERE uuid = $3 AND base_ip = $4",
         )
         .bind(entry.hits + 1)
         .bind(Utc::now())
@@ -366,7 +368,7 @@ impl DataSource for Sqlite {
     #[tracing::instrument(skip(ip))]
     async fn get_blacklists(&mut self, ip: Ipv4Addr) -> Response<Vec<Blacklist>> {
         let query = sqlx::query_as::<_,Blacklist>(
-            "SELECT * FROM blacklist WHERE ($1 & (-1 << (32 - mask))) = (base_ip & (-1 << (32 - mask))) SORT BY hits DESC"
+            "SELECT * FROM blacklist WHERE ($1 & (-1 << (32 - mask))) = (base_ip & (-1 << (32 - mask))) ORDER BY hits DESC"
         )
         .bind(ip.to_bits())
         .fetch_all(&mut self.conn)
@@ -388,9 +390,10 @@ impl DataSource for Sqlite {
         mask: u8,
     ) -> Response<Vec<Blacklist>> {
         let query = sqlx::query_as::<_,Blacklist>(
-            "SELECT * FROM blacklist WHERE ($1 & (-1 << (32 - $2))) = (base_ip & (-1 << (32 - $2))) SORT BY hits DESC"
+            "SELECT * FROM blacklist WHERE ($1 & (-1 << (32 - $2))) = (base_ip & (-1 << (32 - $2))) ORDER BY hits DESC"
         )
         .bind(ip.to_bits())
+        .bind(mask)
         .fetch_all(&mut self.conn)
         .await;
 
@@ -430,7 +433,7 @@ impl DataSource for Sqlite {
             .bind(entry.hits + 1)
             .bind(entry.base_ip)
             .bind(entry.mask)
-            .fetch_one(&mut self.conn)
+            .execute(&mut self.conn)
             .await;
 
         map_or_log(query.map(|_| ()), DriverError::Unreachable)
@@ -445,7 +448,7 @@ impl DataSource for Sqlite {
             .bind(new_mask)
             .bind(entry.base_ip)
             .bind(entry.mask)
-            .fetch_one(&mut self.conn)
+            .execute(&mut self.conn)
             .await;
 
         map_or_log(query.map(|_| ()), DriverError::Unreachable)
@@ -476,7 +479,7 @@ impl DataSource for Sqlite {
             .bind(Json(stub.supported_versions))
             .bind(Json(stub.current_modpack))
             .bind(Json(true))
-            .bind(Json("[]"))
+            .bind("[]")
 	    .fetch_one(&mut self.conn).await;
 
         map_or_log(query, DriverError::DuplicateKeyInsertion)
@@ -609,7 +612,7 @@ impl DataSource for Sqlite {
         let _ = self.get_server(server_uuid).await?;
 
         let query = sqlx::query_as::<_,SaveData>(
-            "UPDATE savedata SET viewport = $1 WHERE player_uuid = $2 AND server_uuid = $2 RETURNING *"
+            "UPDATE savedata SET viewport = $1 WHERE player_uuid = $2 AND server_uuid = $3 RETURNING *"
         )
         .bind(Json(viewport))
         .bind(player_uuid)
@@ -795,7 +798,7 @@ impl DataSource for Sqlite {
     }
 
     /// Creates a [`SaveData`] for an [`User`] / [`Server`] pair.
-    /// 
+    ///
     /// Returns:
     /// - [`DriverError::DuplicateKeyInsertion`] if that user/server pair already existed.
     #[tracing::instrument]
@@ -804,16 +807,14 @@ impl DataSource for Sqlite {
         player_uuid: &Uuid,
         server_uuid: &Uuid,
     ) -> Response<SaveData> {
+        let user = self.get_user_by_uuid(player_uuid).await?;
+        let _ = self.get_server(server_uuid).await?;
+
         let query = sqlx::query_as::<_, SaveData>("INSERT INTO savedata (server_uuid, player_uuid, playtime, viewport) VALUES ($1, $2, $3, $4) RETURNING *")
             .bind(server_uuid)
             .bind(player_uuid)
             .bind(Json(time::Duration::ZERO))
-            .bind(Json(Viewport{ loc: Loc {
-                dim: "minecraft:overworld".to_owned(),
-                x: 0.0,
-                y: 64.0,
-                z: 0.0,
-            }, yaw: 0.0, pitch: 0.0 }))
+            .bind(Json(Viewport::default()))
             .fetch_one(&mut self.conn)
             .await;
 
