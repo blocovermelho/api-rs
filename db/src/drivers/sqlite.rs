@@ -311,13 +311,13 @@ impl DataSource for Sqlite {
 
     /// Bumps the `hits` field of an [`AllowlistEntry`].
     ///
-    /// Also updates the `last_joined` field to `Utc::now`.  
+    /// Also updates the `last_join` field to `Utc::now`.  
     /// Returns an [DriverError::Unreachable] if something *bad* happens.  
     /// ### Note: The use of unreachable is justified since this function should be used for modifying already existing input.
     #[tracing::instrument]
     async fn bump_allowlist(&mut self, entry: Allowlist) -> Response<()> {
         let query = sqlx::query(
-            "UPDATE allowlist SET hits = $1, last_joined = $2 WHERE uuid = $3 AND base_ip = $4",
+            "UPDATE allowlist SET hits = $1, last_join = $2 WHERE uuid = $3 AND base_ip = $4",
         )
         .bind(entry.hits + 1)
         .bind(Utc::now())
