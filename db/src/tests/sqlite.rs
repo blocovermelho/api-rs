@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     data::{
         result::{ServerJoin, ServerLeave},
-        stub::{ServerStub, UserStub},
+        stub::{AccountStub, ServerStub, UserStub},
         Loc, Pronoun, Server, User, Viewport,
     },
     drivers::{
@@ -100,6 +100,23 @@ async fn create_savedata(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     assert_eq!(savedata.server_uuid, server.uuid);
     assert_eq!(savedata.player_uuid, user.uuid);
 
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn create_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+    // We first need to create an user, in order to satisfy the foreign key constraint.
+    let user = mock_user(&mut db).await;
+
+    // Creating an account with the same uuid should now work.
+    let stub = AccountStub {
+        uuid: user.uuid,
+        password: "TotallyMyPassword123".to_owned(),
+    };
+
+    let save = db.create_account(stub).await.unwrap();
+    assert_eq!(save, ());
     Ok(())
 }
 
@@ -215,10 +232,28 @@ async fn get_playtime(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     Ok(())
 }
 
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let user = mock_user(&mut db).await;
+    db.create_account(AccountStub {
+        uuid: user.uuid,
+        password: "TotallyMyPassword123".to_owned(),
+    })
+    .await
+    .unwrap();
+
+    let acc = db.get_account(&user.uuid).await.unwrap();
+
+    assert_eq!(acc.password, "TotallyMyPassword123".to_owned());
+    assert_eq!(acc.uuid, user.uuid);
+    Ok(())
+}
 // UPDATE
 
 #[test(sqlx::test(migrations = "src/migrations"))]
-async fn migrate_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+async fn migrate_user(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let old_uuid = offline_uuid("roridev");
     let new_uuid = offline_uuid("alikindsys");
     let mut db = get_wrapper(pool).await.unwrap();
@@ -416,6 +451,74 @@ async fn update_playtime(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     Ok(())
 }
 
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn update_password(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+    let user = mock_user(&mut db).await;
+
+    db.create_account(AccountStub {
+        uuid: user.uuid,
+        password: "oldpass".to_owned(),
+    })
+    .await
+    .unwrap();
+
+    db.update_password(&user.uuid, "newpass".to_owned())
+        .await
+        .unwrap();
+
+    let acc = db.get_account(&user.uuid).await.unwrap();
+
+    assert_eq!(acc.password, "newpass".to_owned());
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn migrate_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let old_uuid = offline_uuid("roridev");
+    let new_uuid = offline_uuid("alikindsys");
+
+    let old_stub = UserStub {
+        uuid: old_uuid,
+        username: "roridev".to_owned(),
+        discord_id: "-Discord ID-".to_owned(),
+    };
+    let new_stub = UserStub {
+        uuid: new_uuid,
+        username: "alikindsys".to_owned(),
+        discord_id: "-Discord ID-".to_owned(),
+    };
+
+    db.create_user(old_stub).await.unwrap();
+    db.create_user(new_stub).await.unwrap();
+
+    db.create_account(AccountStub {
+        uuid: old_uuid,
+        password: "SuperSecurePassword".to_owned(),
+    })
+    .await
+    .unwrap();
+
+    db.migrate_account(&old_uuid, &new_uuid).await.unwrap();
+
+    let old_acc = db.get_account(&old_uuid).await.unwrap_err();
+    let new_acc = db.get_account(&new_uuid).await.unwrap();
+
+    // The "old" account shouldn't be accessible.
+    assert!(matches!(
+        old_acc,
+        DriverError::DatabaseError(crate::drivers::err::base::NotFoundError::Account(_))
+    ));
+
+    // The migrated account should match the new uuid and have the same password as before.
+    assert_eq!(new_acc.uuid, new_uuid);
+    assert_eq!(new_acc.password, "SuperSecurePassword".to_owned());
+
+    Ok(())
+}
 // DELETE
 
 #[test(sqlx::test(migrations = "src/migrations"))]
@@ -451,6 +554,31 @@ async fn delete_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 
     assert_eq!(stub, save);
     assert_eq!(save, read);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn delete_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let user = mock_user(&mut db).await;
+
+    db.create_account(AccountStub {
+        uuid: user.uuid,
+        password: "oldpass".to_owned(),
+    })
+    .await
+    .unwrap();
+
+    let res = db.delete_account(&user.uuid).await.unwrap();
+    let read = db.get_account(&user.uuid).await.unwrap_err();
+
+    assert_eq!(res, ());
+    assert!(matches!(
+        read,
+        DriverError::DatabaseError(crate::drivers::err::base::NotFoundError::Account(_))
+    ));
 
     Ok(())
 }
