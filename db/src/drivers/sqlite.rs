@@ -188,16 +188,16 @@ impl DataSource for Sqlite {
 
     /// Migrates an [`Account`]'s password to a new Account, returing the unit value on success.
     ///
-    /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if either account with the provided uuid can't be found.  
+    /// Returns an [`base::NotFoundError::User`] wrapped inside a [`DriverError::DatabaseError`] if either user with the provided uuid can't be found.  
     /// Returns an [`DriverError::Unreachable`] if something *bad* happens.
     /// ### Note: Using [`DriverError::Unreachable`] is justified since all inputs were validated prior to running the query.
 
     #[tracing::instrument]
     async fn migrate_account(&mut self, from: &uuid::Uuid, to: &uuid::Uuid) -> Response<()> {
-        let from = self.get_account(from).await?;
-        let to = self.get_account(to).await?;
+        let from = self.get_user_by_uuid(from).await?;
+        let to = self.get_user_by_uuid(to).await?;
 
-        let query = sqlx::query("UPDATE accounts SET password = (SELECT password FROM accounts WHERE uuid = $1) WHERE uuid = $2")
+        let query = sqlx::query("UPDATE accounts SET uuid = $2 WHERE uuid = $1")
         .bind(from.uuid)
         .bind(to.uuid)
         .execute(&mut self.conn)
