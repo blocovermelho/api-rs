@@ -394,6 +394,7 @@ impl DataSource for Sqlite {
             "SELECT * FROM blacklist WHERE ($1 & (-1 << (32 - $2))) = (base_ip & (-1 << (32 - $2))) ORDER BY hits DESC"
         )
         .bind(ip.to_bits())
+        .bind(mask)
         .fetch_all(&mut self.conn)
         .await;
 
