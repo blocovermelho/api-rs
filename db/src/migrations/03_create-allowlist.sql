@@ -5,6 +5,6 @@ CREATE TABLE IF NOT EXISTS allowlist (
     last_join DATE,
     hits INTEGER,
 
-    FOREIGN KEY (uuid) REFERENCES users(uuid),
+    FOREIGN KEY (uuid) REFERENCES accounts(uuid) ON UPDATE CASCADE,
     PRIMARY KEY (uuid, last_join)
 );
