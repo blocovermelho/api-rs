@@ -230,10 +230,9 @@ impl DataSource for Sqlite {
         let user = self.get_account(player_uuid).await?;
 
         let query = sqlx::query_as::<_, Allowlist>(
-            "INSERT INTO allowlist (uuid, discord_id, base_ip, mask, last_join, hits) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
+            "INSERT INTO allowlist (uuid, base_ip, mask, last_join, hits) VALUES ($1, $2, $3, $4, $5) RETURNING *"
         )
         .bind(player_uuid)
-        .bind(user.discord_id)
         .bind(ip.to_bits())
         .bind(32)
         .bind(Utc::now())
