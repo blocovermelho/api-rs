@@ -52,6 +52,15 @@ async fn mock_server(db: &mut Sqlite) -> Server {
     db.create_server(stub).await.unwrap()
 }
 
+async fn mock_account(db: &mut Sqlite, uuid: uuid::Uuid) {
+    db.create_account(AccountStub {
+        uuid,
+        password: "SuperSecretSettings".to_owned(),
+    })
+    .await
+    .unwrap()
+}
+
 // CREATE
 
 #[test(sqlx::test(migrations = "src/migrations"))]
@@ -132,6 +141,25 @@ async fn create_blacklist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
         .await
         .unwrap();
 
+    assert_eq!(res.get_addr(), ip);
+    assert_eq!(res.hits, 1);
+    assert_eq!(res.mask, 32);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn create_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+    let ip = Ipv4Addr::new(127, 0, 0, 1);
+
+    // Allowlists are only created when an account exists.
+    // But an account can only exist if an user exists.
+    let user = mock_user(&mut db).await;
+    mock_account(&mut db, user.uuid).await;
+
+    let res = db.create_allowlist(&user.uuid, ip).await.unwrap();
+
+    assert_eq!(res.uuid, user.uuid);
     assert_eq!(res.get_addr(), ip);
     assert_eq!(res.hits, 1);
     assert_eq!(res.mask, 32);
@@ -312,6 +340,72 @@ async fn get_blacklists_with_range(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Resu
 
     Ok(())
 }
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_allowlists(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let user = mock_user(&mut db).await;
+    mock_account(&mut db, user.uuid).await;
+    db.create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
+        .await
+        .unwrap();
+
+    let read = db.get_allowlists(&user.uuid).await.unwrap();
+
+    assert_eq!(read.len(), 1);
+    assert_eq!(read.get(0).unwrap().uuid, user.uuid);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_allowlists_with_ip(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let user = mock_user(&mut db).await;
+    mock_account(&mut db, user.uuid).await;
+    db.create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
+        .await
+        .unwrap();
+
+    let read = db
+        .get_allowlists_with_ip(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
+        .await
+        .unwrap();
+
+    assert_eq!(read.len(), 1);
+    assert_eq!(read.get(0).unwrap().uuid, user.uuid);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_allowlists_with_range(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let user = mock_user(&mut db).await;
+    mock_account(&mut db, user.uuid).await;
+    db.create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
+        .await
+        .unwrap();
+
+    db.create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 2))
+        .await
+        .unwrap();
+
+    let read = db
+        .get_allowlists_with_range(&user.uuid, Ipv4Addr::new(127, 0, 0, 1), 30)
+        .await
+        .unwrap();
+
+    assert_eq!(read.len(), 2);
+    assert_eq!(read.get(0).unwrap().uuid, user.uuid);
+    assert_eq!(read.get(1).unwrap().uuid, user.uuid);
+
+    Ok(())
+}
+
 // UPDATE
 
 #[test(sqlx::test(migrations = "src/migrations"))]
@@ -624,9 +718,50 @@ async fn broaden_blacklist_mask(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<
         .unwrap();
 
     assert_eq!(read.get(0).unwrap().mask, 16);
-    
+
     Ok(())
 }
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn bump_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+    let user = mock_user(&mut db).await;
+    mock_account(&mut db, user.uuid).await;
+    let entry = db
+        .create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
+        .await
+        .unwrap();
+
+    db.bump_allowlist(entry).await.unwrap();
+
+    let read = db.get_allowlists(&user.uuid).await.unwrap();
+
+    assert_eq!(read.len(), 1);
+    assert_eq!(read.get(0).unwrap().hits, 2);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn broaden_allowlist_mask(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+    let user = mock_user(&mut db).await;
+    mock_account(&mut db, user.uuid).await;
+    let entry = db
+        .create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
+        .await
+        .unwrap();
+
+    db.broaden_allowlist_mask(entry, 16).await.unwrap();
+
+    let read = db.get_allowlists(&user.uuid).await.unwrap();
+
+    assert_eq!(read.len(), 1);
+    assert_eq!(read.get(0).unwrap().mask, 16);
+
+    Ok(())
+}
+
 // DELETE
 
 #[test(sqlx::test(migrations = "src/migrations"))]
@@ -711,5 +846,25 @@ async fn delete_blacklist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
         .unwrap();
 
     assert_eq!(read.len(), 0);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn delete_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let user = mock_user(&mut db).await;
+    mock_account(&mut db, user.uuid).await;
+    let entry = db
+        .create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
+        .await
+        .unwrap();
+
+    db.delete_allowlist(entry).await.unwrap();
+
+    let read = db.get_allowlists(&user.uuid).await.unwrap();
+
+    assert_eq!(read.len(), 0);
+
     Ok(())
 }
