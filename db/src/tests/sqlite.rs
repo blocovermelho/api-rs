@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{net::Ipv4Addr, time::Duration};
 
 // Unit Tests for the Sqlite Driver.
 use test_log::test;
@@ -8,13 +8,13 @@ use crate::{
     data::{
         result::{ServerJoin, ServerLeave},
         stub::{AccountStub, ServerStub, UserStub},
-        Loc, Pronoun, Server, User, Viewport,
+        BanActor, Loc, Pronoun, Server, User, Viewport,
     },
     drivers::{
         err::{DriverError, Response},
         sqlite::Sqlite,
     },
-    interface::DataSource,
+    interface::{DataSource, NetworkProvider},
 };
 
 
@@ -117,6 +117,24 @@ async fn create_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 
     let save = db.create_account(stub).await.unwrap();
     assert_eq!(save, ());
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn create_blacklist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+    let ip = Ipv4Addr::new(127, 0, 0, 1);
+    let res = db
+        .create_blacklist(
+            ip,
+            crate::data::BanActor::AutomatedSystem("Database Testing".to_owned()),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.get_addr(), ip);
+    assert_eq!(res.hits, 1);
+    assert_eq!(res.mask, 32);
     Ok(())
 }
 
@@ -248,6 +266,50 @@ async fn get_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 
     assert_eq!(acc.password, "TotallyMyPassword123".to_owned());
     assert_eq!(acc.uuid, user.uuid);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_blacklists(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+    let actor = BanActor::AutomatedSystem("Database Testing".to_owned());
+    db.create_blacklist(Ipv4Addr::new(127, 0, 0, 1), actor)
+        .await
+        .unwrap();
+    let read = db
+        .get_blacklists(Ipv4Addr::new(127, 0, 0, 1))
+        .await
+        .unwrap();
+
+    // There should be one result, which matches the query perfectly.
+    assert_eq!(read.len(), 1);
+    // And the lone entry should have 127.0.0.1 as the IP address
+    assert_eq!(read.get(0).unwrap().get_addr(), Ipv4Addr::new(127, 0, 0, 1));
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_blacklists_with_range(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+    let actor = BanActor::AutomatedSystem("Database Testing".to_owned());
+
+    db.create_blacklist(Ipv4Addr::new(127, 0, 0, 1), actor.clone())
+        .await
+        .unwrap();
+
+    // This would match with *literally* anything smaller then /31.
+    db.create_blacklist(Ipv4Addr::new(127, 0, 0, 2), actor)
+        .await
+        .unwrap();
+
+    let read = db
+        .get_blacklists_with_range(Ipv4Addr::new(127, 0, 0, 1), 30)
+        .await
+        .unwrap();
+
+    // Should match both of them.
+    assert_eq!(read.len(), 2);
+
     Ok(())
 }
 // UPDATE
@@ -519,6 +581,52 @@ async fn migrate_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 
     Ok(())
 }
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn bump_blacklist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+    let entry = db
+        .create_blacklist(
+            Ipv4Addr::new(127, 0, 0, 1),
+            BanActor::AutomatedSystem("Database Testing".to_owned()),
+        )
+        .await
+        .unwrap();
+
+    db.bump_blacklist(entry).await.unwrap();
+
+    let read = db
+        .get_blacklists(Ipv4Addr::new(127, 0, 0, 1))
+        .await
+        .unwrap();
+
+    assert_eq!(read.get(0).unwrap().hits, 2);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn broaden_blacklist_mask(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+    let entry = db
+        .create_blacklist(
+            Ipv4Addr::new(127, 0, 0, 1),
+            BanActor::AutomatedSystem("Database Testing".to_owned()),
+        )
+        .await
+        .unwrap();
+
+    db.broaden_blacklist_mask(entry, 16).await.unwrap();
+
+    let read = db
+        .get_blacklists(Ipv4Addr::new(127, 0, 0, 1))
+        .await
+        .unwrap();
+
+    assert_eq!(read.get(0).unwrap().mask, 16);
+    
+    Ok(())
+}
 // DELETE
 
 #[test(sqlx::test(migrations = "src/migrations"))]
@@ -580,5 +688,28 @@ async fn delete_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
         DriverError::DatabaseError(crate::drivers::err::base::NotFoundError::Account(_))
     ));
 
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn delete_blacklist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let mut db = get_wrapper(pool).await.unwrap();
+
+    let entry = db
+        .create_blacklist(
+            Ipv4Addr::new(127, 0, 0, 1),
+            BanActor::AutomatedSystem("Database Testing".to_owned()),
+        )
+        .await
+        .unwrap();
+
+    db.delete_blacklist(entry).await.unwrap();
+
+    let read = db
+        .get_blacklists(Ipv4Addr::new(127, 0, 0, 1))
+        .await
+        .unwrap();
+
+    assert_eq!(read.len(), 0);
     Ok(())
 }
