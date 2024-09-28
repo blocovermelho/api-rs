@@ -20,19 +20,19 @@ pub struct User {
 }
 
 #[derive(sqlx::FromRow, Debug)]
-pub(crate) struct Account {
-    pub(crate) uuid: Uuid,
-    pub(crate) password: String,
-    pub(crate) current_join: DateTime<Utc>,
+pub struct Account {
+    pub uuid: Uuid,
+    pub password: String,
+    pub current_join: DateTime<Utc>,
 }
 
 #[derive(sqlx::FromRow, Debug)]
-pub(crate) struct Allowlist {
-    pub(crate) uuid: Uuid,
-    pub(crate) base_ip: u32,
-    pub(crate) mask: u8,
-    pub(crate) last_join: DateTime<Utc>,
-    pub(crate) hits: i64,
+pub struct Allowlist {
+    pub uuid: Uuid,
+    pub base_ip: u32,
+    pub mask: u8,
+    pub last_join: DateTime<Utc>,
+    pub hits: i64,
 }
 
 impl NetworkProvider for Allowlist {
