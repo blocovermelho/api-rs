@@ -6,5 +6,5 @@ CREATE TABLE IF NOT EXISTS allowlist (
     hits INTEGER,
 
     FOREIGN KEY (uuid) REFERENCES accounts(uuid) ON UPDATE CASCADE,
-    PRIMARY KEY (uuid, last_join)
+    PRIMARY KEY (uuid, base_ip, mask)
 );
