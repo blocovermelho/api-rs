@@ -250,7 +250,7 @@ impl DataSource for Sqlite {
     #[tracing::instrument]
     async fn get_allowlists(&mut self, player_uuid: &Uuid) -> Response<Vec<Allowlist>> {
         let query = sqlx::query_as::<_, Allowlist>(
-            "SELECT * FROM allowlist WHERE uuid = $1 SORT BY last_join DESC",
+            "SELECT * FROM allowlist WHERE uuid = $1 ORDER BY last_join DESC",
         )
         .bind(player_uuid)
         .fetch_all(&mut self.conn)
@@ -272,7 +272,7 @@ impl DataSource for Sqlite {
         ip: Ipv4Addr,
     ) -> Response<Vec<Allowlist>> {
         let query = sqlx::query_as::<_, Allowlist>(
-            "SELECT * FROM allowlist WHERE uuid = $1 AND ($2 & (-1 << (32 - mask))) = (base_ip & (-1 << (32 - mask))) SORT BY last_join DESC"
+            "SELECT * FROM allowlist WHERE uuid = $1 AND ($2 & (-1 << (32 - mask))) = (base_ip & (-1 << (32 - mask))) ORDER BY last_join DESC"
         )
         .bind(player_uuid)
         .bind(ip.to_bits())
@@ -296,7 +296,7 @@ impl DataSource for Sqlite {
         mask: u8,
     ) -> Response<Vec<Allowlist>> {
         let query = sqlx::query_as::<_, Allowlist>(
-            "SELECT * FROM allowlist WHERE uuid = $1 AND ($2 & (-1 << (32 - $3))) = (base_ip & (-1 << (32 - $3))) SORT BY last_join DESC"
+            "SELECT * FROM allowlist WHERE uuid = $1 AND ($2 & (-1 << (32 - $3))) = (base_ip & (-1 << (32 - $3))) ORDER BY last_join DESC"
         )
         .bind(player_uuid)
         .bind(ip.to_bits())
@@ -369,7 +369,7 @@ impl DataSource for Sqlite {
     #[tracing::instrument(skip(ip))]
     async fn get_blacklists(&mut self, ip: Ipv4Addr) -> Response<Vec<Blacklist>> {
         let query = sqlx::query_as::<_,Blacklist>(
-            "SELECT * FROM blacklist WHERE ($1 & (-1 << (32 - mask))) = (base_ip & (-1 << (32 - mask))) SORT BY hits DESC"
+            "SELECT * FROM blacklist WHERE ($1 & (-1 << (32 - mask))) = (base_ip & (-1 << (32 - mask))) ORDER BY hits DESC"
         )
         .bind(ip.to_bits())
         .fetch_all(&mut self.conn)
@@ -391,7 +391,7 @@ impl DataSource for Sqlite {
         mask: u8,
     ) -> Response<Vec<Blacklist>> {
         let query = sqlx::query_as::<_,Blacklist>(
-            "SELECT * FROM blacklist WHERE ($1 & (-1 << (32 - $2))) = (base_ip & (-1 << (32 - $2))) SORT BY hits DESC"
+            "SELECT * FROM blacklist WHERE ($1 & (-1 << (32 - $2))) = (base_ip & (-1 << (32 - $2))) ORDER BY hits DESC"
         )
         .bind(ip.to_bits())
         .fetch_all(&mut self.conn)
