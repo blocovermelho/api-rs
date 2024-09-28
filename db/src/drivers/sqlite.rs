@@ -434,7 +434,7 @@ impl DataSource for Sqlite {
             .bind(entry.hits + 1)
             .bind(entry.base_ip)
             .bind(entry.mask)
-            .fetch_one(&mut self.conn)
+            .execute(&mut self.conn)
             .await;
 
         map_or_log(query.map(|_| ()), DriverError::Unreachable)
@@ -449,7 +449,7 @@ impl DataSource for Sqlite {
             .bind(new_mask)
             .bind(entry.base_ip)
             .bind(entry.mask)
-            .fetch_one(&mut self.conn)
+            .execute(&mut self.conn)
             .await;
 
         map_or_log(query.map(|_| ()), DriverError::Unreachable)
