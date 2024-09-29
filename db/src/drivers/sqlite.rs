@@ -2,7 +2,7 @@ use core::time;
 use std::{fmt::Display, net::Ipv4Addr, time::Duration};
 
 use chrono::Utc;
-use sqlx::{types::Json, SqliteConnection};
+use sqlx::{types::Json, Pool};
 use tracing::error;
 use uuid::Uuid;
 
@@ -10,7 +10,7 @@ use crate::{
     data::{
         self,
         result::{ServerJoin, ServerLeave},
-        Account, Allowlist, BanActor, Blacklist, Loc, SaveData, Server, User, Viewport,
+        Account, Allowlist, BanActor, Blacklist, SaveData, Server, User, Viewport,
     },
     interface::DataSource,
 };
@@ -18,13 +18,11 @@ use crate::{
 use super::err::{base, DriverError, Response};
 
 #[derive(Debug)]
-pub struct Sqlite {
-    conn: SqliteConnection,
-}
+pub struct Sqlite (Pool<sqlx::Sqlite>);
 
-impl Sqlite {
-    pub fn new(conn: SqliteConnection) -> Self {
-        Self { conn }
+impl From<Pool<sqlx::Sqlite>> for Sqlite {
+    fn from(value: Pool<sqlx::Sqlite>) -> Self {
+        Self(value)
     }
 }
 
@@ -46,10 +44,10 @@ impl DataSource for Sqlite {
     ///
     /// Returns an [`base::NotFoundError::User`] wrapped inside a [`DriverError::DatabaseError`] if a user with the given uuid can't be found.
     #[tracing::instrument]
-    async fn get_user_by_uuid(&mut self, uuid: &uuid::Uuid) -> Response<User> {
+    async fn get_user_by_uuid(&self, uuid: &uuid::Uuid) -> Response<User> {
         let query = sqlx::query_as::<_, User>("SELECT * FROM users WHERE uuid = ?")
             .bind(uuid)
-            .fetch_one(&mut self.conn)
+            .fetch_one(&self.0)
             .await;
 
         map_or_log(
@@ -63,10 +61,10 @@ impl DataSource for Sqlite {
     /// ### Note: Multiple users can share the same Discord account.
     /// Returns an [`base::NotFoundError::DiscordAccount`] wrapped inside a [`DriverError::DatabaseError`] if no users can be found for the given discord id.
     #[tracing::instrument]
-    async fn get_users_by_discord_id(&mut self, discord_id: String) -> Response<Vec<User>> {
+    async fn get_users_by_discord_id(&self, discord_id: String) -> Response<Vec<User>> {
         let query = sqlx::query_as::<_, User>("SELECT * FROM users WHERE discord_id = ?")
             .bind(discord_id)
-            .fetch_all(&mut self.conn)
+            .fetch_all(&self.0)
             .await;
 
         map_or_log(
@@ -79,14 +77,14 @@ impl DataSource for Sqlite {
     ///
     /// Returns [`DriverError::DuplicateKeyInsertion`] if an user with the provided uuid already exists.
     #[tracing::instrument]
-    async fn create_user(&mut self, stub: data::stub::UserStub) -> Response<User> {
+    async fn create_user(&self, stub: data::stub::UserStub) -> Response<User> {
         let query = sqlx::query_as::<_, User>("INSERT INTO users (uuid, username, discord_id, created_at, pronouns) VALUES ($1, $2, $3, $4, $5) RETURNING * ")
         .bind(stub.uuid)
         .bind(stub.username)
         .bind(stub.discord_id)
         .bind(Utc::now())
         .bind("[]")
-        .fetch_one(&mut self.conn)
+        .fetch_one(&self.0)
         .await;
 
         map_or_log(query, DriverError::DuplicateKeyInsertion)
@@ -96,10 +94,10 @@ impl DataSource for Sqlite {
     ///
     /// Returns an [`base::NotFoundError::User`] wrapped inside a [`DriverError::DatabaseError`] if a user with the given uuid can't be found.
     #[tracing::instrument]
-    async fn delete_user(&mut self, uuid: &uuid::Uuid) -> Response<User> {
+    async fn delete_user(&self, uuid: &uuid::Uuid) -> Response<User> {
         let query = sqlx::query_as::<_, User>("DELETE FROM users WHERE uuid == ? RETURNING *")
             .bind(uuid)
-            .fetch_one(&mut self.conn)
+            .fetch_one(&self.0)
             .await;
 
         map_or_log(
@@ -114,7 +112,7 @@ impl DataSource for Sqlite {
     /// Returns an [`base::NotFoundError::User`] wrapped inside a [`DriverError::DatabaseError`] if either user with the provided uuid can't be found.  
     /// Returns an [`DriverError::Unreachable`] if something *bad* happens.
     /// ### Note: Using [`DriverError::Unreachable`] is justified since all inputs were validated prior to running the query.
-    async fn migrate_user(&mut self, from: &uuid::Uuid, into: &uuid::Uuid) -> Response<User> {
+    async fn migrate_user(&self, from: &uuid::Uuid, into: &uuid::Uuid) -> Response<User> {
         let from_user = self.get_user_by_uuid(from).await?;
         let into_user = self.get_user_by_uuid(into).await?;
 
@@ -124,7 +122,7 @@ impl DataSource for Sqlite {
         .bind(from_user.created_at)
         .bind(from_user.pronouns)
         .bind(into_user.uuid)
-        .fetch_one(&mut self.conn)
+        .fetch_one(&self.0)
         .await;
 
         map_or_log(query, DriverError::Unreachable)
@@ -135,14 +133,14 @@ impl DataSource for Sqlite {
     /// ### Warning: This function expects a salted/hashed password since it *does not* do any hashing/salting itself.
     /// Returns [`DriverError::DuplicateKeyInsertion`] if an account with said uuid already exists.
     #[tracing::instrument(skip(stub))]
-    async fn create_account(&mut self, stub: data::stub::AccountStub) -> Response<()> {
+    async fn create_account(&self, stub: data::stub::AccountStub) -> Response<()> {
         let query = sqlx::query_as::<_, Account>(
             "INSERT INTO accounts (uuid, password, current_join) VALUES ($1, $2, $3) RETURNING *",
         )
         .bind(stub.uuid)
         .bind(stub.password)
         .bind(Utc::now())
-        .fetch_one(&mut self.conn)
+        .fetch_one(&self.0)
         .await;
 
         map_or_log(query.map(|_| ()), DriverError::DuplicateKeyInsertion)
@@ -152,10 +150,10 @@ impl DataSource for Sqlite {
     ///
     /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if an account with the given uuid can't be found.
     #[tracing::instrument]
-    async fn get_account(&mut self, uuid: &Uuid) -> Response<Account> {
+    async fn get_account(&self, uuid: &Uuid) -> Response<Account> {
         let query = sqlx::query_as::<_, Account>("SELECT * FROM accounts WHERE uuid = ?")
             .bind(uuid)
-            .fetch_one(&mut self.conn)
+            .fetch_one(&self.0)
             .await;
 
         map_or_log(
@@ -169,15 +167,11 @@ impl DataSource for Sqlite {
     /// ### Warning: This function expects a salted/hashed password since it *does not* do any hashing/salting itself.
     /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if an account with the given uuid can't be found.
     #[tracing::instrument(skip(password))]
-    async fn update_password(
-        &mut self,
-        player_uuid: &uuid::Uuid,
-        password: String,
-    ) -> Response<()> {
+    async fn update_password(&self, player_uuid: &uuid::Uuid, password: String) -> Response<()> {
         let query = sqlx::query("UPDATE accounts SET password = $1 WHERE uuid = $2")
             .bind(password)
             .bind(player_uuid)
-            .execute(&mut self.conn)
+            .execute(&self.0)
             .await;
 
         map_or_log(
@@ -193,14 +187,14 @@ impl DataSource for Sqlite {
     /// ### Note: Using [`DriverError::Unreachable`] is justified since all inputs were validated prior to running the query.
 
     #[tracing::instrument]
-    async fn migrate_account(&mut self, from: &uuid::Uuid, to: &uuid::Uuid) -> Response<()> {
+    async fn migrate_account(&self, from: &uuid::Uuid, to: &uuid::Uuid) -> Response<()> {
         let from = self.get_user_by_uuid(from).await?;
         let to = self.get_user_by_uuid(to).await?;
 
         let query = sqlx::query("UPDATE accounts SET uuid = $2 WHERE uuid = $1")
         .bind(from.uuid)
         .bind(to.uuid)
-        .execute(&mut self.conn)
+        .execute(&self.0)
         .await;
 
         map_or_log(query.map(|_| ()), DriverError::Unreachable)
@@ -210,10 +204,10 @@ impl DataSource for Sqlite {
     ///
     /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if an account with the given uuid can't be found.
     #[tracing::instrument]
-    async fn delete_account(&mut self, player_uuid: &uuid::Uuid) -> Response<()> {
+    async fn delete_account(&self, player_uuid: &uuid::Uuid) -> Response<()> {
         let query = sqlx::query("DELETE FROM accounts WHERE uuid == ?")
             .bind(player_uuid)
-            .execute(&mut self.conn)
+            .execute(&self.0)
             .await;
 
         map_or_log(
@@ -226,7 +220,7 @@ impl DataSource for Sqlite {
     ///
     /// Returns an [`DriverError::DuplicateKeyInsertion`] if an account with the given uuid or ip address can be found.
     #[tracing::instrument(skip(ip))]
-    async fn create_allowlist(&mut self, player_uuid: &Uuid, ip: Ipv4Addr) -> Response<Allowlist> {
+    async fn create_allowlist(&self, player_uuid: &Uuid, ip: Ipv4Addr) -> Response<Allowlist> {
         let user = self.get_account(player_uuid).await?;
 
         let query = sqlx::query_as::<_, Allowlist>(
@@ -237,7 +231,7 @@ impl DataSource for Sqlite {
         .bind(32)
         .bind(Utc::now())
         .bind(1)
-        .fetch_one(&mut self.conn)
+        .fetch_one(&self.0)
         .await;
 
         map_or_log(query, DriverError::DuplicateKeyInsertion)
@@ -247,12 +241,12 @@ impl DataSource for Sqlite {
     ///
     /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if an account with the given uuid can't be found.
     #[tracing::instrument]
-    async fn get_allowlists(&mut self, player_uuid: &Uuid) -> Response<Vec<Allowlist>> {
+    async fn get_allowlists(&self, player_uuid: &Uuid) -> Response<Vec<Allowlist>> {
         let query = sqlx::query_as::<_, Allowlist>(
             "SELECT * FROM allowlist WHERE uuid = $1 ORDER BY last_join DESC",
         )
         .bind(player_uuid)
-        .fetch_all(&mut self.conn)
+        .fetch_all(&self.0)
         .await;
 
         map_or_log(
@@ -266,7 +260,7 @@ impl DataSource for Sqlite {
     /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if an account with the given uuid can't be found.
     #[tracing::instrument(skip(ip))]
     async fn get_allowlists_with_ip(
-        &mut self,
+        &self,
         player_uuid: &Uuid,
         ip: Ipv4Addr,
     ) -> Response<Vec<Allowlist>> {
@@ -275,7 +269,7 @@ impl DataSource for Sqlite {
         )
         .bind(player_uuid)
         .bind(ip.to_bits())
-        .fetch_all(&mut self.conn)
+        .fetch_all(&self.0)
         .await;
 
         map_or_log(
@@ -289,7 +283,7 @@ impl DataSource for Sqlite {
     /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if an account with the given uuid can't be found.
     #[tracing::instrument(skip(ip))]
     async fn get_allowlists_with_range(
-        &mut self,
+        &self,
         player_uuid: &Uuid,
         ip: Ipv4Addr,
         mask: u8,
@@ -300,7 +294,7 @@ impl DataSource for Sqlite {
         .bind(player_uuid)
         .bind(ip.to_bits())
         .bind(mask)
-        .fetch_all(&mut self.conn)
+        .fetch_all(&self.0)
         .await;
 
         map_or_log(
@@ -315,7 +309,7 @@ impl DataSource for Sqlite {
     /// Returns an [DriverError::Unreachable] if something *bad* happens.  
     /// ### Note: The use of unreachable is justified since this function should be used for modifying already existing input.
     #[tracing::instrument]
-    async fn bump_allowlist(&mut self, entry: Allowlist) -> Response<()> {
+    async fn bump_allowlist(&self, entry: Allowlist) -> Response<()> {
         let query = sqlx::query(
             "UPDATE allowlist SET hits = $1, last_join = $2 WHERE uuid = $3 AND base_ip = $4",
         )
@@ -323,7 +317,7 @@ impl DataSource for Sqlite {
         .bind(Utc::now())
         .bind(entry.uuid)
         .bind(entry.base_ip)
-        .execute(&mut self.conn)
+        .execute(&self.0)
         .await;
 
         map_or_log(query.map(|_| ()), DriverError::Unreachable)
@@ -334,12 +328,12 @@ impl DataSource for Sqlite {
     /// Returns an [DriverError::Unreachable] if something *bad* happens.  
     /// ### Note: The use of unreachable is justified since this function should be used for modifying already existing input.
     #[tracing::instrument]
-    async fn broaden_allowlist_mask(&mut self, entry: Allowlist, new_mask: u8) -> Response<()> {
+    async fn broaden_allowlist_mask(&self, entry: Allowlist, new_mask: u8) -> Response<()> {
         let query = sqlx::query("UPDATE allowlist SET mask = $1 WHERE uuid = $2 AND base_ip = $3")
             .bind(new_mask)
             .bind(entry.uuid)
             .bind(entry.base_ip)
-            .execute(&mut self.conn)
+            .execute(&self.0)
             .await;
 
         map_or_log(query.map(|_| ()), DriverError::Unreachable)
@@ -350,13 +344,13 @@ impl DataSource for Sqlite {
     /// Returns an [DriverError::Unreachable] if something *bad* happens.  
     /// ### Note: The use of unreachable is justified since this function should be used for modifying already existing input.
     #[tracing::instrument]
-    async fn delete_allowlist(&mut self, entry: Allowlist) -> Response<()> {
+    async fn delete_allowlist(&self, entry: Allowlist) -> Response<()> {
         let query =
             sqlx::query("DELETE FROM allowlist WHERE uuid = $1 AND base_ip = $2 AND mask = $3")
                 .bind(entry.uuid)
                 .bind(entry.base_ip)
                 .bind(entry.mask)
-                .execute(&mut self.conn)
+                .execute(&self.0)
                 .await;
 
         map_or_log(query.map(|_| ()), DriverError::Unreachable)
@@ -366,12 +360,12 @@ impl DataSource for Sqlite {
     ///
     /// Returns an [`base::NotFoundError::BlacklistEntry`] wrapped inside a [`DriverError::DatabaseError`] if an entry with the given IP Address can't be found.
     #[tracing::instrument(skip(ip))]
-    async fn get_blacklists(&mut self, ip: Ipv4Addr) -> Response<Vec<Blacklist>> {
+    async fn get_blacklists(&self, ip: Ipv4Addr) -> Response<Vec<Blacklist>> {
         let query = sqlx::query_as::<_,Blacklist>(
             "SELECT * FROM blacklist WHERE ($1 & (-1 << (32 - mask))) = (base_ip & (-1 << (32 - mask))) ORDER BY hits DESC"
         )
         .bind(ip.to_bits())
-        .fetch_all(&mut self.conn)
+        .fetch_all(&self.0)
         .await;
 
         map_or_log(
@@ -384,17 +378,13 @@ impl DataSource for Sqlite {
     ///
     /// Returns an [`base::NotFoundError::BlacklistEntry`] wrapped inside a [`DriverError::DatabaseError`] if an entry with the given IP Address can't be found.
     #[tracing::instrument(skip(ip))]
-    async fn get_blacklists_with_range(
-        &mut self,
-        ip: Ipv4Addr,
-        mask: u8,
-    ) -> Response<Vec<Blacklist>> {
+    async fn get_blacklists_with_range(&self, ip: Ipv4Addr, mask: u8) -> Response<Vec<Blacklist>> {
         let query = sqlx::query_as::<_,Blacklist>(
             "SELECT * FROM blacklist WHERE ($1 & (-1 << (32 - $2))) = (base_ip & (-1 << (32 - $2))) ORDER BY hits DESC"
         )
         .bind(ip.to_bits())
         .bind(mask)
-        .fetch_all(&mut self.conn)
+        .fetch_all(&self.0)
         .await;
 
         map_or_log(
@@ -408,7 +398,7 @@ impl DataSource for Sqlite {
     /// ### Note: This function doesn't check for matches when inserting the new entry. Please check if a match already exists with [`DataSource::get_blacklists`] or [`DataSource::get_blacklists_with_range`] before creating a new entry.
     /// Returns an [`DriverError::DuplicateKeyInsertion`] if an entry with that IP address already exists.
     #[tracing::instrument(skip(ip))]
-    async fn create_blacklist(&mut self, ip: Ipv4Addr, actor: BanActor) -> Response<Blacklist> {
+    async fn create_blacklist(&self, ip: Ipv4Addr, actor: BanActor) -> Response<Blacklist> {
         let query = sqlx::query_as::<_, Blacklist>(
             "INSERT INTO blacklist (base_ip, mask, created_at, actor, hits) VALUES ($1, $2, $3, $4, $5) RETURNING *"
         )
@@ -417,7 +407,7 @@ impl DataSource for Sqlite {
         .bind(Utc::now())
         .bind(Json(actor))
         .bind(1)
-        .fetch_one(&mut self.conn)
+        .fetch_one(&self.0)
         .await;
 
         map_or_log(query, DriverError::DuplicateKeyInsertion)
@@ -428,12 +418,12 @@ impl DataSource for Sqlite {
     /// Returns an [DriverError::Unreachable] if something *bad* happens.  
     /// ### Note: The use of unreachable is justified since this function should be used for modifying already existing input.
     #[tracing::instrument]
-    async fn bump_blacklist(&mut self, entry: Blacklist) -> Response<()> {
+    async fn bump_blacklist(&self, entry: Blacklist) -> Response<()> {
         let query = sqlx::query("UPDATE blacklist SET hits = $1 WHERE base_ip = $2 AND mask = $3")
             .bind(entry.hits + 1)
             .bind(entry.base_ip)
             .bind(entry.mask)
-            .execute(&mut self.conn)
+            .execute(&self.0)
             .await;
 
         map_or_log(query.map(|_| ()), DriverError::Unreachable)
@@ -443,12 +433,12 @@ impl DataSource for Sqlite {
     ///
     /// Returns an [DriverError::Unreachable] if something *bad* happens.  
     /// ### Note: The use of unreachable is justified since this function should be used for modifying already existing input.
-    async fn broaden_blacklist_mask(&mut self, entry: Blacklist, new_mask: u8) -> Response<()> {
+    async fn broaden_blacklist_mask(&self, entry: Blacklist, new_mask: u8) -> Response<()> {
         let query = sqlx::query("UPDATE blacklist SET mask = $1 WHERE base_ip = $2 AND mask = $3")
             .bind(new_mask)
             .bind(entry.base_ip)
             .bind(entry.mask)
-            .execute(&mut self.conn)
+            .execute(&self.0)
             .await;
 
         map_or_log(query.map(|_| ()), DriverError::Unreachable)
@@ -458,11 +448,11 @@ impl DataSource for Sqlite {
     ///
     /// Returns an [DriverError::Unreachable] if something *bad* happens.  
     /// ### Note: The use of unreachable is justified since this function should be used for modifying already existing input.
-    async fn delete_blacklist(&mut self, entry: Blacklist) -> Response<()> {
+    async fn delete_blacklist(&self, entry: Blacklist) -> Response<()> {
         let query = sqlx::query("DELETE FROM blacklist WHERE base_ip = $1 AND mask = $2")
             .bind(entry.base_ip)
             .bind(entry.mask)
-            .execute(&mut self.conn)
+            .execute(&self.0)
             .await;
 
         map_or_log(query.map(|_| ()), DriverError::Unreachable)
@@ -472,7 +462,7 @@ impl DataSource for Sqlite {
     ///
     /// Returns [`DriverError::DuplicateKeyInsertion`] if an server with said name already exists.
     #[tracing::instrument]
-    async fn create_server(&mut self, stub: data::stub::ServerStub) -> Response<Server> {
+    async fn create_server(&self, stub: data::stub::ServerStub) -> Response<Server> {
         let query = sqlx::query_as::<_, Server>("INSERT INTO servers (uuid, name, supported_versions, current_modpack, online, players) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *")
             .bind(Uuid::new_v4())
             .bind(stub.name)
@@ -480,7 +470,7 @@ impl DataSource for Sqlite {
             .bind(Json(stub.current_modpack))
             .bind(Json(true))
             .bind("[]")
-	    .fetch_one(&mut self.conn).await;
+	    .fetch_one(&self.0).await;
 
         map_or_log(query, DriverError::DuplicateKeyInsertion)
     }
@@ -489,10 +479,10 @@ impl DataSource for Sqlite {
     ///
     /// Returns an [`base::NotFoundError::Server`] wrapped inside a [`DriverError::DatabaseError`] if an server with the given uuid can't be found.
     #[tracing::instrument]
-    async fn delete_server(&mut self, server_uuid: &uuid::Uuid) -> Response<Server> {
+    async fn delete_server(&self, server_uuid: &uuid::Uuid) -> Response<Server> {
         let query = sqlx::query_as::<_, Server>("DELETE FROM servers WHERE uuid = ? RETURNING *")
             .bind(server_uuid)
-            .fetch_one(&mut self.conn)
+            .fetch_one(&self.0)
             .await;
 
         map_or_log(
@@ -505,10 +495,10 @@ impl DataSource for Sqlite {
     ///
     /// Returns an [`base::NotFoundError::Server`] wrapped inside a [`DriverError::DatabaseError`] if an server with the given uuid can't be found.
     #[tracing::instrument]
-    async fn get_server(&mut self, server_uuid: &uuid::Uuid) -> Response<Server> {
+    async fn get_server(&self, server_uuid: &uuid::Uuid) -> Response<Server> {
         let query = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE uuid = ?")
             .bind(server_uuid)
-            .fetch_one(&mut self.conn)
+            .fetch_one(&self.0)
             .await;
 
         map_or_log(
@@ -521,10 +511,10 @@ impl DataSource for Sqlite {
     ///
     /// Returns an [`base::NotFoundError::Server`] wrapped inside a [`DriverError::DatabaseError`] if an server with the given name can't be found.
     #[tracing::instrument]
-    async fn get_server_by_name(&mut self, name: String) -> Response<Server> {
+    async fn get_server_by_name(&self, name: String) -> Response<Server> {
         let query = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE name = ?")
             .bind(name)
-            .fetch_one(&mut self.conn)
+            .fetch_one(&self.0)
             .await;
 
         map_or_log(
@@ -534,13 +524,13 @@ impl DataSource for Sqlite {
     }
 
     /// Adds an [`User`] to an [`Server`] if it wasn't already there, returning an [`data::result::ServerJoin`] if the user was added successfully.
-    /// 
+    ///
     /// Returns:
     /// - [`base::NotFoundError`] if either [`User`] or [`Server`] don't exist.
     /// - [`DriverError::Unreachable`] if something *bad* happened.
     #[tracing::instrument]
     async fn join_server(
-        &mut self,
+        &self,
         server_uuid: &uuid::Uuid,
         player_uuid: &uuid::Uuid,
     ) -> Response<ServerJoin> {
@@ -552,7 +542,7 @@ impl DataSource for Sqlite {
             let query = sqlx::query("UPDATE servers SET players = $1 WHERE uuid = $2")
                 .bind(Json(server.players))
                 .bind(server_uuid)
-                .execute(&mut self.conn)
+                .execute(&self.0)
                 .await;
 
             map_or_log(query, DriverError::Unreachable)?;
@@ -566,13 +556,13 @@ impl DataSource for Sqlite {
     }
 
     /// Removes an [`User`] to an [`Server`] if it wasn't already there, returning an [`data::result::ServerLeave`] if the user was removed successfully.
-    /// 
+    ///
     /// Returns:
     /// - [`base::NotFoundError`] if either [`User`] or [`Server`] don't exist.
     /// - [`DriverError::Unreachable`] if something *bad* happened.
     #[tracing::instrument]
     async fn leave_server(
-        &mut self,
+        &self,
         server_uuid: &uuid::Uuid,
         player_uuid: &uuid::Uuid,
     ) -> Response<ServerLeave> {
@@ -586,7 +576,7 @@ impl DataSource for Sqlite {
             let query = sqlx::query("UPDATE servers SET players = $1 WHERE uuid = $2")
                 .bind(Json(server.players))
                 .bind(server_uuid)
-                .execute(&mut self.conn)
+                .execute(&self.0)
                 .await;
 
             map_or_log(
@@ -597,13 +587,13 @@ impl DataSource for Sqlite {
     }
 
     /// Updates an [`User`]'s [`Viewport`] for a given [`Server`], returning the updated [`Viewport`].
-    /// 
+    ///
     /// Returns:
     /// - [`base::NotFoundError`] if either [`User`] or [`Server`] don't exist.
     /// - [`base::NotFoundError::UserData`] if the [`UserData`] for the following User/Server pair didn't exist.
     #[tracing::instrument]
     async fn update_viewport(
-        &mut self,
+        &self,
         player_uuid: &uuid::Uuid,
         server_uuid: &uuid::Uuid,
         viewport: data::Viewport,
@@ -617,7 +607,7 @@ impl DataSource for Sqlite {
         .bind(Json(viewport))
         .bind(player_uuid)
         .bind(server_uuid)
-        .fetch_one(&mut self.conn)
+        .fetch_one(&self.0)
         .await;
 
         map_or_log(
@@ -630,12 +620,12 @@ impl DataSource for Sqlite {
     }
 
     /// Gets an [`User`]'s [`Viewport`] for a given [`Server`].
-    /// 
+    ///
     /// Returns:
     /// - [`base::NotFoundError`] if either [`User`] or [`Server`] don't exist.
     /// - [`base::NotFoundError::UserData`] if the [`UserData`] for the following User/Server pair didn't exist.
     async fn get_viewport(
-        &mut self,
+        &self,
         player_uuid: &uuid::Uuid,
         server_uuid: &uuid::Uuid,
     ) -> Response<Viewport> {
@@ -647,7 +637,7 @@ impl DataSource for Sqlite {
         )
         .bind(player_uuid)
         .bind(server_uuid)
-        .fetch_one(&mut self.conn)
+        .fetch_one(&self.0)
         .await;
 
         map_or_log(
@@ -660,13 +650,13 @@ impl DataSource for Sqlite {
     }
 
     /// Updates an [`User`]'s playtime for a given [`Server`].
-    /// 
+    ///
     /// Returns:
     /// - [`base::NotFoundError`] if either [`User`] or [`Server`] don't exist.
     /// - [`base::NotFoundError::UserData`] if the [`UserData`] for the following User/Server pair didn't exist.
     #[tracing::instrument]
     async fn update_playtime(
-        &mut self,
+        &self,
         player_uuid: &uuid::Uuid,
         server_uuid: &uuid::Uuid,
         new_duration: Duration,
@@ -680,7 +670,7 @@ impl DataSource for Sqlite {
         .bind(Json(new_duration))
         .bind(player_uuid)
         .bind(server_uuid)
-        .fetch_one(&mut self.conn)
+        .fetch_one(&self.0)
         .await;
 
         map_or_log(
@@ -693,13 +683,13 @@ impl DataSource for Sqlite {
     }
 
     /// Gets an [`User`]'s playtime for a given [`Server`]. Returns a [`std::time::Duration`] representing the current playtime.
-    /// 
+    ///
     /// Returns:
     /// - [`base::NotFoundError`] if either [`User`] or [`Server`] don't exist.
     /// - [`base::NotFoundError::UserData`] if the [`UserData`] for the following User/Server pair didn't exist.
     #[tracing::instrument]
     async fn get_playtime(
-        &mut self,
+        &self,
         player_uuid: &uuid::Uuid,
         server_uuid: &uuid::Uuid,
     ) -> Response<time::Duration> {
@@ -711,7 +701,7 @@ impl DataSource for Sqlite {
         )
         .bind(player_uuid)
         .bind(server_uuid)
-        .fetch_one(&mut self.conn)
+        .fetch_one(&self.0)
         .await;
 
         map_or_log(
@@ -724,13 +714,13 @@ impl DataSource for Sqlite {
     }
 
     /// Adds an [`Pronoun`] for an [`User`].
-    /// 
+    ///
     /// Returns:
     /// - [`base::NotFoundError`] if the [`User`] don't exist.
     /// - [`DriverError::Unreachable`] if something *bad* happened.
     #[tracing::instrument]
     async fn add_pronoun(
-        &mut self,
+        &self,
         player_uuid: &uuid::Uuid,
         pronoun: data::Pronoun,
     ) -> Response<Vec<data::Pronoun>> {
@@ -741,20 +731,20 @@ impl DataSource for Sqlite {
             sqlx::query_as::<_, User>("UPDATE users SET pronouns = $1 WHERE uuid = $2 RETURNING *")
                 .bind(Json(pronouns))
                 .bind(player_uuid)
-                .fetch_one(&mut self.conn)
+                .fetch_one(&self.0)
                 .await;
 
         map_or_log(query.map(|x| x.pronouns.0), DriverError::Unreachable)
     }
 
     /// Removes an [`Pronoun`] for an [`User`].
-    /// 
+    ///
     /// Returns:
     /// - [`base::NotFoundError`] if the [`User`] don't exist.
     /// - [`DriverError::Unreachable`] if something *bad* happened.
     #[tracing::instrument]
     async fn remove_pronoun(
-        &mut self,
+        &self,
         player_uuid: &uuid::Uuid,
         pronoun: data::Pronoun,
     ) -> Response<Vec<data::Pronoun>> {
@@ -765,20 +755,20 @@ impl DataSource for Sqlite {
             sqlx::query_as::<_, User>("UPDATE users SET pronouns = $1 WHERE uuid = $2 RETURNING *")
                 .bind(Json(pronouns))
                 .bind(player_uuid)
-                .fetch_one(&mut self.conn)
+                .fetch_one(&self.0)
                 .await;
 
         map_or_log(query.map(|x| x.pronouns.0), DriverError::Unreachable)
     }
 
     /// Updates an existing [`Pronoun`] for an [`User`].
-    /// 
+    ///
     /// Returns:
     /// - [`base::NotFoundError`] if the [`User`] don't exist.
     /// - [`DriverError::Unreachable`] if something *bad* happened.
     #[tracing::instrument]
     async fn update_pronoun(
-        &mut self,
+        &self,
         player_uuid: &uuid::Uuid,
         old: &data::Pronoun,
         new: data::Pronoun,
@@ -791,7 +781,7 @@ impl DataSource for Sqlite {
             sqlx::query_as::<_, User>("UPDATE users SET pronouns = $1 WHERE uuid = $2 RETURNING *")
                 .bind(Json(pronouns))
                 .bind(player_uuid)
-                .fetch_one(&mut self.conn)
+                .fetch_one(&self.0)
                 .await;
 
         map_or_log(query.map(|x| x.pronouns.0), DriverError::Unreachable)
@@ -802,11 +792,7 @@ impl DataSource for Sqlite {
     /// Returns:
     /// - [`DriverError::DuplicateKeyInsertion`] if that user/server pair already existed.
     #[tracing::instrument]
-    async fn create_savedata(
-        &mut self,
-        player_uuid: &Uuid,
-        server_uuid: &Uuid,
-    ) -> Response<SaveData> {
+    async fn create_savedata(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<SaveData> {
         let user = self.get_user_by_uuid(player_uuid).await?;
         let _ = self.get_server(server_uuid).await?;
 
@@ -815,7 +801,7 @@ impl DataSource for Sqlite {
             .bind(player_uuid)
             .bind(Json(time::Duration::ZERO))
             .bind(Json(Viewport::default()))
-            .fetch_one(&mut self.conn)
+            .fetch_one(&self.0)
             .await;
 
         map_or_log(query, DriverError::DuplicateKeyInsertion)
