@@ -39,6 +39,7 @@ where
     }
 }
 
+#[async_trait::async_trait]
 impl DataSource for Sqlite {
     /// Gets an [User] by its Uuid.
     ///

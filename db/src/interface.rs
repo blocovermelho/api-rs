@@ -5,6 +5,7 @@ use ipnet::Ipv4Net;
 use uuid::Uuid;
 use crate::{data::{result, stub, Account, Allowlist, BanActor, Blacklist, Pronoun, SaveData, Server, User, Viewport}, drivers::err::Response};
 
+#[async_trait::async_trait]
 pub trait DataSource {
     async fn get_user_by_uuid(&self, uuid: &Uuid) -> Response<User>;
     async fn get_users_by_discord_id(&self, discord_id: String) -> Response<Vec<User>>;
