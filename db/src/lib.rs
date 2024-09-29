@@ -1,5 +1,6 @@
-mod interface;
-mod data;
-mod drivers;
-mod helper;
-mod tests;
+pub mod data;
+pub mod drivers;
+pub mod helper;
+pub mod interface;
+#[cfg(feature = "testing")]
+pub mod tests;

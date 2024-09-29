@@ -1,4 +1,5 @@
 #[allow(unused_variables)]
+#[cfg(feature = "sqlite")]
 pub mod sqlite;
 
 pub const MAX_SESSION_TIME_MINUTE : i64 = 15;
