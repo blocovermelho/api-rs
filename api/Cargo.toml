@@ -26,6 +26,7 @@ futures = { version = "0.3.30" }
 
 oauth = { path = "../oauth" }
 traits = { path = "../traits" }
+db = { path = "../db", features = ["sqlite"] }
 
 oauth2 = "4.4.2"
 reqwest = { version = "0.11", default-features = false , features = ["json", "rustls-tls"]}

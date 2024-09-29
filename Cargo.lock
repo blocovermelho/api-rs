@@ -1315,6 +1315,7 @@ dependencies = [
  "axum-typed-websockets",
  "bcrypt",
  "chrono",
+ "db",
  "flate2",
  "futures",
  "ipnet",
