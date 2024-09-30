@@ -31,10 +31,10 @@ fn offline_uuid(name: &'static str) -> Uuid {
     Uuid::from_bytes(hash)
 }
 
-async fn mock_user(db: &Sqlite) -> User {
+async fn mock_user(db: &Sqlite, username: &'static str) -> User {
     let stub = UserStub {
-        uuid: Uuid::new_v4(),
-        username: "alikindsys".to_owned(),
+        uuid: offline_uuid(username),
+        username: username.to_owned(),
         discord_id: "-Discord ID-".to_owned(),
     };
 
@@ -100,7 +100,7 @@ async fn create_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 async fn create_savedata(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
     let server = mock_server(&db).await;
 
     let savedata = db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
@@ -115,7 +115,7 @@ async fn create_savedata(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 async fn create_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
     // We first need to create an user, in order to satisfy the foreign key constraint.
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
 
     // Creating an account with the same uuid should now work.
     let stub = AccountStub {
@@ -153,7 +153,7 @@ async fn create_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 
     // Allowlists are only created when an account exists.
     // But an account can only exist if an user exists.
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
     mock_account(&db, user.uuid).await;
 
     let res = db.create_allowlist(&user.uuid, ip).await.unwrap();
@@ -181,6 +181,18 @@ async fn get_user_by_uuid(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let save = db.get_user_by_uuid(&uuid).await.unwrap();
 
     assert_eq!(stub, save);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_all_users(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    mock_user(&db, "alikindsys").await;
+    mock_user(&db, "CinderAesthethic").await;
+    mock_user(&db, "SofiAzeda").await;
+
+    let users = db.get_all_users().await.unwrap();
+    assert_eq!(users.len(), 3);
     Ok(())
 }
 
@@ -246,10 +258,20 @@ async fn get_server_by_name(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> 
 }
 
 #[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_all_servers(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    mock_server(&db).await;
+
+    let servers = db.get_all_servers().await.unwrap();
+    assert_eq!(servers.len(), 1);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
 async fn get_viewport(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
     let server = mock_server(&db).await;
 
     db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
@@ -265,7 +287,7 @@ async fn get_viewport(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 async fn get_playtime(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
     let server = mock_server(&db).await;
 
     db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
@@ -281,7 +303,7 @@ async fn get_playtime(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 async fn get_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
     db.create_account(AccountStub {
         uuid: user.uuid,
         password: "TotallyMyPassword123".to_owned(),
@@ -293,6 +315,21 @@ async fn get_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 
     assert_eq!(acc.password, "TotallyMyPassword123".to_owned());
     assert_eq!(acc.uuid, user.uuid);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_all_accounts(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let alikind = mock_user(&db, "alikindsys").await;
+    let sofia = mock_user(&db, "SofiAzeda").await;
+
+    mock_account(&db, alikind.uuid).await;
+    mock_account(&db, sofia.uuid).await;
+
+    let accounts = db.get_all_accounts().await.unwrap();
+
+    assert_eq!(accounts.len(), 2);
     Ok(())
 }
 
@@ -344,7 +381,7 @@ async fn get_blacklists_with_range(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Resu
 async fn get_allowlists(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
     mock_account(&db, user.uuid).await;
     db.create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
         .await
@@ -362,7 +399,7 @@ async fn get_allowlists(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 async fn get_allowlists_with_ip(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
     mock_account(&db, user.uuid).await;
     db.create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
         .await
@@ -383,7 +420,7 @@ async fn get_allowlists_with_ip(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<
 async fn get_allowlists_with_range(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
     mock_account(&db, user.uuid).await;
     db.create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
         .await
@@ -558,7 +595,7 @@ async fn leave_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 async fn update_viewport(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
     let server = mock_server(&db).await;
 
     db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
@@ -589,7 +626,7 @@ async fn update_viewport(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 async fn update_playtime(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
     let server = mock_server(&db).await;
 
     db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
@@ -609,7 +646,7 @@ async fn update_playtime(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 #[test(sqlx::test(migrations = "src/migrations"))]
 async fn update_password(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
 
     db.create_account(AccountStub {
         uuid: user.uuid,
@@ -724,7 +761,7 @@ async fn broaden_blacklist_mask(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<
 #[test(sqlx::test(migrations = "src/migrations"))]
 async fn bump_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
     mock_account(&db, user.uuid).await;
     let entry = db
         .create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
@@ -744,7 +781,7 @@ async fn bump_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 #[test(sqlx::test(migrations = "src/migrations"))]
 async fn broaden_allowlist_mask(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
     mock_account(&db, user.uuid).await;
     let entry = db
         .create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
@@ -804,7 +841,7 @@ async fn delete_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 async fn delete_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
 
     db.create_account(AccountStub {
         uuid: user.uuid,
@@ -852,7 +889,7 @@ async fn delete_blacklist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 async fn delete_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db).await;
+    let user = mock_user(&db, "alikindsys").await;
     mock_account(&db, user.uuid).await;
     let entry = db
         .create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
