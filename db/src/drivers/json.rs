@@ -11,7 +11,7 @@ use std::{
 // The worst parts is that data-representation is different from what the new database format expects.
 // This will need a bunch of conversions and dummy objects.
 // This is not a place of honor
-mod data;
+pub mod data;
 use chrono::{DateTime, Utc};
 use data::{self as old_data};
 use ipnet::Ipv4Net;
