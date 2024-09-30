@@ -26,11 +26,12 @@ use websocket::MessageOut;
 use crate::store::Store;
 
 pub mod bus;
+pub mod cidr;
+pub mod migrate;
 pub mod models;
 pub mod routes;
 pub mod store;
 pub mod websocket;
-pub mod cidr;
 
 struct Channels {
     links: OneshotBus<Uuid, LinkResult>,
