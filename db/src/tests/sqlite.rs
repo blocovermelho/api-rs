@@ -185,6 +185,18 @@ async fn get_user_by_uuid(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 }
 
 #[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_all_users(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    mock_user(&db, "alikindsys").await;
+    mock_user(&db, "CinderAesthethic").await;
+    mock_user(&db, "SofiAzeda").await;
+
+    let users = db.get_all_users().await.unwrap();
+    assert_eq!(users.len(), 3);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
 async fn get_users_by_discord_id(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let discord_id = "-Discord ID-".to_owned();
     let db = get_wrapper(pool).await.unwrap();
@@ -246,6 +258,16 @@ async fn get_server_by_name(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> 
 }
 
 #[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_all_servers(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    mock_server(&db).await;
+
+    let servers = db.get_all_servers().await.unwrap();
+    assert_eq!(servers.len(), 1);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
 async fn get_viewport(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
@@ -293,6 +315,21 @@ async fn get_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 
     assert_eq!(acc.password, "TotallyMyPassword123".to_owned());
     assert_eq!(acc.uuid, user.uuid);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_all_accounts(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let alikind = mock_user(&db, "alikindsys").await;
+    let sofia = mock_user(&db, "SofiAzeda").await;
+
+    mock_account(&db, alikind.uuid).await;
+    mock_account(&db, sofia.uuid).await;
+
+    let accounts = db.get_all_accounts().await.unwrap();
+
+    assert_eq!(accounts.len(), 2);
     Ok(())
 }
 
