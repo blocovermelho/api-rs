@@ -74,8 +74,15 @@ impl DataSource for Sqlite {
         )
     }
 
+    /// Gets the [Uuid]s for all currently registered users.
+    ///
+    /// Returns an [DriverError::Unreachable] if something *bad* happens.  
+    /// ### Note: The use of unreachable is justified since this function only returns Uuids, and we currently don't have enough players for that to be a concern.
     async fn get_all_users(&self) -> Response<Vec<Uuid>> {
-        todo!();
+        let query = sqlx::query_scalar::<_, Uuid>("SELECT uuid FROM users")
+            .fetch_all(&self.0)
+            .await;
+        map_or_log(query, DriverError::Unreachable)
     }
     /// Creates a new [`User`]
     ///
@@ -166,8 +173,15 @@ impl DataSource for Sqlite {
         )
     }
 
+    /// Gets the [Uuid]s for all currently registered accounts.
+    ///
+    /// Returns an [DriverError::Unreachable] if something *bad* happens.  
+    /// ### Note: The use of unreachable is justified since this function only returns Uuids, and we currently don't have enough players for that to be a concern.
     async fn get_all_accounts(&self) -> Response<Vec<Uuid>> {
-        todo!();
+        let query = sqlx::query_scalar::<_, Uuid>("SELECT uuid FROM accounts")
+            .fetch_all(&self.0)
+            .await;
+        map_or_log(query, DriverError::Unreachable)
     }
 
     /// Updates an [`Account`]'s password..
@@ -515,8 +529,15 @@ impl DataSource for Sqlite {
         )
     }
 
+    /// Gets the [Uuid]s for all currently registered servers.
+    ///
+    /// Returns an [DriverError::Unreachable] if something *bad* happens.  
+    /// ### Note: The use of unreachable is justified since this function only returns Uuids, and we currently don't have enough players for that to be a concern.
     async fn get_all_servers(&self) -> Response<Vec<Uuid>> {
-        todo!();
+        let query = sqlx::query_scalar::<_, Uuid>("SELECT uuid FROM servers")
+            .fetch_all(&self.0)
+            .await;
+        map_or_log(query, DriverError::Unreachable)
     }
 
     /// Gets an [`Server`] given its name.
