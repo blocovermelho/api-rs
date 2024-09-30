@@ -116,6 +116,9 @@ impl DataSource for JsonDriver {
             )))
         }
     }
+    async fn get_all_users(&self) -> Response<Vec<Uuid>> {
+        todo!();
+    }
     async fn get_account(&self, uuid: &Uuid) -> Response<Account> {
         if let Some(old_account) = self.0.clone().accounts.get(&uuid) {
             Ok(Account {
@@ -129,6 +132,9 @@ impl DataSource for JsonDriver {
                 uuid.clone(),
             )))
         }
+    }
+    async fn get_all_accounts(&self) -> Response<Vec<Uuid>> {
+        todo!();
     }
     async fn get_allowlists(&self, player_uuid: &Uuid) -> Response<Vec<Allowlist>> {
         // Oh boy this one is involved. What we call an allowlist is stored... Inside the Account, iirc.
@@ -196,6 +202,9 @@ impl DataSource for JsonDriver {
         } else {
             Err(DriverError::DatabaseError(NotFoundError::Server))
         }
+    }
+    async fn get_all_servers(&self) -> Response<Vec<Uuid>> {
+        todo!();
     }
     async fn get_playtime(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Duration> {
         if let Some(old_user) = self.0.users.get(&player_uuid) {

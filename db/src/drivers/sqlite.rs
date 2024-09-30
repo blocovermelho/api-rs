@@ -74,6 +74,9 @@ impl DataSource for Sqlite {
         )
     }
 
+    async fn get_all_users(&self) -> Response<Vec<Uuid>> {
+        todo!();
+    }
     /// Creates a new [`User`]
     ///
     /// Returns [`DriverError::DuplicateKeyInsertion`] if an user with the provided uuid already exists.
@@ -161,6 +164,10 @@ impl DataSource for Sqlite {
             query,
             DriverError::DatabaseError(base::NotFoundError::Account(uuid.clone())),
         )
+    }
+
+    async fn get_all_accounts(&self) -> Response<Vec<Uuid>> {
+        todo!();
     }
 
     /// Updates an [`Account`]'s password..
@@ -506,6 +513,10 @@ impl DataSource for Sqlite {
             query,
             DriverError::DatabaseError(base::NotFoundError::Server),
         )
+    }
+
+    async fn get_all_servers(&self) -> Response<Vec<Uuid>> {
+        todo!();
     }
 
     /// Gets an [`Server`] given its name.

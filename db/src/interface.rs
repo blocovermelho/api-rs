@@ -9,6 +9,7 @@ use crate::{data::{result, stub, Account, Allowlist, BanActor, Blacklist, Pronou
 pub trait DataSource {
     async fn get_user_by_uuid(&self, uuid: &Uuid) -> Response<User>;
     async fn get_users_by_discord_id(&self, discord_id: String) -> Response<Vec<User>>;
+    async fn get_all_users(&self) -> Response<Vec<Uuid>>;
 
     async fn create_user(&self, stub: stub::UserStub) -> Response<User>;
     async fn delete_user(&self, uuid: &Uuid) -> Response<User>;
@@ -17,6 +18,7 @@ pub trait DataSource {
 
     async fn create_account(&self, stub: stub::AccountStub) -> Response<()>;
     async fn get_account(&self, uuid: &Uuid) -> Response<Account>;
+    async fn get_all_accounts(&self) -> Response<Vec<Uuid>>;
     async fn update_password(&self, player_uuid: &Uuid, new_password: String) -> Response<()>;
     async fn migrate_account(&self, from: &Uuid, to: &Uuid) -> Response<()>;
     async fn delete_account(&self, player_uuid: &Uuid) -> Response<()>;
@@ -50,6 +52,7 @@ pub trait DataSource {
 
     async fn get_server(&self, server_uuid: &Uuid) -> Response<Server>;
     async fn get_server_by_name(&self, name: String) -> Response<Server>;
+    async fn get_all_servers(&self) -> Response<Vec<Uuid>>;
 
     async fn join_server(
         &self,
