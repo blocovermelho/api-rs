@@ -1,8 +1,12 @@
 use core::time;
-use std::{fmt::Display, net::Ipv4Addr, time::Duration};
+use std::{fmt::Display, net::Ipv4Addr, path::PathBuf, time::Duration};
 
 use chrono::Utc;
-use sqlx::{types::Json, Pool};
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+    types::Json,
+    Pool, SqlitePool,
+};
 use tracing::error;
 use uuid::Uuid;
 
@@ -23,6 +27,19 @@ pub struct Sqlite (Pool<sqlx::Sqlite>);
 impl From<Pool<sqlx::Sqlite>> for Sqlite {
     fn from(value: Pool<sqlx::Sqlite>) -> Self {
         Self(value)
+    }
+}
+
+impl Sqlite {
+    pub async fn run_migrations(&self) {
+        sqlx::migrate!("src/migrations").run(&self.0).await.unwrap();
+    }
+    pub async fn new(path: &PathBuf) -> Self {
+        let options = SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true);
+
+        SqlitePool::connect_with(options).await.unwrap().into()
     }
 }
 
