@@ -1,5 +1,5 @@
 [package]
-name = "new-api-rs"
+name = "bv-api"
 version = "0.1.0"
 edition = "2021"
 
