@@ -33,6 +33,7 @@ pub mod routes;
 pub mod store;
 pub mod websocket;
 
+// TODO: Replace usages of `OneshotBus` with a more tested channel implementation.
 struct Channels {
     links: OneshotBus<Uuid, LinkResult>,
     verify: OneshotBus<String, u64>,
@@ -54,10 +55,12 @@ impl Channels {
 
 #[derive(Clone)]
 pub struct AppState {
+    // TODO: Migrate to the new Sqlite Backend.
     data: Arc<Mutex<Store>>,
     path: Option<PathBuf>,
     config: Arc<Mutex<Config>>,
     config_path: Option<PathBuf>,
+    // TODO: Move discord related code to a separate crate.
     reqwest_client: Arc<Mutex<Client>>,
     discord_client: Arc<serenity::Client>,
     chs: Arc<Channels>
@@ -124,6 +127,8 @@ async fn main() {
     let token =
         std::env::var("API_AUTH_TOKEN").expect("API_AUTH_TOKEN Environment variable is NOT SET.");
 
+    // TODO: Make a better way to authenticate requests.
+    // TODO: We'd likely need a flow for distributing new tokens to servers.
     let authenticated = stack
         .clone()
         .layer(ValidateRequestHeaderLayer::bearer(&token));
@@ -176,6 +181,8 @@ async fn main() {
         .layer(authenticated);
 
     let app = Router::new()
+    // FIXME: This should use the `tower::timeout` middleware.
+    // FIXME: Currently this uses some faulty handrolled timeout logic.
         .route("/link", get(routes::link))
         .route("/oauth", get(routes::discord))
         .route("/servers", get(routes::get_servers))

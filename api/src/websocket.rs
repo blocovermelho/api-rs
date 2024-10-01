@@ -1,6 +1,8 @@
 use std::time::Duration;
 
 use axum::{extract::State, response::IntoResponse};
+// FIXME: We *really* shouldn't be using axum-typed-websockets.
+// NOTE: I think we can simplify a *lot* of this.
 use axum_typed_websockets::{Message, WebSocket, WebSocketUpgrade};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};

@@ -20,7 +20,11 @@ use crate::{
     cidr::{any_match, lowest_common_prefix, try_merge, HOST_PREFIX}, models::{Account, BanIssuer, BanResponse, CidrKind, CidrResponse, CreateServer, CreateUser, GraceResponse, Pos, Server, User}, store::MAX_ATTEMPTS_PER_ACC, websocket::MessageOut, AppState
 };
 
+// TODO: This error type is really restrictive. We shouldn't use it for *everything*.
+// FIXME: Rename this to JsonResponse.
 pub type Res<T> = Result<Json<T>, ErrKind>;
+
+// TODO: Make another type alias for HTML responses.
 
 #[derive(Serialize, Clone)]
 pub struct Err {
@@ -57,6 +61,21 @@ impl IntoResponse for ErrKind {
         }
     }
 }
+
+// FIXME: We should get `axum-extra` in here due to the `typed-path` feature.
+// An example would be turning get_user into a typed path.
+// #[derive(TypedPath)]
+// #[typed_path("/user/:user_id")]
+// pub struct UserById {
+//   user_id: Uuid
+// }
+// Then using it instead of the current `Path(uuid) : Path<Uuid>`.
+// pub async fn get_user_by_uuid(UserById { id } : UserById, ...) {
+// This provides the benefit that we encode the path on the request and don't have to document it twice.
+// It also guarantees that each handler goes exactly to the path we specify, and
+// if the path params match the struct fields so there's less room for error.
+
+// We could even make a module just for the paths, another for query parameters, and keep this one only for the handlers.
 
 /// [GET] /api/link?state=<>&code=<>
 pub async fn link(
