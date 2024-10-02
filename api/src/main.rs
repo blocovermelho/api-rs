@@ -32,6 +32,7 @@ pub mod models;
 pub mod routes;
 pub mod store;
 pub mod websocket;
+pub mod data;
 
 // TODO: Replace usages of `OneshotBus` with a more tested channel implementation.
 struct Channels {
