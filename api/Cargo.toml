@@ -23,6 +23,8 @@ iprange = { version = "0.6.7", features = ["serde"] }
 ipnet = { version = "2.9.0", features = ["serde"] } 
 textnonce = {version = "1.0.0" }
 futures = { version = "0.3.30" }
+bimap = { version = "0.6.3" }
+anyhow = { version = "1.0.91" }
 
 oauth = { path = "../oauth" }
 traits = { path = "../traits" }

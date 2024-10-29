@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
@@ -7,11 +8,19 @@ use axum::{
     Router,
 };
 
+use bimap::BiHashMap;
 use bus::OneshotBus;
-use futures::channel::mpsc::{self, UnboundedSender, UnboundedReceiver};
+use db::drivers::json::JsonDriver;
+use db::drivers::sqlite::Sqlite;
+use event::generator::GeneratorModule;
+use event::link::PlayerLinkModule;
+use event::log::LoggerModule;
+use event::{EventBus, Module, ModuleCtx};
+use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use oauth2::basic::BasicClient;
 use routes::LinkResult;
 use serenity::all::GatewayIntents;
-use tokio::sync::Mutex;
+use tokio::sync::{broadcast, Mutex};
 
 use oauth::models::Config;
 use reqwest::{header, Client};
@@ -27,6 +36,7 @@ use crate::store::Store;
 
 pub mod bus;
 pub mod cidr;
+pub mod event;
 pub mod migrate;
 pub mod models;
 pub mod routes;
@@ -48,6 +58,35 @@ impl Channels {
                 let (tx, rx) = mpsc::unbounded();
                 Arc::new((Mutex::new(tx), Mutex::new(rx)))
             }
+        }
+    }
+}
+
+pub struct AppState2 {
+    db: Arc<Sqlite>,
+    config: Arc<Config>,
+    ephemeral_data: Arc<Mutex<Ephemeral>>,
+    oauth_client: Arc<BasicClient>,
+}
+
+pub struct Ephemeral {
+    // Bisexual and proud.
+    // Using bisexuality will solve the problem of users spamming /link
+    // The nonce will just update when that happens.
+    pub links: BiHashMap<String, Uuid>,
+    pub names: BiHashMap<String, Uuid>,
+}
+
+impl AppState2 {
+    pub fn new(config: Config, database: Sqlite) -> Self {
+        Self {
+            db: Arc::new(database),
+            config: Arc::new(config.clone()),
+            ephemeral_data: Arc::new(Mutex::new(Ephemeral {
+                links: BiHashMap::new(),
+                names: BiHashMap::new(),
+            })),
+            oauth_client: Arc::new(oauth::routes::get_client(config).unwrap()),
         }
     }
 }
@@ -90,10 +129,32 @@ impl AppState {
 #[tokio::main]
 async fn main() {
     let path = ["data.json"].iter().collect();
+    let db_path = ["data.db"].iter().collect();
     let config_path = ["config.json"].iter().collect();
 
     let store = Store::from_file_or_default(&path);
     let config = Config::from_file_or_default(&config_path);
+
+    migrate::migrate(&db_path, &path).await;
+
+    let db = Sqlite::new(&db_path).await;
+    db.run_migrations().await;
+
+    let event_bus = EventBus::new();
+    let state = Arc::new(AppState2::new(config.clone(), db));
+
+    let logger_ctx = ModuleCtx::new("logger", &event_bus, &state);
+    let mut logger = LoggerModule::new(logger_ctx);
+
+    let link_ctx = ModuleCtx::new("link", &event_bus, &state);
+    let mut link = PlayerLinkModule::new(link_ctx);
+
+    let gen_ctx = ModuleCtx::new("gen", &event_bus, &state);
+    let mut generator = GeneratorModule::new(gen_ctx);
+
+    tokio::join!(logger.run(), link.run(), generator.run())
+        .0
+        .unwrap();
 
     if Store::is_empty(&store) {
         Store::to_file(&store, &path).expect("Error happened while saving store to file.");
