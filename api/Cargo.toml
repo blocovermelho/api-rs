@@ -24,6 +24,8 @@ ipnet = { version = "2.9.0", features = ["serde"] }
 textnonce = {version = "1.0.0" }
 futures = { version = "0.3.30" }
 
+bimap = { version = "0.6.3" }
+
 oauth = { path = "../oauth" }
 traits = { path = "../traits" }
 db = { path = "../db", features = ["sqlite", "legacy"] }
