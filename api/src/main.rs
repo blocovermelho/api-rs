@@ -40,15 +40,16 @@ pub mod websocket;
 
 struct Channels {
     links: OneshotBus<Uuid, LinkResult>,
-    verify: OneshotBus<String, u64>,
-    messages: Arc<(Mutex<UnboundedSender<MessageOut>>, Mutex<UnboundedReceiver<MessageOut>>)>
+    messages: Arc<(
+        Mutex<UnboundedSender<MessageOut>>,
+        Mutex<UnboundedReceiver<MessageOut>>,
+    )>,
 }
 
 impl Channels {
     fn new() -> Self {
         Self {
             links: OneshotBus::new(),
-            verify: OneshotBus::new(),
             messages: {
                 let (tx, rx) = mpsc::unbounded();
                 Arc::new((Mutex::new(tx), Mutex::new(rx)))
