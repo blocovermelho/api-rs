@@ -2,7 +2,7 @@ use std::net::Ipv4Addr;
 
 use ipnet::Ipv4Net;
 
-use crate::{data::Allowlist, interface::NetworkProvider};
+use crate::interface::NetworkProvider;
 
 pub const LOWEST_PREFIX_LEN: u8 = 16;
 

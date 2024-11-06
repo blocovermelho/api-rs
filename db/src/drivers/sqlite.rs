@@ -2,11 +2,7 @@ use core::time;
 use std::{fmt::Display, net::Ipv4Addr, path::PathBuf, time::Duration};
 
 use chrono::Utc;
-use sqlx::{
-    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
-    types::Json,
-    Pool, SqlitePool,
-};
+use sqlx::{sqlite::SqliteConnectOptions, types::Json, Pool, SqlitePool};
 use tracing::error;
 use uuid::Uuid;
 

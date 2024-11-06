@@ -1,4 +1,4 @@
-use core::time::{self, Duration};
+use core::time::Duration;
 use std::net::Ipv4Addr;
 
 use chrono::{DateTime, Utc};
