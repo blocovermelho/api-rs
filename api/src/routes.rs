@@ -1,4 +1,4 @@
-use std::{collections::HashSet, net::Ipv4Addr, time::Duration};
+use std::{net::Ipv4Addr, sync::Arc};
 
 use axum::{
     extract::{Path, Query, State},
@@ -8,19 +8,30 @@ use axum::{
 };
 
 use chrono::{DateTime, Utc};
+use db::{
+    data::{
+        result::ServerJoin,
+        stub::{AccountStub, ServerStub, UserStub},
+        BanActor, Server, User, Viewport,
+    },
+    interface::{DataSource, NetworkProvider},
+};
 use futures::SinkExt;
-use ipnet::Ipv4Net;
-use iprange::IpRange;
 use oauth2::{reqwest::async_http_client, AuthorizationCode};
 use serde::{Deserialize, Serialize};
 use serenity::all::{GuildId, RoleId, UserId};
 use uuid::Uuid;
+use uuid_mc::PlayerUuid;
 
 use crate::{
-    cidr::{any_match, lowest_common_prefix, try_merge, HOST_PREFIX}, models::{Account, BanIssuer, BanResponse, CidrKind, CidrResponse, CreateServer, CreateUser, GraceResponse, Pos, Server, User}, store::MAX_ATTEMPTS_PER_ACC, websocket::MessageOut, AppState
+    cidr::{lowest_common_prefix, MIN_COMMON_PREFIX},
+    models::{BanIssuer, BanResponse, CidrResponse},
+    websocket::MessageOut,
+    AppState,
 };
 
 pub type Res<T> = Result<Json<T>, ErrKind>;
+pub const MAX_ATTEMPTS_PER_ACC: i32 = 5;
 
 #[derive(Serialize, Clone)]
 pub struct Err {
@@ -60,21 +71,18 @@ impl IntoResponse for ErrKind {
 
 /// [GET] /api/link?state=<>&code=<>
 pub async fn link(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(link): Query<LinkQueryParams>,
 ) -> Res<LinkResult> {
-    let mut data = state.data.lock().await;
-    let uuid = data
-        .get_uuid_from_nonce(&link.state)
+    let eph = state.ephemeral.lock().await;
+    let uuid = eph
+        .links
+        .get_by_right(&link.state)
         .ok_or(ErrKind::NotFound(Err::new(
             "Tried getting an user that hasn't started linking yet.",
-        )))?
-        .clone();
+        )))?;
 
-    data.drop_nonce(&link.state);
-
-    let cfg = state.config.lock().await;
-    let client = oauth::routes::get_client(cfg.clone()).map_err(|e| {
+    let client = oauth::routes::get_client(&state.config).map_err(|e| {
         ErrKind::Internal(Err::new("Error while getting a BasicClient").with_inner(e))
     })?;
 
@@ -87,233 +95,281 @@ pub async fn link(
         ErrKind::Internal(Err::new("Couldn't exchange the code for a discord user.").with_inner(e))
     })?;
 
-    let reqwest_client = state.reqwest_client.lock().await;
-    let on_discord = oauth::routes::get_guild(&reqwest_client, &token, &cfg)
-        .await
-        .map_err(|e| {
-            ErrKind::Internal(Err::new("Provided discord User didn't had a valid Guild Member object. Are you on the discord guild?").with_inner(e))
-        })?;
+    let member = oauth::routes::get_guild(&state.client.reqwest, &token, &state.config).await.map_err(|e| {
+        ErrKind::Internal(Err::new("Provided discord User didn't had a valid Guild Member object. Are you on the discord guild?").with_inner(e))
+    })?;
 
-    let result = LinkResult {
-        discord_id: on_discord.user.id,
-        discord_username: on_discord.user.username,
-        when: on_discord.joined_at,
-        minecraft_uuid: uuid,
+    let link_result = LinkResult {
+        discord_id: member.user.id,
+        discord_username: member.user.username,
+        when: member.joined_at,
+        minecraft_uuid: *uuid,
     };
 
-    let mut buff = state.chs.messages.0.lock().await;
-    let _ = buff.send(MessageOut::LinkResponse(result.clone())).await;
+    let mut buff = state.channel.messages.0.lock().await;
+    let _ = buff.send(MessageOut::LinkResponse(link_result)).await;
 
-    Ok(Json(result))
+    Err(ErrKind::Internal(Err::new("Not implemented.")))
 }
 
 /// [GET] /api/oauth?uuid=<ID>
 pub async fn discord(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(uuid): Query<UuidQueryParam>,
 ) -> Res<String> {
-    let mut data = state.data.lock().await;
-    let cfg = state.config.lock().await;
+    let mut data = state.ephemeral.lock().await;
 
-    let client = oauth::routes::get_client(cfg.clone()).map_err(|e| {
+    let client = oauth::routes::get_client(&state.config).map_err(|e| {
         ErrKind::Internal(Err::new("Error while getting a BasicClient").with_inner(e))
     })?;
 
     let (url, token) = oauth::routes::authorize(&client).url();
 
-    data.add_nonce(token.secret().clone(), uuid.uuid);
+    data.links.insert(uuid.uuid, token.secret().clone());
 
     Ok(Json(url.to_string()))
 }
 
 /// [GET] /api/users
-pub async fn get_users(State(state): State<AppState>) -> Res<Vec<User>> {
-    let data = state.data.lock().await;
-    Ok(Json(data.get_users()))
+pub async fn get_users(State(state): State<Arc<AppState>>) -> Res<Vec<Uuid>> {
+    let data = state.db.get_all_users().await.map_err(|e| {
+        ErrKind::Internal(Err::new("Couldn't get all users").with_inner(format!("{:?}", e)))
+    })?;
+    Ok(Json(data))
 }
 
 /// [GET] /api/user/:user_id
-pub async fn get_user(State(state): State<AppState>, Path(user_id): Path<Uuid>) -> Res<User> {
-    let data = state.data.lock().await;
+pub async fn get_user(State(state): State<Arc<AppState>>, Path(user_id): Path<Uuid>) -> Res<User> {
+    let data = state.db.get_user_by_uuid(&user_id).await.map_err(|_| ErrKind::Internal(Err::new("User not found.")))?;
 
-    let u = data
-        .get_user(&user_id)
-        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
+    Ok(Json(data))
+}
 
-    Ok(Json(u.clone()))
+/// [GET] /api/user/by-name/:username
+pub async fn get_user_by_name(
+    State(state): State<Arc<AppState>>,
+    Path(username): Path<String>,
+) -> Res<User> {
+    let user_id = PlayerUuid::new_with_offline_username(&username);
+    let data = state
+        .db
+        .get_user_by_uuid(user_id.as_uuid())
+        .await
+        .map_err(|_| ErrKind::Internal(Err::new("User not found.")))?;
+
+    Ok(Json(data))
+}
+
+/// [GET] /api/user/by-discord/:discordId
+pub async fn get_user_by_discord(
+    State(state): State<Arc<AppState>>,
+    Path(discord_id): Path<u64>,
+) -> Res<Vec<User>> {
+    let data = state
+        .db
+        .get_users_by_discord_id(discord_id.to_string())
+        .await
+        .map_err(|_| ErrKind::Internal(Err::new("User not found.")))?;
+
+    Ok(Json(data))
 }
 
 /// [GET] /api/user/exists?uuid=<uuid>
 pub async fn user_exists(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(user_id): Query<UuidQueryParam>,
 ) -> Res<bool> {
-    let data = state.data.lock().await;
-    let user = data.get_user(&user_id.uuid);
+    let data = state.db.get_user_by_uuid(&user_id.uuid).await;
 
-    Ok(Json(user.is_some()))
+    Ok(Json(data.is_ok()))
 }
 
 /// [DELETE] /api/user/:user_id
-pub async fn delete_user(State(state): State<AppState>, Path(user): Path<Uuid>) -> Res<User> {
-    let mut data = state.data.lock().await;
+pub async fn delete_user(State(state): State<Arc<AppState>>, Path(user): Path<Uuid>) -> Res<User> {
+    let user = state
+        .db
+        .delete_user(&user)
+        .await
+        .map_err(|e| ErrKind::Internal(Err::new("Couldn't flush data for User").with_inner(format!("{:?}", e))))?;
 
-    let u = data
-        .drop_user(&user)
-        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
-
-    state
-        .flush(&data)
-        .map_err(|e| ErrKind::Internal(Err::new("Couldn't flush data for User").with_inner(e)))?;
-
-    Ok(Json(u))
+    Ok(Json(user))
 }
 
 /// [POST] /api/user
-pub async fn create_user(State(state): State<AppState>, Json(stub): Json<CreateUser>) -> Res<User> {
-    let mut data = state.data.lock().await;
-    let user = User::from(stub);
+pub async fn create_user(
+    State(state): State<Arc<AppState>>,
+    Json(stub): Json<UserStub>,
+) -> Res<User> {
+    let user = state
+        .db
+        .create_user(stub)
+        .await
+        .map_err(|_| ErrKind::BadRequest(Err::new("This user already exists.")))?;
 
-    if data.add_user(user.clone()) {
-        state.flush(&data).map_err(|e| {
-            ErrKind::Internal(Err::new("Couldn't flush the data for this user.").with_inner(e))
-        })?;
-
-        Ok(Json(user))
-    } else {
-        Err(ErrKind::BadRequest(Err::new("This user already exists.")))
-    }
+    Ok(Json(user))
 }
 
 /// [GET] /api/servers
-pub async fn get_servers(State(state): State<AppState>) -> Res<Vec<Server>> {
-    let data = state.data.lock().await;
-    Ok(Json(data.get_servers()))
+pub async fn get_servers(State(state): State<Arc<AppState>>) -> Res<Vec<Uuid>> {
+    let data = state.db.get_all_servers().await.map_err(|e| {
+        ErrKind::Internal(Err::new("Couldn't get all servers").with_inner(format!("{:?}", e)))
+    })?;
+
+    Ok(Json(data))
 }
 
 /// [GET] /api/server/:server_id
-pub async fn get_server(State(state): State<AppState>, Path(server_id): Path<Uuid>) -> Res<Server> {
-    let data = state.data.lock().await;
-    let server = data
-        .get_server(&server_id)
-        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
-    Ok(Json(server.to_owned()))
+pub async fn get_server(
+    State(state): State<Arc<AppState>>,
+    Path(server_uuid): Path<Uuid>,
+) -> Res<Server> {
+    let data = state
+        .db
+        .get_server(&server_uuid)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?;
+
+    Ok(Json(data))
 }
 
 /// [DELETE] /api/server/:user_id
-pub async fn delete_server(State(state): State<AppState>, Path(user): Path<Uuid>) -> Res<Server> {
-    let mut data = state.data.lock().await;
+pub async fn delete_server(
+    State(state): State<Arc<AppState>>,
+    Path(server_uuid): Path<Uuid>,
+) -> Res<Server> {
+    let data = state
+        .db
+        .delete_server(&server_uuid)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?;
 
-    let u = data
-        .drop_server(&user)
-        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
-
-    state
-        .flush(&data)
-        .map_err(|e| ErrKind::Internal(Err::new("Couldn't flush data for Server").with_inner(e)))?;
-
-    Ok(Json(u))
+    Ok(Json(data))
 }
 
 /// [POST] /api/server
 pub async fn create_server(
-    State(state): State<AppState>,
-    Json(stub): Json<CreateServer>,
+    State(state): State<Arc<AppState>>,
+    Json(stub): Json<ServerStub>,
 ) -> Res<Server> {
-    let mut data = state.data.lock().await;
+    let data = state
+        .db
+        .create_server(stub)
+        .await
+        .map_err(|_| ErrKind::BadRequest(Err::new("Server already exists.")))?;
 
-    let server = Server::from(stub);
-
-    if data.add_server(server.clone()) {
-        state.flush(&data).map_err(|e| {
-            ErrKind::Internal(Err::new("Couldn't flush data for Server.").with_inner(e))
-        })?;
-
-        Ok(Json(server))
-    } else {
-        Err(ErrKind::BadRequest(Err::new("Server already exists.")))
-    }
+    Ok(Json(data))
 }
 
 /// [PATCH] /api/server/:server_id/enable
-pub async fn enable(State(state): State<AppState>, Path(server_id): Path<Uuid>) -> Res<bool> {
-    let mut data = state.data.lock().await;
-    let mut server = data
-        .get_server(&server_id)
-        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?
+pub async fn enable(State(state): State<Arc<AppState>>, Path(server_id): Path<Uuid>) -> Res<bool> {
+    let status = state
+        .db
+        .update_server_status(&server_id, true)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?
         .clone();
 
-    server.available = true;
-
-    data.update_server(server);
-
-    state.flush(&data).map_err(|e| {
-        ErrKind::Internal(Err::new("Couldn't flush data for Server.").with_inner(e))
-    })?;
-
-    Ok(Json(true))
+    Ok(Json(status))
 }
 
 /// [PATCH] /api/server/:server_id/disable
-pub async fn disable(State(state): State<AppState>, Path(server_id): Path<Uuid>) -> Res<bool> {
-    let mut data = state.data.lock().await;
-    let mut server = data
-        .get_server(&server_id)
-        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?
+pub async fn disable(State(state): State<Arc<AppState>>, Path(server_id): Path<Uuid>) -> Res<bool> {
+    let status = state
+        .db
+        .update_server_status(&server_id, true)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?
         .clone();
 
-    server.available = false;
-
-    data.update_server(server);
-
-    state.flush(&data).map_err(|e| {
-        ErrKind::Internal(Err::new("Couldn't flush data for Server.").with_inner(e))
-    })?;
-
-    Ok(Json(true))
+    Ok(Json(status))
 }
 
 /// [GET] /api/auth/session?uuid=<ID>&ip=<IP>
 pub async fn get_session(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(session): Query<SessionQueryParams>,
 ) -> Res<bool> {
-    let data = state.data.lock().await;
-    let user = data
-        .get_user(&session.uuid)
-        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
+    let now = chrono::offset::Utc::now();
 
-    Ok(Json(data.has_valid_session(
-        user,
-        &session.ip,
-        chrono::offset::Utc::now(),
-    )))
+    let entries = state
+        .db
+        .get_allowlists_with_ip(&session.uuid, session.ip.clone())
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Account not found.")))?;
+
+    for entry in entries {
+        let diff = now - entry.last_join;
+        if diff.num_minutes() <= 10 {
+            // Bump that entry since it was a successful match.
+            let _ = state.db.bump_allowlist(entry).await;
+
+            state.db.update_current_join(&session.uuid).await.unwrap();
+            return Ok(Json(true));
+        }
+    }
+
+    // Automatically broaden netmask on user login
+    let broad = state
+        .db
+        .get_allowlists_with_range(&session.uuid, session.ip, MIN_COMMON_PREFIX)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Account not found.")))?;
+
+    for entry in broad {
+        let diff = now - entry.last_join;
+        // Calculate new netmask
+        let nmask = lowest_common_prefix(&entry.get_network(), &session.ip).unwrap();
+        // Update the netmask
+        let _ = state.db.broaden_allowlist_mask(entry.clone(), nmask).await;
+
+        if diff.num_minutes() <= 10 {
+            // Bump that entry since it was a successful match.
+            let _ = state.db.bump_allowlist(entry).await;
+
+            state.db.update_current_join(&session.uuid).await.unwrap();
+
+            return Ok(Json(true));
+        }
+    }
+
+    Ok(Json(false))
 }
 
-/// [PATCH] /api/auth/:player_id/resume
+/// [PATCH] /api/auth/resume?uuid=<ID>&ip=<IP>
 pub async fn resume(
-    State(state) : State<AppState>,
-    Path(player_id): Path<Uuid>,
+    State(state): State<Arc<AppState>>,
+    Query(session): Query<SessionQueryParams>,
 ) -> Res<bool> {
-    let mut data = state.data.lock().await;
-    let cfg = state.config.lock().await;
-    let client = state.discord_client.clone();
-    let mut p = data.get_account(&player_id).ok_or(ErrKind::NotFound(Err::new("Account not found.")))?.clone();
-    let u = data.get_user(&player_id).ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
+    let user = state
+        .db
+        .get_user_by_uuid(&session.uuid)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("User not found.")))?;
 
-    p.current_join = chrono::offset::Utc::now();
+    let entries = state
+        .db
+        .get_allowlists_with_ip(&session.uuid, session.ip.clone())
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Account not found.")))?;
+
+    for entry in entries {
+        let _ = state.db.bump_allowlist(entry).await;
+    }
+
+    let cfg = &state.config;
+    let client = &state.client.serenity;
+
+    state.db.update_current_join(&session.uuid).await.unwrap();
 
     let _ = client
         .http
         .add_member_role(
             GuildId::new(cfg.guild_id.parse().unwrap()),
-            UserId::new(u.discord_id.parse().unwrap()),
+            UserId::new(user.discord_id.parse().unwrap()),
             RoleId::new(cfg.role_id.parse().unwrap()),
             None,
         )
         .await;
-
-    data.update_account(p);
 
     Ok(Json(true))
 }
@@ -321,52 +377,71 @@ pub async fn resume(
 /// [POST] /api/auth/:server_id/logoff?uuid=<ID>&ip=<IP>
 /// ```json
 /// {
-///     "x": 0,
-///     "z": 0,
-///     "y": 64,
-///     "dim": "minecraft:overworld"
+///   "loc": {
+///       "x": 0,
+///       "z": 0,
+///       "y": 64,
+///       "dim": "minecraft:overworld"
+///   },
+///   "yaw": 0,
+///   "pitch": 0
 /// }
 /// ```
 pub async fn logoff(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(server_id): Path<Uuid>,
     Query(session): Query<SessionQueryParams>,
-    Json(pos): Json<Pos>,
+    Json(pos): Json<Viewport>,
 ) -> Res<bool> {
-    let mut data = state.data.lock().await;
-    let cfg = state.config.lock().await;
-    let client = state.discord_client.clone();
+    let cfg = &state.config;
+    let client = &state.client.serenity;
 
-    let server = data
+    let user = state
+        .db
+        .get_user_by_uuid(&session.uuid)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("User not found.")))?;
+
+    let server = state
+        .db
         .get_server(&server_id)
-        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
-    let mut user = data
-        .get_user(&session.uuid)
-        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?
-        .clone();
-    let mut account = data
-        .get_account(&user.uuid)
-        .ok_or(ErrKind::NotFound(Err::new("Account not found.")))?
-        .clone();
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?;
 
-    user.last_server = Some(server.uuid);
-    user.last_pos.insert(server_id, pos);
+    let account = state
+        .db
+        .get_account(&session.uuid)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Account not foumd.")))?;
+
+    state.db
+        .update_viewport(&session.uuid, &server.uuid, pos)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("SaveData not found.")))?;
 
     let now = chrono::offset::Utc::now();
 
-    let current_duration = user
-        .playtime
-        .get(&server_id)
-        .unwrap_or(&Duration::default())
-        .to_owned();
-    let duration = (now - account.current_join).to_std().map_err(|e| {
-        ErrKind::Internal(Err::new("Negative duration while calculating playtime.").with_inner(e))
-    })?;
+    let mut playtime = state
+        .db
+        .get_playtime(&session.uuid, &server.uuid)
+        .await
+        .unwrap_or_default();
 
-    user.playtime.insert(server_id, current_duration + duration);
+    let delta = (now - account.current_join).to_std().unwrap();
 
-    account.last_login = Some(now);
-    // account.previous_ips.insert(session.ip);
+    playtime = playtime + delta;
+
+    state
+        .db
+        .update_playtime(&session.uuid, &server.uuid, playtime)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("SaveData not found.")))?;
+
+    state
+        .db
+        .leave_server(&server.uuid, &session.uuid)
+        .await
+        .unwrap();
 
     let _ = client
         .http
@@ -377,13 +452,6 @@ pub async fn logoff(
             None,
         )
         .await;
-
-    data.update_account(account);
-    data.update_user(user);
-
-    state
-        .flush(&data)
-        .map_err(|e| ErrKind::Internal(Err::new("Couldn't flush data for User.").with_inner(e)))?;
 
     Ok(Json(true))
 }
@@ -397,44 +465,61 @@ pub async fn logoff(
 /// }
 /// ```
 pub async fn login(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(server_id): Path<Uuid>,
     Json(session): Json<AuthenticationQueryParams>,
-) -> Res<bool> {
-    let mut data = state.data.lock().await;
-    let cfg = state.config.lock().await;
-    let client = state.discord_client.clone();
+) -> Res<Option<ServerJoin>> {
+    let cfg = &state.config;
+    let client = &state.client.serenity;
+    let mut eph = state.ephemeral.lock().await;
 
-    let _ = data
+    let _ = state.db
         .get_server(&server_id)
-        .ok_or(ErrKind::NotFound(Err::new("Server not found.")))?;
-    let user = data
-        .get_user(&session.uuid)
-        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?
-        .clone();
-    let mut account = data
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?;
+
+    let user = state
+        .db
+        .get_user_by_uuid(&session.uuid)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("User not found.")))?;
+
+    let  account = state.db
         .get_account(&user.uuid)
-        .ok_or(ErrKind::NotFound(Err::new("Account not found.")))?
-        .clone();
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Account not found.")))?;
 
     let password = bcrypt::verify(session.password, &account.password)
         .map_err(|e| ErrKind::Internal(Err::new(format!("BCrypt Error.")).with_inner(e)))?;
 
     if !password {
-        let count = data.wrong_password(&account);
+        let mut count = 1;
+
+        if !eph.password.contains_key(&session.uuid) {
+            eph.password.insert(session.uuid, count);
+        } else {
+            count = *(eph.password.get(&session.uuid).unwrap());
+            count = count + 1;
+            eph.password.insert(session.uuid, count);
+        }
 
         if count >= MAX_ATTEMPTS_PER_ACC {
             Err(ErrKind::BadRequest(Err::new(
                 "Exhausted MAX_ATTEMPTS for this account.",
             )))
         } else {
-            Ok(Json(false))
+            Ok(Json(None))
         }
     } else {
-        data.correct_password(&account);
+        eph.password.remove(&session.uuid);
 
-        account.current_join = chrono::offset::Utc::now();
-        data.update_account(account);
+        state.db.update_current_join(&session.uuid).await.unwrap();
+
+        let res = state.db.join_server(&server_id, &session.uuid).await.unwrap() ;
+        
+        if let ServerJoin::FirstJoin = res {
+            let _ = state.db.create_savedata(&session.uuid, &server_id).await;
+        }
 
         let _ = client
             .http
@@ -446,71 +531,18 @@ pub async fn login(
             )
             .await;
 
-        state.flush(&data).map_err(|e| {
-            ErrKind::Internal(Err::new("Couldn't flush data for User.").with_inner(e))
-        })?;
-
-        Ok(Json(true))
+        Ok(Json(Some(res)))
     }
 }
 
 /// [GET] /auth/exists?uuid=<uuid>
 pub async fn account_exists(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(account): Query<UuidQueryParam>,
 ) -> Res<bool> {
-    let data = state.data.lock().await;
+    let data = state.db.get_account(&account.uuid).await;
 
-    Ok(Json(data.get_account(&account.uuid).is_some()))
-}
-
-/// [POST] /auth/handshake?id=<id>
-pub async fn cidr_handshake(
-    State(state): State<AppState>,
-    Query(discord_id) : Query<DiscordIdQueryParam>,
-) -> Res<String> {
-    let mut data  = state.data.lock().await;
-    let discord = state.discord_client.clone();
-    let cfg = state.config.lock().await;
-
-    
-    let _ = discord.http.get_member(
-        GuildId::new(cfg.guild_id.parse().expect("Invalid Guild Id")), 
-        discord_id.id
-    ).await.map_err(|_| {
-        ErrKind::Internal(Err::new("Unknown Error"))
-    })?;
-
-    let user = data.get_user_from_discord(discord_id.id.get())
-    .ok_or(ErrKind::NotFound(Err::new("User not found.")))?.clone();
-
-    let secret = data.add_handshake(discord_id.id.get());
-
-    state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
-
-    let _ = state.chs.verify.send(secret.clone(), discord_id.id.get()).await;
-    let mut buff = state.chs.messages.0.lock().await;
-    let _ = buff.send(MessageOut::CidrSyn(user.uuid)).await;
-
-    Ok(Json(secret))
-}
-
-/// [POST] /auth/grace?id=<id>
-pub async fn cidr_grace(
-    State(state): State<AppState>,
-    Query(discord_id) : Query<DiscordIdQueryParam>,
-) -> Res<GraceResponse> {
-    let mut data  = state.data.lock().await;
-
-    if !data.has_handshake(discord_id.id.get()) {
-        return Err(ErrKind::BadRequest(Err::new("Unknown Error")));
-    }
-
-    let response = data.grace_user(CidrKind::Allowed { user_id: discord_id.id.get(), self_registered: true, time: chrono::offset::Utc::now() });
-    
-    state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
-
-    Ok(Json(response))
+    Ok(Json(data.is_ok()))
 }
 
 /// [POST] /auth/ban?uuid=<>&ip=<ip>
@@ -521,165 +553,152 @@ pub async fn cidr_grace(
 /// }
 /// ```
 pub async fn ban_cidr(
-    State(state): State<AppState>,
-    Query(params) : Query<BanCidrQueryParam>,
-    Json(issuer) : Json<BanIssuer>
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<BanCidrQueryParam>,
+    Json(issuer): Json<BanIssuer>,
 ) -> Res<BanResponse> {
-    let mut data  = state.data.lock().await;
-    let response = data.ban_cidr(params.ip.to_string(), CidrKind::Banned { uuid: params.uuid, time: chrono::offset::Utc::now(), issuer: issuer, ip: params.ip });
+    if let Ok(strict) = state.db.get_blacklists(params.ip).await {
+        if !strict.is_empty() {
+            return Ok(Json(BanResponse::Existing));
+        }
+    }
 
-    state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
+    if let Ok(broad) = state
+        .db
+        .get_blacklists_with_range(params.ip, MIN_COMMON_PREFIX)
+        .await
+    {
+        if !broad.is_empty() {
+            for entry in broad {
+                let nmask = lowest_common_prefix(&entry.get_network(), &params.ip).unwrap();
+                let _ = state.db.broaden_blacklist_mask(entry.clone(), nmask).await;
+                let _ = state.db.bump_blacklist(entry).await;
+            }
+        }
 
-    Ok(Json(response))
+        return Ok(Json(BanResponse::Merged));
+    }
+
+    let actor = match issuer {
+        BanIssuer::Manual(uuid) => BanActor::Staff(uuid),
+        BanIssuer::Automatic => {
+            BanActor::AutomatedSystem(format!("Logged while {} was online.", params.uuid))
+        }
+    };
+
+    if let Ok(_) = state.db.create_blacklist(params.ip, actor).await {
+        return Ok(Json(BanResponse::New));
+    }
+
+    Ok(Json(BanResponse::Invalid))
 }
 
-/// [POST] /auth/allow?uuid=<id>&nonce=<nonce>&ip=<ip>
+/// **Note**: This is **not** a direct port to the new sqlite backend.
+/// This *was* a part of the three step manual verification process, but became a manual override for allowing IP addresses.
+/// This is why the logic looks similar to ban_cidr, including the check to see if the IP is already allowed.
+/// Kept around for being possibly useful in the future. Manual overrides and fail-safes are nice.
+///
+/// [POST] /auth/allow?uuid=<id>&ip=<ip>
 
 pub async fn allow_cidr(
-    State(state): State<AppState>,
-    Query(params) : Query<AllowCidrQueryParams>,
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<CheckCidrQueryParam>,
 ) -> Res<bool> {
-    let mut data  = state.data.lock().await;
-    let holder = data.get_handshake_holder(&params.nonce).ok_or(ErrKind::NotFound(Err::new("User not found")))?;
-
-    if holder.uuid != params.uuid {
-        return Err(ErrKind::BadRequest(Err::new("Unknown Error")));
-    }
-
-    let mut account = data.get_account(&holder.uuid)
-    .ok_or(ErrKind::NotFound(Err::new("Account not found")))?
-    .clone();
-
-    let mut new_prefix: Option<u8> = None;
-    let mut net : Option<Ipv4Net> = None;
-
-    for network in account.cidr.clone() {
-        new_prefix = lowest_common_prefix(&network, &params.ip);
-        
-        if new_prefix.is_some() {
-            net = Some(network);
-            break;
+    if let Ok(strict) = state
+        .db
+        .get_allowlists_with_ip(&params.uuid, params.ip)
+        .await
+    {
+        if !strict.is_empty() {
+            return Ok(Json(true));
         }
+      
     }
 
-    if new_prefix.is_some() {
-        let netw = net.unwrap();
-        let addr = netw.addr();
-        account.cidr.remove(&netw);
-        account.cidr.insert(format!("{}/{}", addr, new_prefix.unwrap()).parse().unwrap());
-    } else {
-        account.cidr.insert(format!("{}/{}", params.ip, HOST_PREFIX).parse().unwrap());
-    }
-
-    if let Some(merged) = try_merge(&account.cidr) {
-        account.cidr = merged;
-    }
-
-    data.update_account(account);
-    let id : u64 = holder.discord_id.parse().unwrap();
-    data.clear_handshake(id);
-    state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
-
-    Ok(Json(true))
-}
-
-/// [POST] /auth/disallow?id=<id>&ip=<ip>
-pub async fn disallow_cidr(
-    State(state): State<AppState>,
-    Query(params) : Query<DiscordDenyCidrQueryParams>,
-) -> Res<bool> {
-    let mut data  = state.data.lock().await;
-    let u = data.get_user_from_discord(params.id.get()).ok_or(ErrKind::BadRequest(Err::new("Missing User")))?;
-    let mut a = data.get_account(&u.uuid).ok_or(ErrKind::BadRequest(Err::new("Missing Account")))?.clone(); 
-
-    let mut range: Option<IpRange<Ipv4Net>> = None;
-    let mut selected: Option<Ipv4Net> = None;
-
-    for network in a.cidr.clone() {
-        if ! network.contains(&params.ip) {
-            continue;
+    // We always do automatic widening when possible, since the next call will be amortized and returned early.
+    if let Ok(broad) = state
+        .db
+        .get_allowlists_with_range(&params.uuid, params.ip, MIN_COMMON_PREFIX)
+        .await
+    {
+        if !broad.is_empty() {
+            for entry in broad {
+                let nmask = lowest_common_prefix(&entry.get_network(), &params.ip).unwrap();
+                let _ = state.db.broaden_allowlist_mask(entry, nmask).await;
+                // We don't bump the allowlist here, since that would lead to counting connections twice.
+                // Allowlists are only bumped at `resume` (after (re)logging in) and `get_session` (on the case of a valid existing session).
+            }
+            return Ok(Json(true));
         }
-
-        let mut this = IpRange::new();
-        this.add(network);
-
-        let mut other: IpRange<Ipv4Net> = IpRange::new();
-        other.add(format!("{}/32", &params.ip).parse().unwrap());
-    
-        range = Some(this.exclude(&other));
-        selected = Some(network);
-    };
-
-    if selected.is_some() {
-        a.cidr.remove(&selected.unwrap());
-        for new_net in &range.unwrap() {
-            a.cidr.insert(new_net);
-        }
+       
     }
 
-    data.update_account(a);
-    state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
-
-    Ok(Json(true))
-}
-
-/// [POST] /auth/disallow-ingame?uuid=<id>&ip=<ip>
-pub async fn disallow_cidr_ingame(
-    State(state): State<AppState>,
-    Query(params) : Query<MinecraftDenyCidrQueryParams>,
-) -> Res<bool> {
-    let mut data  = state.data.lock().await;
-    let mut a = data.get_account(&params.uuid).ok_or(ErrKind::BadRequest(Err::new("Missing Account")))?.clone(); 
-
-    let mut range: Option<IpRange<Ipv4Net>> = None;
-    let mut selected: Option<Ipv4Net> = None;
-
-    for network in a.cidr.clone() {
-        if ! network.contains(&params.ip) {
-            continue;
-        }
-
-        let mut this = IpRange::new();
-        this.add(network);
-
-        let mut other: IpRange<Ipv4Net> = IpRange::new();
-        other.add(format!("{}/32", &params.ip).parse().unwrap());
-    
-        range = Some(this.exclude(&other));
-        selected = Some(network);
-    };
-
-    if selected.is_some() {
-        a.cidr.remove(&selected.unwrap());
-        for new_net in &range.unwrap() {
-            a.cidr.insert(new_net);
-        }
-    }
-
-    data.update_account(a);
-    state.flush(&data).map_err(|_| ErrKind::Internal(Err::new("Error while flushing data")))?;
-
+    let _ = state.db.create_allowlist(&params.uuid, params.ip).await;
     Ok(Json(true))
 }
 
 /// [POST] /auth/cidr?uuid=<id>&ip=<ip>
 pub async fn cidr_check(
-    State(state): State<AppState>,
-    Query(params) : Query<CheckCidrQueryParam>,
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<CheckCidrQueryParam>,
 ) -> Res<CidrResponse> {
-    let data  = state.data.lock().await;
-    let ledger = data.get_all_banned_cidr();
-    let a = data.get_account(&params.uuid);
-    let is_banned = any_match(&ledger, &params.ip);
-    // There is likely an idiomatic way to do this
-    let is_allowed = if a.is_some() { any_match(&a.unwrap().cidr, &params.ip) } else { true };
+    // This is a trivial "can join" or "is banned check"
+    // We should check things broadly for users, but strict for bans.
+    // If the user doesn't exist, we allow it in, only if the IP isn't banned.
 
-    if is_banned && !is_allowed {
-        return Ok(Json(CidrResponse::Banned));
+    // Honestly this should be the place to put all broadening logic, and everything else should just strict-check.
+    // Since this everything *should* be CIDR-checked at the Pre-Login phase.
+
+    if let Ok(strict) = state
+        .db
+        .get_allowlists_with_ip(&params.uuid, params.ip)
+        .await
+    {
+        if !strict.is_empty() {
+            return Ok(Json(CidrResponse::Allowed));
+        }
+        
     }
 
-    if is_allowed {
-        return Ok(Json(CidrResponse::Allowed));
+    if let Ok(broad) = state
+        .db
+        .get_allowlists_with_range(&params.uuid, params.ip, MIN_COMMON_PREFIX)
+        .await
+    {
+        if !broad.is_empty() {
+            for entry in broad {
+                let nmask = lowest_common_prefix(&entry.get_network(), &params.ip).unwrap();
+                let _ = state.db.broaden_allowlist_mask(entry, nmask).await;
+                // We don't bump the allowlist here, since that would lead to counting connections twice.
+                // Allowlists are only bumped at `resume` (after (re)logging in) and `get_session` (on the case of a valid existing session).
+            }
+            return Ok(Json(CidrResponse::Allowed));
+        }
+        
+    }
+
+    if let Ok(strict) = state.db.get_blacklists(params.ip).await {
+        if !strict.is_empty() {
+            return Ok(Json(CidrResponse::Banned));
+        }
+        
+    }
+
+    if let Ok(broad) = state
+        .db
+        .get_blacklists_with_range(params.ip, MIN_COMMON_PREFIX)
+        .await
+    {
+        if !broad.is_empty() {
+            for entry in broad {
+                let nmask = lowest_common_prefix(&entry.get_network(), &params.ip).unwrap();
+                let _ = state.db.broaden_blacklist_mask(entry.clone(), nmask).await;
+                let _ = state.db.bump_blacklist(entry).await;
+            }
+
+            return Ok(Json(CidrResponse::Banned));
+        }
+        
     }
 
     Ok(Json(CidrResponse::Unknown))
@@ -694,52 +713,43 @@ pub async fn cidr_check(
 /// }
 /// ```
 pub async fn create_account(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(session): Json<AuthenticationQueryParams>,
 ) -> Res<bool> {
-    let mut data = state.data.lock().await;
-    let user = data
-        .get_user(&session.uuid)
-        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
+    // This function does a lot of stuff. So attention is needed in order to make things work.
+    // Accounts were once a cohesive thing that existed in one object, now it spans a little more then that.
+    // Firstly, we basically need to create the account and set the initial allowlist entry.
+    // The account should also have the last logged in time updated to the current time, if thats unset by default.
 
+    // Lets create the account. For that obviously an user need to exist.
     let hash = bcrypt::hash(&session.password, 12)
         .map_err(|e| ErrKind::Internal(Err::new("BCrypt Error.").with_inner(e)))?;
 
-    let mut ips = HashSet::new();
-    ips.insert(session.ip);
+    if let Err(_) = state
+        .db
+        .create_account(AccountStub {
+            uuid: session.uuid,
+            password: hash,
+        })
+        .await
+    {
+        return Err(ErrKind::Internal(Err::new("Account already existed")));
+    }
 
-    let net = Ipv4Net::new(session.ip, 32).unwrap();
-    let mut netset = HashSet::new();
-    netset.insert(net);
+    // Now we need to store the initial ip address
+    let _ = state.db.create_allowlist(&session.uuid, session.ip).await;
 
-    let acc = Account {
-        uuid: user.uuid,
-        password: hash,
-        current_join: chrono::offset::Utc::now(),
-        last_login: Some(chrono::offset::Utc::now()),
-        cidr: netset
-    };
+    // We're done with initial account creation
 
-    let result = data.add_account(acc);
-
-    state
-        .flush(&data)
-        .map_err(|e| ErrKind::Internal(Err::new("Couldn't flush data for User.").with_inner(e)))?;
-
-    Ok(Json(result))
+    Ok(Json(true))
 }
 
 /// [DELETE] /api/auth/:user_id
-pub async fn delete_account(State(state): State<AppState>, Path(user): Path<Uuid>) -> Res<bool> {
-    let mut data = state.data.lock().await;
-
-    let _ = data
-        .drop_account(&user)
-        .ok_or(ErrKind::NotFound(Err::new("User not found.")))?;
-
-    state.flush(&data).map_err(|e| {
-        ErrKind::Internal(Err::new("Couldn't flush data for Account").with_inner(e))
-    })?;
+pub async fn delete_account(
+    State(state): State<Arc<AppState>>,
+    Path(user): Path<Uuid>,
+) -> Res<bool> {
+    state.db.delete_account(&user).await.map_err(|_| ErrKind::NotFound(Err::new("User not found.")))?;
 
     Ok(Json(true))
 }
@@ -752,32 +762,37 @@ pub async fn delete_account(State(state): State<AppState>, Path(user): Path<Uuid
 ///     "new": "<new password>"
 /// ```
 pub async fn changepw(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(session): Json<ChangePasswordQueryParams>,
 ) -> Res<bool> {
-    let mut data = state.data.lock().await;
+    let mut eph = state.ephemeral.lock().await;
 
-    let mut acc = data
+    let acc = state
+        .db
         .get_account(&session.uuid)
-        .ok_or(ErrKind::NotFound(Err::new("Account not found.")))?
-        .clone();
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Account not found.")))?;
+
     let matches = bcrypt::verify(session.old, &acc.password)
         .map_err(|e| ErrKind::Internal(Err::new("BCrypt Error.").with_inner(e)))?;
 
     if matches {
-        data.correct_password(&acc);
-        acc.password = bcrypt::hash(session.new, 12)
+        let new_pass = bcrypt::hash(session.new, 12)
             .map_err(|e| ErrKind::Internal(Err::new("BCrypt Error.").with_inner(e)))?;
+        
+        let _ = state.db.update_password(&session.uuid, new_pass).await;
 
-        data.invalidate_session(&mut acc);
-
-        state.flush(&data).map_err(|e| {
-            ErrKind::Internal(Err::new("Couldn't flush data for User.").with_inner(e))
-        })?;
-
-        Ok(Json(data.update_account(acc)))
+        Ok(Json(true))
     } else {
-        let count = data.wrong_password(&acc);
+        let mut count = 1;
+
+        if !eph.password.contains_key(&session.uuid) {
+            eph.password.insert(session.uuid, count);
+        } else {
+            count = *(eph.password.get(&session.uuid).unwrap());
+            count = count + 1;
+            eph.password.insert(session.uuid, count);
+        }
 
         if count >= MAX_ATTEMPTS_PER_ACC {
             Err(ErrKind::BadRequest(Err::new(

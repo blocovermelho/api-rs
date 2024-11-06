@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::fs;
 use std::net::SocketAddr;
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
@@ -7,8 +9,11 @@ use axum::{
     Router,
 };
 
+use bimap::BiHashMap;
 use bus::OneshotBus;
-use futures::channel::mpsc::{self, UnboundedSender, UnboundedReceiver};
+use db::drivers::sqlite::Sqlite;
+use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use migrate::migrate;
 use routes::LinkResult;
 use serenity::all::GatewayIntents;
 use tokio::sync::Mutex;
@@ -23,14 +28,14 @@ use traits::json::JsonSync;
 use uuid::Uuid;
 use websocket::MessageOut;
 
-use crate::store::Store;
+// use crate::store::Store;
 
 pub mod bus;
 pub mod cidr;
 pub mod migrate;
 pub mod models;
 pub mod routes;
-pub mod store;
+// pub mod store;
 pub mod websocket;
 
 struct Channels {
@@ -52,52 +57,97 @@ impl Channels {
     }
 }
 
-#[derive(Clone)]
+// AppState2
+// Should be Sync.
 pub struct AppState {
-    data: Arc<Mutex<Store>>,
-    path: Option<PathBuf>,
-    config: Arc<Mutex<Config>>,
-    config_path: Option<PathBuf>,
-    reqwest_client: Arc<Mutex<Client>>,
-    discord_client: Arc<serenity::Client>,
-    chs: Arc<Channels>
+    db: Arc<Sqlite>,
+    config: Arc<Config>,
+    ephemeral: Arc<Mutex<Ephemeral>>,
+    client: Arc<Clients>,
+    channel: Arc<Channels>,
 }
 
 impl AppState {
-    pub fn load(path: PathBuf, store: Store, config_path: PathBuf, config: Config, client: serenity::Client) -> AppState {
-        AppState {
-            data: Arc::new(Mutex::new(store)),
-            path: Some(path),
-            config: Arc::new(Mutex::new(config)),
-            config_path: Some(config_path),
-            reqwest_client: Arc::new(Mutex::new(Client::new())),
-            chs: Arc::new(Channels::new()),
-            discord_client: Arc::new(client)
+    fn new(db: Sqlite, config: Arc<Config>, serenity: serenity::Client) -> Self {
+        Self {
+            db: Arc::new(db),
+            ephemeral: Arc::new(Mutex::new(Ephemeral::new())),
+            config,
+            client: Arc::new(Clients::new(serenity)),
+            channel: Arc::new(Channels::new()),
         }
     }
+}
 
-    pub fn flush(&self, data: &Store) -> std::io::Result<()> {
-        let path = self
-            .path
-            .clone()
-            .expect("Cannot flush state without a path");
-        Store::to_file(data, &path)?;
+// Ephemeral Data
+pub struct Ephemeral {
+    /// A map containing all this session's pending discord links.
+    /// Mapping: Minecraft UUID <-> Discord Nonce (State Parameter).
+    pub links: BiHashMap<Uuid, String>,
+    /// A map containing every logged users' username.  
+    /// Mapping: Minecraft UUID <-> Minecraft Username
+    pub names: BiHashMap<Uuid, String>,
+    /// A map containing bad password attempts
+    pub password: HashMap<Uuid, i32>,
+}
 
-        Ok(())
+impl Ephemeral {
+    fn new() -> Self {
+        Self {
+            links: BiHashMap::new(),
+            names: BiHashMap::new(),
+            password: HashMap::new(),
+        }
+    }
+}
+
+pub struct Clients {
+    pub reqwest: reqwest::Client,
+    pub serenity: serenity::Client,
+}
+
+impl Clients {
+    fn new(serenity: serenity::Client) -> Self {
+        Self {
+            reqwest: Client::new(),
+            serenity,
+        }
     }
 }
 
 #[tokio::main]
 async fn main() {
-    let path = ["data.json"].iter().collect();
-    let config_path = ["config.json"].iter().collect();
+    let db_path = PathBuf::from("data.db");
+    let old_data = PathBuf::from("data.json");
+    let config_path = PathBuf::from("config.json");
 
-    let store = Store::from_file_or_default(&path);
-    let config = Config::from_file_or_default(&config_path);
+    let db: Sqlite;
 
-    if Store::is_empty(&store) {
-        Store::to_file(&store, &path).expect("Error happened while saving store to file.");
+    if old_data.exists() {
+        // We will migrate the data then move it to data.json.old
+        if let Ok(_db) = migrate(&db_path, &old_data).await {
+            db = _db;
+            match fs::rename(old_data.clone(), "data.json.bak") {
+                Ok(_) => println!("Sucessfully moved old data file."),
+                Err(_) => panic!(
+                    "Manual intervention required.
+                Old json-backed store refused to be moved.
+                Please manually move \"{:?}\" to another location.",
+                    old_data
+                        .canonicalize()
+                        .unwrap_or_else(|_| PathBuf::from("data.json"))
+                ),
+            }
+        } else {
+            db = Sqlite::new(&db_path).await;
+        }
+    } else {
+         db = Sqlite::new(&db_path).await;
     }
+
+    db.run_migrations().await;
+
+    let config = Config::from_file_or_default(&config_path);
 
     if Config::is_empty(&config) {
         Config::to_file(&config, &config_path)
@@ -110,7 +160,7 @@ async fn main() {
 
     let client = serenity::Client::builder(&token, GatewayIntents::GUILD_MODERATION).await.expect("Error while building client");
 
-    let s = AppState::load(path, store, config_path, config, client);
+    let state = Arc::new(AppState::new(db, Arc::new(config), client));
 
     tracing_subscriber::fmt::init();
 
@@ -150,6 +200,8 @@ async fn main() {
     let user = Router::new()
         .route("/exists", get(routes::user_exists))
         .route("/:user_id", get(routes::get_user))
+        .route("/by-name/:username", get(routes::get_user_by_name))
+        .route("/by-discord/:discord_id", get(routes::get_user_by_discord))
         .route(
             "/:user_id",
             delete(routes::delete_user).layer(authenticated.clone()),
@@ -157,12 +209,12 @@ async fn main() {
         .route("/", post(routes::create_user).layer(authenticated.clone()));
 
     let auth = Router::new()
-        .route("/handshake", post(routes::cidr_handshake))
-        .route("/grace", post(routes::cidr_grace))
+        // .route("/handshake", post(routes::cidr_handshake))
+        // .route("/grace", post(routes::cidr_grace))
         .route("/ban", post(routes::ban_cidr))
         .route("/allow", post(routes::allow_cidr))
-        .route("/disallow", post(routes::disallow_cidr))
-        .route("/disallow-ingame", post(routes::disallow_cidr_ingame))
+        // .route("/disallow", post(routes::disallow_cidr))
+        // .route("/disallow-ingame", post(routes::disallow_cidr_ingame))
         .route("/cidr", get(routes::cidr_check))        
         .route("/exists", get(routes::account_exists))
         .route("/:server_id/logoff", post(routes::logoff))
@@ -183,7 +235,7 @@ async fn main() {
         .nest("/server", server)
         .nest("/user", user)
         .nest("/auth", auth)
-        .with_state(s)
+        .with_state(state)
         .layer(stack)
         .layer(TraceLayer::new_for_http());
 

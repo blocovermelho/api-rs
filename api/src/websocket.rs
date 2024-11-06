@@ -1,22 +1,22 @@
-use std::time::Duration;
+use std::sync::Arc;
 
 use axum::{extract::State, response::IntoResponse};
 use axum_typed_websockets::{Message, WebSocket, WebSocketUpgrade};
+use db::data::User;
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use tokio::time::timeout;
 use uuid::Uuid;
 
-use crate::{models::User, routes::LinkResult, AppState};
+use crate::{routes::LinkResult, AppState};
 
 pub async fn handle_socket(
     ws: WebSocketUpgrade<MessageOut, MessageIn>,
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     ws.on_upgrade(|socket| link_socket(socket, state))
 }
 
-async fn link_socket(socket: WebSocket<MessageOut, MessageIn>, state: AppState) {
+async fn link_socket(socket: WebSocket<MessageOut, MessageIn>, state: Arc<AppState>) {
     println!("Handling connection to websocket");
     let (mut send, mut recv) = socket.split();
     let read_state = state.clone();
@@ -42,7 +42,7 @@ async fn link_socket(socket: WebSocket<MessageOut, MessageIn>, state: AppState) 
     });
 
     let mut send_task = tokio::spawn(async move {
-        let mut messages = state.chs.messages.1.lock().await;
+        let mut messages = state.channel.messages.1.lock().await;
         while let Some(item) = messages.next().await {
             let _ = send.send(Message::Item(item)).await;
         }
@@ -60,7 +60,7 @@ async fn link_socket(socket: WebSocket<MessageOut, MessageIn>, state: AppState) 
 }
 
 async fn handle_error(e: axum_typed_websockets::Error<serde_json::Error>, state: &AppState) {
-    let mut buff = state.chs.messages.0.lock().await;
+    let mut buff = state.channel.messages.0.lock().await;
     let _ = buff.send(MessageOut::Error {
         source_event: "generic".to_owned(),
         error: e.to_string(),
@@ -69,8 +69,8 @@ async fn handle_error(e: axum_typed_websockets::Error<serde_json::Error>, state:
 }
 
 async fn handle_link_request(request: Uuid, state: &AppState) {
-    let link = state.chs.links.recv(request).await;
-    let mut buff = state.chs.messages.0.lock().await;
+    let link = state.channel.links.recv(request).await;
+    let mut buff = state.channel.messages.0.lock().await;
     if let Ok(result) = link {
         let _ = buff.send(MessageOut::LinkResponse(result)).await;
         return;
@@ -84,7 +84,7 @@ async fn handle_link_request(request: Uuid, state: &AppState) {
 }
 
 async fn handle_unknown(state: &AppState) {
-    let mut buff = state.chs.messages.0.lock().await;
+    let mut buff = state.channel.messages.0.lock().await;
     let _ = buff.send(MessageOut::Error {
         source_event: "generic".to_owned(),
         error: "Unknown Message".to_owned(),
