@@ -171,11 +171,12 @@ pub struct Pronoun {
 
 pub mod stub {
     use crate::data::Modpack;
+    use serde::Deserialize;
     use uuid::Uuid;
 
     use super::{Account, Server, User};
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Deserialize)]
     pub struct UserStub {
         pub uuid: Uuid,
         pub username: String,
@@ -200,7 +201,7 @@ pub mod stub {
         }
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Deserialize)]
     pub struct ServerStub {
         pub name: String,
         pub supported_versions: Vec<String>,
