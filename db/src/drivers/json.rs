@@ -20,8 +20,8 @@ use uuid::Uuid;
 
 use crate::{
     data::{
-        result, stub, Account, Allowlist, BanActor, Blacklist, Modpack, Pronoun, SaveData, Server,
-        User, Viewport,
+        result, stub, Account, Allowlist, BanActor, Blacklist, Loc, Modpack, Pronoun, SaveData,
+        Server, User, Viewport,
     },
     drivers::err::{base::NotFoundError, DriverError},
     interface::DataSource,
@@ -237,7 +237,26 @@ impl DataSource for JsonDriver {
 
     /// This information wasn't saved.
     async fn get_viewport(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Viewport> {
-        unimplemented!();
+        if let Some(user) = self.0.users.get(&player_uuid) {
+            if let Some(pos) = user.last_pos.get(&server_uuid) {
+                return Ok(Viewport {
+                    loc: Loc {
+                        dim: pos.dim.clone(),
+                        x: pos.x as f64,
+                        y: pos.y as f64,
+                        z: pos.z as f64,
+                    },
+                    yaw: 0.0, // This is what we actually didn't save.
+                    pitch: 0.0,
+                });
+            }
+        }
+
+        return Err(DriverError::DatabaseError(NotFoundError::UserData {
+            server_uuid: server_uuid.clone(),
+            player_uuid: player_uuid.clone(),
+        }));
+
     }
 
     async fn create_user(&self, stub: stub::UserStub) -> Response<User> {
