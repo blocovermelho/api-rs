@@ -66,7 +66,7 @@ impl DataSource for Sqlite {
 
         map_or_log(
             query,
-            DriverError::DatabaseError(base::NotFoundError::User(uuid.clone())),
+            DriverError::DatabaseError(base::NotFoundError::User(*uuid)),
         )
     }
 
@@ -126,7 +126,7 @@ impl DataSource for Sqlite {
 
         map_or_log(
             query,
-            DriverError::DatabaseError(base::NotFoundError::User(uuid.clone())),
+            DriverError::DatabaseError(base::NotFoundError::User(*uuid)),
         )
     }
 
@@ -182,7 +182,7 @@ impl DataSource for Sqlite {
 
         map_or_log(
             query,
-            DriverError::DatabaseError(base::NotFoundError::Account(uuid.clone())),
+            DriverError::DatabaseError(base::NotFoundError::Account(*uuid)),
         )
     }
 
@@ -211,7 +211,7 @@ impl DataSource for Sqlite {
 
         map_or_log(
             query.map(|_| ()),
-            DriverError::DatabaseError(base::NotFoundError::Account(player_uuid.clone())),
+            DriverError::DatabaseError(base::NotFoundError::Account(*player_uuid)),
         )
     }
 
@@ -228,7 +228,7 @@ impl DataSource for Sqlite {
 
         map_or_log(
             query.map(|_| ()),
-            DriverError::DatabaseError(base::NotFoundError::Account(player_uuid.clone())),
+            DriverError::DatabaseError(base::NotFoundError::Account(*player_uuid)),
         )
     }
 
@@ -264,7 +264,7 @@ impl DataSource for Sqlite {
 
         map_or_log(
             query.map(|_| ()),
-            DriverError::DatabaseError(base::NotFoundError::Account(player_uuid.clone())),
+            DriverError::DatabaseError(base::NotFoundError::Account(*player_uuid)),
         )
     }
 
@@ -303,7 +303,7 @@ impl DataSource for Sqlite {
 
         map_or_log(
             query,
-            DriverError::DatabaseError(base::NotFoundError::Account(player_uuid.clone())),
+            DriverError::DatabaseError(base::NotFoundError::Account(*player_uuid)),
         )
     }
 
@@ -326,7 +326,7 @@ impl DataSource for Sqlite {
 
         map_or_log(
             query,
-            DriverError::DatabaseError(base::NotFoundError::Account(player_uuid.clone())),
+            DriverError::DatabaseError(base::NotFoundError::Account(*player_uuid)),
         )
     }
 
@@ -351,7 +351,7 @@ impl DataSource for Sqlite {
 
         map_or_log(
             query,
-            DriverError::DatabaseError(base::NotFoundError::Account(player_uuid.clone())),
+            DriverError::DatabaseError(base::NotFoundError::Account(*player_uuid)),
         )
     }
 
@@ -601,7 +601,7 @@ impl DataSource for Sqlite {
         let mut server = self.get_server(server_uuid).await?;
 
         if !server.players.contains(player_uuid) {
-            server.players.push(player_uuid.clone());
+            server.players.push(*player_uuid);
             let query = sqlx::query("UPDATE servers SET players = $1 WHERE uuid = $2")
                 .bind(Json(server.players))
                 .bind(server_uuid)
@@ -611,7 +611,7 @@ impl DataSource for Sqlite {
             map_or_log(query, DriverError::Unreachable)?;
         }
 
-        if let Some(viewport) = self.get_viewport(player_uuid, server_uuid).await.ok() {
+        if let Ok(viewport) = self.get_viewport(player_uuid, server_uuid).await {
             Ok(ServerJoin::Resume(viewport))
         } else {
             Ok(ServerJoin::FirstJoin)
@@ -695,8 +695,8 @@ impl DataSource for Sqlite {
         map_or_log(
             query.map(|x| x.viewport.0),
             DriverError::DatabaseError(base::NotFoundError::UserData {
-                server_uuid: server_uuid.clone(),
-                player_uuid: player_uuid.clone(),
+                server_uuid: *server_uuid,
+                player_uuid: *player_uuid,
             }),
         )
     }
@@ -725,8 +725,8 @@ impl DataSource for Sqlite {
         map_or_log(
             query.map(|x| x.viewport.0),
             DriverError::DatabaseError(base::NotFoundError::UserData {
-                server_uuid: server_uuid.clone(),
-                player_uuid: player_uuid.clone(),
+                server_uuid: *server_uuid,
+                player_uuid: *player_uuid,
             }),
         )
     }
@@ -758,8 +758,8 @@ impl DataSource for Sqlite {
         map_or_log(
             query.map(|_| ()),
             DriverError::DatabaseError(base::NotFoundError::UserData {
-                server_uuid: server_uuid.clone(),
-                player_uuid: player_uuid.clone(),
+                server_uuid: *server_uuid,
+                player_uuid: *player_uuid,
             }),
         )
     }
@@ -789,8 +789,8 @@ impl DataSource for Sqlite {
         map_or_log(
             query.map(|x| x.playtime.0),
             DriverError::DatabaseError(base::NotFoundError::UserData {
-                server_uuid: server_uuid.clone(),
-                player_uuid: player_uuid.clone(),
+                server_uuid: *server_uuid,
+                player_uuid: *player_uuid,
             }),
         )
     }

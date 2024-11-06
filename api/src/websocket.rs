@@ -24,13 +24,9 @@ async fn link_socket(socket: WebSocket<MessageOut, MessageIn>, state: Arc<AppSta
     let mut read_task = tokio::spawn(async move {
         while let Some(message) = recv.next().await {
             match message {
-                Ok(Message::Item(message)) => match message {
-                    MessageIn::LinkRequest(request) => {
-                        handle_link_request(request, &read_state).await;
-                    }
-                    _ => { handle_unknown(&read_state).await; }
+                Ok(Message::Item(MessageIn::LinkRequest(request))) =>  {
+                    handle_link_request(request, &read_state).await;
                 },
-
                 Ok(_) => {
                     handle_unknown(&read_state).await;
                 }

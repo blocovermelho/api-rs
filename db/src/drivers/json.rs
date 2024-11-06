@@ -30,9 +30,8 @@ use crate::{
 use super::err::Response;
 
 /// This driver is read-only. Most functions will be unimplemented. This is here to migrate data and nothing else.
-
-fn get_highest_mask(nets: &Vec<Ipv4Net>) -> Ipv4Net {
-    let mut current_prefix_len = nets.iter().map(|it| it.prefix_len()).min().unwrap();
+fn get_highest_mask(nets: &[Ipv4Net]) -> Ipv4Net {
+    let mut current_prefix_len = nets.iter().map(Ipv4Net::prefix_len).min().unwrap();
     let first_addr = nets.first().unwrap().addr();
     let mut current_net = Ipv4Net::new(first_addr, current_prefix_len).unwrap();
     let mut all_match = false;
@@ -43,7 +42,7 @@ fn get_highest_mask(nets: &Vec<Ipv4Net>) -> Ipv4Net {
             break;
         }
 
-        current_prefix_len = current_prefix_len - 1;
+        current_prefix_len -= 1;
         current_net = Ipv4Net::new(first_addr, current_prefix_len).unwrap();
     }
 
@@ -101,7 +100,7 @@ impl From<old_data::Datum> for JsonDriver {
 #[async_trait::async_trait]
 impl DataSource for JsonDriver {
     async fn get_user_by_uuid(&self, uuid: &Uuid) -> Response<User> {
-        if let Some(old_user) = self.0.clone().users.get(&uuid) {
+        if let Some(old_user) = self.0.clone().users.get(uuid) {
             Ok(User {
                 uuid: old_user.uuid,
                 username: old_user.username.clone(),
@@ -112,15 +111,15 @@ impl DataSource for JsonDriver {
             })
         } else {
             Err(DriverError::DatabaseError(NotFoundError::User(
-                uuid.clone(),
+                *uuid,
             )))
         }
     }
     async fn get_all_users(&self) -> Response<Vec<Uuid>> {
-        Ok(self.0.users.keys().map(|it| it.clone()).collect())
+        Ok(self.0.users.keys().copied().collect())
     }
     async fn get_account(&self, uuid: &Uuid) -> Response<Account> {
-        if let Some(old_account) = self.0.clone().accounts.get(&uuid) {
+        if let Some(old_account) = self.0.clone().accounts.get(uuid) {
             Ok(Account {
                 uuid: old_account.uuid,
                 password: old_account.password.clone(),
@@ -129,16 +128,16 @@ impl DataSource for JsonDriver {
             })
         } else {
             Err(DriverError::DatabaseError(NotFoundError::Account(
-                uuid.clone(),
+                *uuid,
             )))
         }
     }
     async fn get_all_accounts(&self) -> Response<Vec<Uuid>> {
-        Ok(self.0.accounts.keys().map(|it| it.clone()).collect())
+        Ok(self.0.accounts.keys().copied().collect())
     }
     async fn get_allowlists(&self, player_uuid: &Uuid) -> Response<Vec<Allowlist>> {
         // Oh boy this one is involved. What we call an allowlist is stored... Inside the Account, iirc.
-        if let Some(old_account) = self.0.clone().accounts.get(&player_uuid) {
+        if let Some(old_account) = self.0.clone().accounts.get(player_uuid) {
             // The idea is quite simple. Unix Time 0 All the last_joins, sets hits to 0.
             // We do, by a miracle have an Hashset<Ipv4Net> which should make getting the base ip and mask relatively easy.
             // Instead of converting things one-to-one, what I will do, is de-duplicate the IP blocks before sending stuff to the database.
@@ -154,7 +153,7 @@ impl DataSource for JsonDriver {
             Ok(networks
                 .iter()
                 .map(|it| Allowlist {
-                    uuid: player_uuid.clone(),
+                    uuid: *player_uuid,
                     base_ip: it.addr().to_bits(),
                     mask: it.prefix_len(),
                     last_join: DateTime::default(),
@@ -163,7 +162,7 @@ impl DataSource for JsonDriver {
                 .collect())
         } else {
             Err(DriverError::DatabaseError(NotFoundError::Account(
-                player_uuid.clone(),
+                *player_uuid,
             )))
         }
     }
@@ -175,7 +174,7 @@ impl DataSource for JsonDriver {
             .iter()
             .filter(|(_, it)| it.discord_id == discord_id)
             .map(|(k, v)| User {
-                uuid: k.clone(),
+                uuid: *k,
                 username: v.username.clone(),
                 discord_id: v.discord_id.clone(),
                 created_at: Utc::now(),
@@ -194,7 +193,7 @@ impl DataSource for JsonDriver {
                     name: it.name.clone(),
                     source: it.source.into(),
                     version: it.version.clone(),
-                    uri: it.uri.clone(),
+                    uri: it.uri,
                 })),
                 online: Json(true),
                 players: Default::default(),
@@ -204,21 +203,21 @@ impl DataSource for JsonDriver {
         }
     }
     async fn get_all_servers(&self) -> Response<Vec<Uuid>> {
-        Ok(self.0.servers.keys().map(|it| it.clone()).collect())
+        Ok(self.0.servers.keys().copied().collect())
     }
     async fn get_playtime(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Duration> {
-        if let Some(old_user) = self.0.users.get(&player_uuid) {
-            if let Some(playtime) = old_user.playtime.get(&server_uuid) {
-                Ok(playtime.clone())
+        if let Some(old_user) = self.0.users.get(player_uuid) {
+            if let Some(playtime) = old_user.playtime.get(server_uuid) {
+                Ok(*playtime)
             } else {
                 Err(DriverError::DatabaseError(NotFoundError::UserData {
-                    server_uuid: server_uuid.clone(),
-                    player_uuid: player_uuid.clone(),
+                    server_uuid: *server_uuid,
+                    player_uuid: *player_uuid,
                 }))
             }
         } else {
             Err(DriverError::DatabaseError(NotFoundError::Account(
-                player_uuid.clone(),
+                *player_uuid,
             )))
         }
     }
@@ -235,10 +234,11 @@ impl DataSource for JsonDriver {
         unimplemented!();
     }
 
+    #[allow(clippy::cast_precision_loss, clippy::as_conversions)]
     /// This information wasn't saved.
     async fn get_viewport(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Viewport> {
-        if let Some(user) = self.0.users.get(&player_uuid) {
-            if let Some(pos) = user.last_pos.get(&server_uuid) {
+        if let Some(user) = self.0.users.get(player_uuid) {
+            if let Some(pos) = user.last_pos.get(server_uuid) {
                 return Ok(Viewport {
                     loc: Loc {
                         dim: pos.dim.clone(),
@@ -253,8 +253,8 @@ impl DataSource for JsonDriver {
         }
 
         return Err(DriverError::DatabaseError(NotFoundError::UserData {
-            server_uuid: server_uuid.clone(),
-            player_uuid: player_uuid.clone(),
+            server_uuid: *server_uuid,
+            player_uuid: *player_uuid,
         }));
 
     }

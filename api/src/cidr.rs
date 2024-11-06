@@ -50,13 +50,7 @@ pub fn any_match(cidr: &HashSet<Ipv4Net>, ip: &Ipv4Addr) -> bool {
 }
 
 pub fn get_exact_match(cidr: &HashSet<Ipv4Net>, ip: &Ipv4Addr) -> Option<Ipv4Net> {
-    for network in cidr.clone() {
-        if network.contains(ip) {
-            return Some(network);
-        }
-    }
-
-    None
+    cidr.clone().into_iter().find(|&network| network.contains(ip))
 }
 
 pub fn match_with_merge(cidr: &HashSet<Ipv4Net>, ip: &Ipv4Addr) -> Option<(Ipv4Net, Ipv4Net)> {
@@ -75,7 +69,7 @@ pub fn try_merge(cidr: &HashSet<Ipv4Net>) -> Option<HashSet<Ipv4Net>> {
     let mut range = as_range(cidr);
     range.simplify();
 
-    let networks : HashSet<Ipv4Net> = range.into_iter().map(|it| it).collect();
+    let networks : HashSet<Ipv4Net> = range.into_iter().collect();
 
     if networks.len() < cidr.len() {
         Some(networks)
@@ -91,15 +85,14 @@ fn as_range(cidr: &HashSet<Ipv4Net>) -> IpRange<Ipv4Net> {
         range.add(addr);
     }
 
-    return range;
+    range
 }
 
 pub fn encode(net: &Ipv4Net) -> String {
     format!("{}/{}", net.addr(), net.prefix_len())
 }
 
-
-pub fn decode(str: &String) -> Option<Ipv4Net> {
+pub fn decode(str: &str) -> Option<Ipv4Net> {
     str.parse().ok()
 }
 

@@ -17,7 +17,7 @@ where
 
         let mut mask = entry.get_mask();
         while mask >= LOWEST_PREFIX_LEN {
-            mask = mask - 1;
+            mask -= 1;
             if entry.with_mask(mask).contains(&ip) {
                 return CidrAction::MaskUpdate(entry, mask);
             }

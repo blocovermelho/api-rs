@@ -30,6 +30,7 @@ use websocket::MessageOut;
 
 // use crate::store::Store;
 
+#[allow(clippy::future_not_send)]
 pub mod bus;
 pub mod cidr;
 pub mod migrate;
@@ -38,6 +39,7 @@ pub mod routes;
 // pub mod store;
 pub mod websocket;
 
+#[allow(clippy::type_complexity)]
 struct Channels {
     links: OneshotBus<Uuid, LinkResult>,
     messages: Arc<(
@@ -122,14 +124,11 @@ async fn main() {
     let old_data = PathBuf::from("data.json");
     let config_path = PathBuf::from("config.json");
 
-    let db: Sqlite;
-
-    if old_data.exists() {
+    let db = if old_data.exists() {
         // We will migrate the data then move it to data.json.old
-        if let Ok(_db) = migrate(&db_path, &old_data).await {
-            db = _db;
+        if let Ok(db) = migrate(&db_path, &old_data).await {
             match fs::rename(old_data.clone(), "data.json.bak") {
-                Ok(_) => println!("Sucessfully moved old data file."),
+                Ok(()) => println!("Sucessfully moved old data file."),
                 Err(_) => panic!(
                     "Manual intervention required.
                 Old json-backed store refused to be moved.
@@ -139,12 +138,13 @@ async fn main() {
                         .unwrap_or_else(|_| PathBuf::from("data.json"))
                 ),
             }
+            db
         } else {
-            db = Sqlite::new(&db_path).await;
+            Sqlite::new(&db_path).await
         }
     } else {
-         db = Sqlite::new(&db_path).await;
-    }
+         Sqlite::new(&db_path).await
+    };
 
     db.run_migrations().await;
 
@@ -245,5 +245,5 @@ async fn main() {
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
-        .expect("server err")
+        .expect("server err");
 }

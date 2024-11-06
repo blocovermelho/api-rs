@@ -93,10 +93,9 @@ pub async fn migrate_user_data(
         for server_id in servers.clone() {
             // We cant be sure if an user has a playtime on that server.
             // We have to handle this correctly.
-             let mapped_id = server_id_mappings
+             let mapped_id = *server_id_mappings
                     .get(&server_id)
-                    .ok_or(DriverError::DatabaseError(NotFoundError::Server))?
-                    .clone();
+                    .ok_or(DriverError::DatabaseError(NotFoundError::Server))?;
 
             println!("[User Data] Mapped Server: {id} -> {mapped_id}");
 

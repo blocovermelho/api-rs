@@ -39,6 +39,7 @@ pub struct Err {
     pub inner: Option<String>,
 }
 
+#[allow(clippy::needless_pass_by_value)]
 impl Err {
     pub fn new(message: impl ToString) -> Self {
         Self {
@@ -62,9 +63,9 @@ pub enum ErrKind {
 impl IntoResponse for ErrKind {
     fn into_response(self) -> axum::response::Response {
         match self {
-            ErrKind::NotFound(e) => (StatusCode::NOT_FOUND, Json(e)).into_response(),
-            ErrKind::Internal(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(e)).into_response(),
-            ErrKind::BadRequest(e) => (StatusCode::BAD_REQUEST, Json(e)).into_response(),
+            Self::NotFound(e) => (StatusCode::NOT_FOUND, Json(e)).into_response(),
+            Self::Internal(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(e)).into_response(),
+            Self::BadRequest(e) => (StatusCode::BAD_REQUEST, Json(e)).into_response(),
         }
     }
 }
@@ -78,7 +79,7 @@ pub async fn link(
     let uuid = eph
         .links
         .get_by_right(&link.state)
-        .ok_or(ErrKind::NotFound(Err::new(
+        .ok_or_else(|| ErrKind::NotFound(Err::new(
             "Tried getting an user that hasn't started linking yet.",
         )))?;
 
@@ -138,7 +139,7 @@ pub async fn get_users(State(state): State<Arc<AppState>>) -> Res<Vec<Uuid>> {
     Ok(Json(data))
 }
 
-/// [GET] /api/user/:user_id
+/// [GET] /`api/user/:user_id`
 pub async fn get_user(State(state): State<Arc<AppState>>, Path(user_id): Path<Uuid>) -> Res<User> {
     let data = state.db.get_user_by_uuid(&user_id).await.map_err(|_| ErrKind::Internal(Err::new("User not found.")))?;
 
@@ -184,7 +185,7 @@ pub async fn user_exists(
     Ok(Json(data.is_ok()))
 }
 
-/// [DELETE] /api/user/:user_id
+/// [DELETE] /`api/user/:user_id`
 pub async fn delete_user(State(state): State<Arc<AppState>>, Path(user): Path<Uuid>) -> Res<User> {
     let user = state
         .db
@@ -218,7 +219,7 @@ pub async fn get_servers(State(state): State<Arc<AppState>>) -> Res<Vec<Uuid>> {
     Ok(Json(data))
 }
 
-/// [GET] /api/server/:server_id
+/// [GET] /`api/server/:server_id`
 pub async fn get_server(
     State(state): State<Arc<AppState>>,
     Path(server_uuid): Path<Uuid>,
@@ -232,7 +233,7 @@ pub async fn get_server(
     Ok(Json(data))
 }
 
-/// [DELETE] /api/server/:user_id
+/// [DELETE] /`api/server/:user_id`
 pub async fn delete_server(
     State(state): State<Arc<AppState>>,
     Path(server_uuid): Path<Uuid>,
@@ -260,26 +261,24 @@ pub async fn create_server(
     Ok(Json(data))
 }
 
-/// [PATCH] /api/server/:server_id/enable
+/// [PATCH] /`api/server/:server_id/enable`
 pub async fn enable(State(state): State<Arc<AppState>>, Path(server_id): Path<Uuid>) -> Res<bool> {
     let status = state
         .db
         .update_server_status(&server_id, true)
         .await
-        .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?
-        .clone();
+        .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?;
 
     Ok(Json(status))
 }
 
-/// [PATCH] /api/server/:server_id/disable
+/// [PATCH] /`api/server/:server_id/disable`
 pub async fn disable(State(state): State<Arc<AppState>>, Path(server_id): Path<Uuid>) -> Res<bool> {
     let status = state
         .db
         .update_server_status(&server_id, true)
         .await
-        .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?
-        .clone();
+        .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?;
 
     Ok(Json(status))
 }
@@ -293,7 +292,7 @@ pub async fn get_session(
 
     let entries = state
         .db
-        .get_allowlists_with_ip(&session.uuid, session.ip.clone())
+        .get_allowlists_with_ip(&session.uuid, session.ip)
         .await
         .map_err(|_| ErrKind::NotFound(Err::new("Account not found.")))?;
 
@@ -348,7 +347,7 @@ pub async fn resume(
 
     let entries = state
         .db
-        .get_allowlists_with_ip(&session.uuid, session.ip.clone())
+        .get_allowlists_with_ip(&session.uuid, session.ip)
         .await
         .map_err(|_| ErrKind::NotFound(Err::new("Account not found.")))?;
 
@@ -374,7 +373,7 @@ pub async fn resume(
     Ok(Json(true))
 }
 
-/// [POST] /api/auth/:server_id/logoff?uuid=<ID>&ip=<IP>
+/// [POST] /`api/auth/:server_id/logoff?uuid`=<ID>&ip=<IP>
 /// ```json
 /// {
 ///   "loc": {
@@ -429,7 +428,7 @@ pub async fn logoff(
 
     let delta = (now - account.current_join).to_std().unwrap();
 
-    playtime = playtime + delta;
+    playtime += delta;
 
     state
         .db
@@ -456,7 +455,7 @@ pub async fn logoff(
     Ok(Json(true))
 }
 
-/// [POST] /api/auth/:server_id/login
+/// [POST] /`api/auth/:server_id/login`
 /// ```json
 /// {
 ///     "uuid": "743a0a05-8929-4383-a564-edc983ea0231",
@@ -490,18 +489,17 @@ pub async fn login(
         .map_err(|_| ErrKind::NotFound(Err::new("Account not found.")))?;
 
     let password = bcrypt::verify(session.password, &account.password)
-        .map_err(|e| ErrKind::Internal(Err::new(format!("BCrypt Error.")).with_inner(e)))?;
+        .map_err(|e| ErrKind::Internal(Err::new("BCrypt Error.".to_string()).with_inner(e)))?;
 
     if !password {
         let mut count = 1;
 
-        if !eph.password.contains_key(&session.uuid) {
-            eph.password.insert(session.uuid, count);
-        } else {
+        if eph.password.contains_key(&session.uuid) {
             count = *(eph.password.get(&session.uuid).unwrap());
-            count = count + 1;
-            eph.password.insert(session.uuid, count);
+            count += 1;
         }
+
+        eph.password.insert(session.uuid, count);
 
         if count >= MAX_ATTEMPTS_PER_ACC {
             Err(ErrKind::BadRequest(Err::new(
@@ -517,7 +515,7 @@ pub async fn login(
 
         let res = state.db.join_server(&server_id, &session.uuid).await.unwrap() ;
         
-        if let ServerJoin::FirstJoin = res {
+        if matches!(res, ServerJoin::FirstJoin) {
             let _ = state.db.create_savedata(&session.uuid, &server_id).await;
         }
 
@@ -586,7 +584,7 @@ pub async fn ban_cidr(
         }
     };
 
-    if let Ok(_) = state.db.create_blacklist(params.ip, actor).await {
+    if state.db.create_blacklist(params.ip, actor).await.is_ok() {
         return Ok(Json(BanResponse::New));
     }
 
@@ -594,12 +592,12 @@ pub async fn ban_cidr(
 }
 
 /// **Note**: This is **not** a direct port to the new sqlite backend.
+///
 /// This *was* a part of the three step manual verification process, but became a manual override for allowing IP addresses.
-/// This is why the logic looks similar to ban_cidr, including the check to see if the IP is already allowed.
+/// This is why the logic looks similar to `ban_cidr`, including the check to see if the IP is already allowed.
 /// Kept around for being possibly useful in the future. Manual overrides and fail-safes are nice.
 ///
 /// [POST] /auth/allow?uuid=<id>&ip=<ip>
-
 pub async fn allow_cidr(
     State(state): State<Arc<AppState>>,
     Query(params): Query<CheckCidrQueryParam>,
@@ -725,13 +723,13 @@ pub async fn create_account(
     let hash = bcrypt::hash(&session.password, 12)
         .map_err(|e| ErrKind::Internal(Err::new("BCrypt Error.").with_inner(e)))?;
 
-    if let Err(_) = state
+    if state
         .db
         .create_account(AccountStub {
             uuid: session.uuid,
             password: hash,
         })
-        .await
+        .await.is_err()
     {
         return Err(ErrKind::Internal(Err::new("Account already existed")));
     }
@@ -744,7 +742,7 @@ pub async fn create_account(
     Ok(Json(true))
 }
 
-/// [DELETE] /api/auth/:user_id
+/// [DELETE] /`api/auth/:user_id`
 pub async fn delete_account(
     State(state): State<Arc<AppState>>,
     Path(user): Path<Uuid>,
@@ -786,13 +784,12 @@ pub async fn changepw(
     } else {
         let mut count = 1;
 
-        if !eph.password.contains_key(&session.uuid) {
-            eph.password.insert(session.uuid, count);
-        } else {
+        if eph.password.contains_key(&session.uuid) {
             count = *(eph.password.get(&session.uuid).unwrap());
-            count = count + 1;
-            eph.password.insert(session.uuid, count);
+            count += 1;
         }
+
+        eph.password.insert(session.uuid, count);
 
         if count >= MAX_ATTEMPTS_PER_ACC {
             Err(ErrKind::BadRequest(Err::new(

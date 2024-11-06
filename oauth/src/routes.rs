@@ -7,7 +7,7 @@ use reqwest::Client;
 
 use crate::models::{Config, Member, User};
 
-pub const BASE_URI: &'static str = "https://discord.com/api";
+pub const BASE_URI: &str = "https://discord.com/api";
 
 pub fn get_client(config: &Config) -> Result<BasicClient, ParseError> {
     Ok(BasicClient::new(

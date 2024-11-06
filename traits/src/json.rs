@@ -24,7 +24,7 @@ pub trait JsonSync {
         let mut file = opt.open(path)?;
         let str = serde_json::to_string_pretty(&this)?;
 
-        file.write(&str.as_bytes())?;
+        file.write_all(str.as_bytes())?;
 
         Ok(())
     }

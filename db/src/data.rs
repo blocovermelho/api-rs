@@ -108,14 +108,14 @@ impl NetworkProvider for Blacklist {
 impl Blacklist {
     pub fn decrement_hitcount(&mut self) -> i64 {
         if self.hits > 0 {
-            self.hits = self.hits - 1;
+            self.hits -= 1;
         }
 
         self.hits
     }
 
     pub fn increment_hitcount(&mut self) -> i64 {
-        self.hits = self.hits + 1;
+        self.hits += 1;
 
         self.hits
     }
