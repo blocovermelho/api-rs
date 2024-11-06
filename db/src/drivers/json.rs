@@ -18,6 +18,7 @@ use ipnet::Ipv4Net;
 use sqlx::types::Json;
 use uuid::Uuid;
 
+use super::err::Response;
 use crate::{
     data::{
         result, stub, Account, Allowlist, BanActor, Blacklist, Loc, Modpack, Pronoun, SaveData,
@@ -26,8 +27,6 @@ use crate::{
     drivers::err::{base::NotFoundError, DriverError},
     interface::DataSource,
 };
-
-use super::err::Response;
 
 /// This driver is read-only. Most functions will be unimplemented. This is here to migrate data and nothing else.
 fn get_highest_mask(nets: &[Ipv4Net]) -> Ipv4Net {
@@ -110,14 +109,14 @@ impl DataSource for JsonDriver {
                 last_server: old_user.last_server,
             })
         } else {
-            Err(DriverError::DatabaseError(NotFoundError::User(
-                *uuid,
-            )))
+            Err(DriverError::DatabaseError(NotFoundError::User(*uuid)))
         }
     }
+
     async fn get_all_users(&self) -> Response<Vec<Uuid>> {
         Ok(self.0.users.keys().copied().collect())
     }
+
     async fn get_account(&self, uuid: &Uuid) -> Response<Account> {
         if let Some(old_account) = self.0.clone().accounts.get(uuid) {
             Ok(Account {
@@ -127,14 +126,14 @@ impl DataSource for JsonDriver {
                 // We're using unwrap_or_default cause if we dont have a login, you'll go back to unix 0 which is safe.
             })
         } else {
-            Err(DriverError::DatabaseError(NotFoundError::Account(
-                *uuid,
-            )))
+            Err(DriverError::DatabaseError(NotFoundError::Account(*uuid)))
         }
     }
+
     async fn get_all_accounts(&self) -> Response<Vec<Uuid>> {
         Ok(self.0.accounts.keys().copied().collect())
     }
+
     async fn get_allowlists(&self, player_uuid: &Uuid) -> Response<Vec<Allowlist>> {
         // Oh boy this one is involved. What we call an allowlist is stored... Inside the Account, iirc.
         if let Some(old_account) = self.0.clone().accounts.get(player_uuid) {
@@ -161,11 +160,10 @@ impl DataSource for JsonDriver {
                 })
                 .collect())
         } else {
-            Err(DriverError::DatabaseError(NotFoundError::Account(
-                *player_uuid,
-            )))
+            Err(DriverError::DatabaseError(NotFoundError::Account(*player_uuid)))
         }
     }
+
     async fn get_users_by_discord_id(&self, discord_id: String) -> Response<Vec<User>> {
         Ok(self
             .0
@@ -183,6 +181,7 @@ impl DataSource for JsonDriver {
             })
             .collect())
     }
+
     async fn get_server(&self, server_uuid: &Uuid) -> Response<Server> {
         if let Some(old_server) = self.0.clone().servers.get(server_uuid) {
             Ok(Server {
@@ -202,9 +201,11 @@ impl DataSource for JsonDriver {
             Err(DriverError::DatabaseError(NotFoundError::Server))
         }
     }
+
     async fn get_all_servers(&self) -> Response<Vec<Uuid>> {
         Ok(self.0.servers.keys().copied().collect())
     }
+
     async fn get_playtime(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Duration> {
         if let Some(old_user) = self.0.users.get(player_uuid) {
             if let Some(playtime) = old_user.playtime.get(server_uuid) {
@@ -216,9 +217,7 @@ impl DataSource for JsonDriver {
                 }))
             }
         } else {
-            Err(DriverError::DatabaseError(NotFoundError::Account(
-                *player_uuid,
-            )))
+            Err(DriverError::DatabaseError(NotFoundError::Account(*player_uuid)))
         }
     }
 
@@ -256,33 +255,40 @@ impl DataSource for JsonDriver {
             server_uuid: *server_uuid,
             player_uuid: *player_uuid,
         }));
-
     }
 
     async fn create_user(&self, stub: stub::UserStub) -> Response<User> {
         unimplemented!();
     }
+
     async fn delete_user(&self, uuid: &Uuid) -> Response<User> {
         unimplemented!();
     }
+
     async fn migrate_user(&self, from: &Uuid, into: &Uuid) -> Response<User> {
         unimplemented!();
     }
+
     async fn create_account(&self, stub: stub::AccountStub) -> Response<()> {
         unimplemented!();
     }
+
     async fn update_password(&self, player_uuid: &Uuid, new_password: String) -> Response<()> {
         unimplemented!();
     }
+
     async fn update_current_join(&self, player_uuid: &Uuid) -> Response<()> {
         unimplemented!();
     }
+
     async fn migrate_account(&self, from: &Uuid, to: &Uuid) -> Response<()> {
         unimplemented!();
     }
+
     async fn delete_account(&self, player_uuid: &Uuid) -> Response<()> {
         unimplemented!();
     }
+
     async fn create_allowlist(&self, player_uuid: &Uuid, ip: Ipv4Addr) -> Response<Allowlist> {
         unimplemented!();
     }
@@ -292,26 +298,25 @@ impl DataSource for JsonDriver {
     }
 
     async fn get_allowlists_with_ip(
-        &self,
-        player_uuid: &Uuid,
-        ip: Ipv4Addr,
+        &self, player_uuid: &Uuid, ip: Ipv4Addr,
     ) -> Response<Vec<Allowlist>> {
         unimplemented!();
     }
+
     async fn get_allowlists_with_range(
-        &self,
-        player_uuid: &Uuid,
-        ip: Ipv4Addr,
-        mask: u8,
+        &self, player_uuid: &Uuid, ip: Ipv4Addr, mask: u8,
     ) -> Response<Vec<Allowlist>> {
         unimplemented!();
     }
+
     async fn bump_allowlist(&self, entry: Allowlist) -> Response<()> {
         unimplemented!();
     }
+
     async fn broaden_allowlist_mask(&self, entry: Allowlist, new_mask: u8) -> Response<()> {
         unimplemented!();
     }
+
     async fn delete_allowlist(&self, entry: Allowlist) -> Response<()> {
         unimplemented!();
     }
@@ -319,15 +324,19 @@ impl DataSource for JsonDriver {
     async fn create_blacklist(&self, ip: Ipv4Addr, actor: BanActor) -> Response<Blacklist> {
         unimplemented!();
     }
+
     async fn get_blacklists_with_range(&self, ip: Ipv4Addr, mask: u8) -> Response<Vec<Blacklist>> {
         unimplemented!();
     }
+
     async fn bump_blacklist(&self, entry: Blacklist) -> Response<()> {
         unimplemented!();
     }
+
     async fn broaden_blacklist_mask(&self, entry: Blacklist, new_mask: u8) -> Response<()> {
         unimplemented!();
     }
+
     async fn delete_blacklist(&self, entry: Blacklist) -> Response<()> {
         unimplemented!();
     }
@@ -335,21 +344,19 @@ impl DataSource for JsonDriver {
     async fn create_server(&self, stub: stub::ServerStub) -> Response<Server> {
         unimplemented!();
     }
+
     async fn delete_server(&self, server_uuid: &Uuid) -> Response<Server> {
         unimplemented!();
     }
 
     async fn join_server(
-        &self,
-        server_uuid: &Uuid,
-        player_uuid: &Uuid,
+        &self, server_uuid: &Uuid, player_uuid: &Uuid,
     ) -> Response<result::ServerJoin> {
         unimplemented!();
     }
+
     async fn leave_server(
-        &self,
-        server_uuid: &Uuid,
-        player_uuid: &Uuid,
+        &self, server_uuid: &Uuid, player_uuid: &Uuid,
     ) -> Response<result::ServerLeave> {
         unimplemented!();
     }
@@ -359,35 +366,31 @@ impl DataSource for JsonDriver {
     }
 
     async fn update_viewport(
-        &self,
-        player_uuid: &Uuid,
-        server_uuid: &Uuid,
-        viewport: Viewport,
+        &self, player_uuid: &Uuid, server_uuid: &Uuid, viewport: Viewport,
     ) -> Response<Viewport> {
         unimplemented!();
     }
+
     async fn update_playtime(
-        &self,
-        player_uuid: &Uuid,
-        server_uuid: &Uuid,
-        new_playtime: Duration,
+        &self, player_uuid: &Uuid, server_uuid: &Uuid, new_playtime: Duration,
     ) -> Response<()> {
         unimplemented!();
     }
+
     async fn add_pronoun(&self, player_uuid: &Uuid, pronoun: Pronoun) -> Response<Vec<Pronoun>> {
         unimplemented!();
     }
+
     async fn remove_pronoun(&self, player_uuid: &Uuid, pronoun: Pronoun) -> Response<Vec<Pronoun>> {
         unimplemented!();
     }
+
     async fn update_pronoun(
-        &self,
-        player_uuid: &Uuid,
-        old: &Pronoun,
-        new: Pronoun,
+        &self, player_uuid: &Uuid, old: &Pronoun, new: Pronoun,
     ) -> Response<Vec<Pronoun>> {
         unimplemented!();
     }
+
     async fn create_savedata(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<SaveData> {
         unimplemented!();
     }

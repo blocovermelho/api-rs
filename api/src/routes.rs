@@ -6,7 +6,6 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-
 use chrono::{DateTime, Utc};
 use db::{
     data::{
@@ -42,10 +41,7 @@ pub struct Err {
 #[allow(clippy::needless_pass_by_value)]
 impl Err {
     pub fn new(message: impl ToString) -> Self {
-        Self {
-            error: message.to_string(),
-            inner: None,
-        }
+        Self { error: message.to_string(), inner: None }
     }
 
     pub fn with_inner(&mut self, inner: impl ToString) -> Self {
@@ -72,16 +68,12 @@ impl IntoResponse for ErrKind {
 
 /// [GET] /api/link?state=<>&code=<>
 pub async fn link(
-    State(state): State<Arc<AppState>>,
-    Query(link): Query<LinkQueryParams>,
+    State(state): State<Arc<AppState>>, Query(link): Query<LinkQueryParams>,
 ) -> Res<LinkResult> {
     let eph = state.ephemeral.lock().await;
-    let uuid = eph
-        .links
-        .get_by_right(&link.state)
-        .ok_or_else(|| ErrKind::NotFound(Err::new(
-            "Tried getting an user that hasn't started linking yet.",
-        )))?;
+    let uuid = eph.links.get_by_right(&link.state).ok_or_else(|| {
+        ErrKind::NotFound(Err::new("Tried getting an user that hasn't started linking yet."))
+    })?;
 
     let client = oauth::routes::get_client(&state.config).map_err(|e| {
         ErrKind::Internal(Err::new("Error while getting a BasicClient").with_inner(e))
@@ -115,8 +107,7 @@ pub async fn link(
 
 /// [GET] /api/oauth?uuid=<ID>
 pub async fn discord(
-    State(state): State<Arc<AppState>>,
-    Query(uuid): Query<UuidQueryParam>,
+    State(state): State<Arc<AppState>>, Query(uuid): Query<UuidQueryParam>,
 ) -> Res<String> {
     let mut data = state.ephemeral.lock().await;
 
@@ -141,15 +132,18 @@ pub async fn get_users(State(state): State<Arc<AppState>>) -> Res<Vec<Uuid>> {
 
 /// [GET] /`api/user/:user_id`
 pub async fn get_user(State(state): State<Arc<AppState>>, Path(user_id): Path<Uuid>) -> Res<User> {
-    let data = state.db.get_user_by_uuid(&user_id).await.map_err(|_| ErrKind::Internal(Err::new("User not found.")))?;
+    let data = state
+        .db
+        .get_user_by_uuid(&user_id)
+        .await
+        .map_err(|_| ErrKind::Internal(Err::new("User not found.")))?;
 
     Ok(Json(data))
 }
 
 /// [GET] /api/user/by-name/:username
 pub async fn get_user_by_name(
-    State(state): State<Arc<AppState>>,
-    Path(username): Path<String>,
+    State(state): State<Arc<AppState>>, Path(username): Path<String>,
 ) -> Res<User> {
     let user_id = PlayerUuid::new_with_offline_username(&username);
     let data = state
@@ -163,8 +157,7 @@ pub async fn get_user_by_name(
 
 /// [GET] /api/user/by-discord/:discordId
 pub async fn get_user_by_discord(
-    State(state): State<Arc<AppState>>,
-    Path(discord_id): Path<u64>,
+    State(state): State<Arc<AppState>>, Path(discord_id): Path<u64>,
 ) -> Res<Vec<User>> {
     let data = state
         .db
@@ -177,8 +170,7 @@ pub async fn get_user_by_discord(
 
 /// [GET] /api/user/exists?uuid=<uuid>
 pub async fn user_exists(
-    State(state): State<Arc<AppState>>,
-    Query(user_id): Query<UuidQueryParam>,
+    State(state): State<Arc<AppState>>, Query(user_id): Query<UuidQueryParam>,
 ) -> Res<bool> {
     let data = state.db.get_user_by_uuid(&user_id.uuid).await;
 
@@ -187,19 +179,16 @@ pub async fn user_exists(
 
 /// [DELETE] /`api/user/:user_id`
 pub async fn delete_user(State(state): State<Arc<AppState>>, Path(user): Path<Uuid>) -> Res<User> {
-    let user = state
-        .db
-        .delete_user(&user)
-        .await
-        .map_err(|e| ErrKind::Internal(Err::new("Couldn't flush data for User").with_inner(format!("{:?}", e))))?;
+    let user = state.db.delete_user(&user).await.map_err(|e| {
+        ErrKind::Internal(Err::new("Couldn't flush data for User").with_inner(format!("{:?}", e)))
+    })?;
 
     Ok(Json(user))
 }
 
 /// [POST] /api/user
 pub async fn create_user(
-    State(state): State<Arc<AppState>>,
-    Json(stub): Json<UserStub>,
+    State(state): State<Arc<AppState>>, Json(stub): Json<UserStub>,
 ) -> Res<User> {
     let user = state
         .db
@@ -221,8 +210,7 @@ pub async fn get_servers(State(state): State<Arc<AppState>>) -> Res<Vec<Uuid>> {
 
 /// [GET] /`api/server/:server_id`
 pub async fn get_server(
-    State(state): State<Arc<AppState>>,
-    Path(server_uuid): Path<Uuid>,
+    State(state): State<Arc<AppState>>, Path(server_uuid): Path<Uuid>,
 ) -> Res<Server> {
     let data = state
         .db
@@ -235,8 +223,7 @@ pub async fn get_server(
 
 /// [DELETE] /`api/server/:user_id`
 pub async fn delete_server(
-    State(state): State<Arc<AppState>>,
-    Path(server_uuid): Path<Uuid>,
+    State(state): State<Arc<AppState>>, Path(server_uuid): Path<Uuid>,
 ) -> Res<Server> {
     let data = state
         .db
@@ -249,8 +236,7 @@ pub async fn delete_server(
 
 /// [POST] /api/server
 pub async fn create_server(
-    State(state): State<Arc<AppState>>,
-    Json(stub): Json<ServerStub>,
+    State(state): State<Arc<AppState>>, Json(stub): Json<ServerStub>,
 ) -> Res<Server> {
     let data = state
         .db
@@ -285,8 +271,7 @@ pub async fn disable(State(state): State<Arc<AppState>>, Path(server_id): Path<U
 
 /// [GET] /api/auth/session?uuid=<ID>&ip=<IP>
 pub async fn get_session(
-    State(state): State<Arc<AppState>>,
-    Query(session): Query<SessionQueryParams>,
+    State(state): State<Arc<AppState>>, Query(session): Query<SessionQueryParams>,
 ) -> Res<bool> {
     let now = chrono::offset::Utc::now();
 
@@ -336,8 +321,7 @@ pub async fn get_session(
 
 /// [PATCH] /api/auth/resume?uuid=<ID>&ip=<IP>
 pub async fn resume(
-    State(state): State<Arc<AppState>>,
-    Query(session): Query<SessionQueryParams>,
+    State(state): State<Arc<AppState>>, Query(session): Query<SessionQueryParams>,
 ) -> Res<bool> {
     let user = state
         .db
@@ -387,10 +371,8 @@ pub async fn resume(
 /// }
 /// ```
 pub async fn logoff(
-    State(state): State<Arc<AppState>>,
-    Path(server_id): Path<Uuid>,
-    Query(session): Query<SessionQueryParams>,
-    Json(pos): Json<Viewport>,
+    State(state): State<Arc<AppState>>, Path(server_id): Path<Uuid>,
+    Query(session): Query<SessionQueryParams>, Json(pos): Json<Viewport>,
 ) -> Res<bool> {
     let cfg = &state.config;
     let client = &state.client.serenity;
@@ -413,7 +395,8 @@ pub async fn logoff(
         .await
         .map_err(|_| ErrKind::NotFound(Err::new("Account not foumd.")))?;
 
-    state.db
+    state
+        .db
         .update_viewport(&session.uuid, &server.uuid, pos)
         .await
         .map_err(|_| ErrKind::NotFound(Err::new("SaveData not found.")))?;
@@ -464,15 +447,15 @@ pub async fn logoff(
 /// }
 /// ```
 pub async fn login(
-    State(state): State<Arc<AppState>>,
-    Path(server_id): Path<Uuid>,
+    State(state): State<Arc<AppState>>, Path(server_id): Path<Uuid>,
     Json(session): Json<AuthenticationQueryParams>,
 ) -> Res<Option<ServerJoin>> {
     let cfg = &state.config;
     let client = &state.client.serenity;
     let mut eph = state.ephemeral.lock().await;
 
-    let _ = state.db
+    let _ = state
+        .db
         .get_server(&server_id)
         .await
         .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?;
@@ -483,7 +466,8 @@ pub async fn login(
         .await
         .map_err(|_| ErrKind::NotFound(Err::new("User not found.")))?;
 
-    let  account = state.db
+    let account = state
+        .db
         .get_account(&user.uuid)
         .await
         .map_err(|_| ErrKind::NotFound(Err::new("Account not found.")))?;
@@ -502,9 +486,7 @@ pub async fn login(
         eph.password.insert(session.uuid, count);
 
         if count >= MAX_ATTEMPTS_PER_ACC {
-            Err(ErrKind::BadRequest(Err::new(
-                "Exhausted MAX_ATTEMPTS for this account.",
-            )))
+            Err(ErrKind::BadRequest(Err::new("Exhausted MAX_ATTEMPTS for this account.")))
         } else {
             Ok(Json(None))
         }
@@ -513,8 +495,12 @@ pub async fn login(
 
         state.db.update_current_join(&session.uuid).await.unwrap();
 
-        let res = state.db.join_server(&server_id, &session.uuid).await.unwrap() ;
-        
+        let res = state
+            .db
+            .join_server(&server_id, &session.uuid)
+            .await
+            .unwrap();
+
         if matches!(res, ServerJoin::FirstJoin) {
             let _ = state.db.create_savedata(&session.uuid, &server_id).await;
         }
@@ -535,8 +521,7 @@ pub async fn login(
 
 /// [GET] /auth/exists?uuid=<uuid>
 pub async fn account_exists(
-    State(state): State<Arc<AppState>>,
-    Query(account): Query<UuidQueryParam>,
+    State(state): State<Arc<AppState>>, Query(account): Query<UuidQueryParam>,
 ) -> Res<bool> {
     let data = state.db.get_account(&account.uuid).await;
 
@@ -551,8 +536,7 @@ pub async fn account_exists(
 /// }
 /// ```
 pub async fn ban_cidr(
-    State(state): State<Arc<AppState>>,
-    Query(params): Query<BanCidrQueryParam>,
+    State(state): State<Arc<AppState>>, Query(params): Query<BanCidrQueryParam>,
     Json(issuer): Json<BanIssuer>,
 ) -> Res<BanResponse> {
     if let Ok(strict) = state.db.get_blacklists(params.ip).await {
@@ -599,8 +583,7 @@ pub async fn ban_cidr(
 ///
 /// [POST] /auth/allow?uuid=<id>&ip=<ip>
 pub async fn allow_cidr(
-    State(state): State<Arc<AppState>>,
-    Query(params): Query<CheckCidrQueryParam>,
+    State(state): State<Arc<AppState>>, Query(params): Query<CheckCidrQueryParam>,
 ) -> Res<bool> {
     if let Ok(strict) = state
         .db
@@ -610,7 +593,6 @@ pub async fn allow_cidr(
         if !strict.is_empty() {
             return Ok(Json(true));
         }
-      
     }
 
     // We always do automatic widening when possible, since the next call will be amortized and returned early.
@@ -628,7 +610,6 @@ pub async fn allow_cidr(
             }
             return Ok(Json(true));
         }
-       
     }
 
     let _ = state.db.create_allowlist(&params.uuid, params.ip).await;
@@ -637,8 +618,7 @@ pub async fn allow_cidr(
 
 /// [POST] /auth/cidr?uuid=<id>&ip=<ip>
 pub async fn cidr_check(
-    State(state): State<Arc<AppState>>,
-    Query(params): Query<CheckCidrQueryParam>,
+    State(state): State<Arc<AppState>>, Query(params): Query<CheckCidrQueryParam>,
 ) -> Res<CidrResponse> {
     // This is a trivial "can join" or "is banned check"
     // We should check things broadly for users, but strict for bans.
@@ -655,7 +635,6 @@ pub async fn cidr_check(
         if !strict.is_empty() {
             return Ok(Json(CidrResponse::Allowed));
         }
-        
     }
 
     if let Ok(broad) = state
@@ -672,14 +651,12 @@ pub async fn cidr_check(
             }
             return Ok(Json(CidrResponse::Allowed));
         }
-        
     }
 
     if let Ok(strict) = state.db.get_blacklists(params.ip).await {
         if !strict.is_empty() {
             return Ok(Json(CidrResponse::Banned));
         }
-        
     }
 
     if let Ok(broad) = state
@@ -696,7 +673,6 @@ pub async fn cidr_check(
 
             return Ok(Json(CidrResponse::Banned));
         }
-        
     }
 
     Ok(Json(CidrResponse::Unknown))
@@ -711,8 +687,7 @@ pub async fn cidr_check(
 /// }
 /// ```
 pub async fn create_account(
-    State(state): State<Arc<AppState>>,
-    Json(session): Json<AuthenticationQueryParams>,
+    State(state): State<Arc<AppState>>, Json(session): Json<AuthenticationQueryParams>,
 ) -> Res<bool> {
     // This function does a lot of stuff. So attention is needed in order to make things work.
     // Accounts were once a cohesive thing that existed in one object, now it spans a little more then that.
@@ -725,11 +700,9 @@ pub async fn create_account(
 
     if state
         .db
-        .create_account(AccountStub {
-            uuid: session.uuid,
-            password: hash,
-        })
-        .await.is_err()
+        .create_account(AccountStub { uuid: session.uuid, password: hash })
+        .await
+        .is_err()
     {
         return Err(ErrKind::Internal(Err::new("Account already existed")));
     }
@@ -744,10 +717,13 @@ pub async fn create_account(
 
 /// [DELETE] /`api/auth/:user_id`
 pub async fn delete_account(
-    State(state): State<Arc<AppState>>,
-    Path(user): Path<Uuid>,
+    State(state): State<Arc<AppState>>, Path(user): Path<Uuid>,
 ) -> Res<bool> {
-    state.db.delete_account(&user).await.map_err(|_| ErrKind::NotFound(Err::new("User not found.")))?;
+    state
+        .db
+        .delete_account(&user)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("User not found.")))?;
 
     Ok(Json(true))
 }
@@ -760,8 +736,7 @@ pub async fn delete_account(
 ///     "new": "<new password>"
 /// ```
 pub async fn changepw(
-    State(state): State<Arc<AppState>>,
-    Json(session): Json<ChangePasswordQueryParams>,
+    State(state): State<Arc<AppState>>, Json(session): Json<ChangePasswordQueryParams>,
 ) -> Res<bool> {
     let mut eph = state.ephemeral.lock().await;
 
@@ -777,7 +752,7 @@ pub async fn changepw(
     if matches {
         let new_pass = bcrypt::hash(session.new, 12)
             .map_err(|e| ErrKind::Internal(Err::new("BCrypt Error.").with_inner(e)))?;
-        
+
         let _ = state.db.update_password(&session.uuid, new_pass).await;
 
         Ok(Json(true))
@@ -792,9 +767,7 @@ pub async fn changepw(
         eph.password.insert(session.uuid, count);
 
         if count >= MAX_ATTEMPTS_PER_ACC {
-            Err(ErrKind::BadRequest(Err::new(
-                "Exhausted MAX_ATTEMPTS for this account.",
-            )))
+            Err(ErrKind::BadRequest(Err::new("Exhausted MAX_ATTEMPTS for this account.")))
         } else {
             Ok(Json(false))
         }
@@ -836,37 +809,36 @@ pub struct UuidQueryParam {
 pub struct AllowCidrQueryParams {
     pub uuid: Uuid,
     pub nonce: String,
-    pub ip: Ipv4Addr
+    pub ip: Ipv4Addr,
 }
-
 
 #[derive(Deserialize)]
 pub struct DiscordDenyCidrQueryParams {
-    pub id : UserId,
-    pub ip: Ipv4Addr
+    pub id: UserId,
+    pub ip: Ipv4Addr,
 }
 
 #[derive(Deserialize)]
 pub struct MinecraftDenyCidrQueryParams {
-    pub uuid : Uuid,
-    pub ip: Ipv4Addr
+    pub uuid: Uuid,
+    pub ip: Ipv4Addr,
 }
 
 #[derive(Deserialize)]
 pub struct CheckCidrQueryParam {
     pub uuid: Uuid,
-    pub ip: Ipv4Addr
+    pub ip: Ipv4Addr,
 }
 
 #[derive(Deserialize)]
 pub struct BanCidrQueryParam {
     pub uuid: Uuid,
-    pub ip: Ipv4Addr
+    pub ip: Ipv4Addr,
 }
 
 #[derive(Deserialize)]
 pub struct DiscordIdQueryParam {
-    pub id: UserId
+    pub id: UserId,
 }
 
 #[derive(Serialize, Clone, Debug)]

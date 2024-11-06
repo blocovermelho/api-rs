@@ -1,29 +1,24 @@
-use std::collections::HashMap;
-use std::fs;
-use std::net::SocketAddr;
-use std::time::Duration;
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::HashMap, fs, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 use axum::{
     routing::{delete, get, patch, post},
     Router,
 };
-
 use bimap::BiHashMap;
 use bus::OneshotBus;
 use db::drivers::sqlite::Sqlite;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use migrate::migrate;
+use oauth::models::Config;
+use reqwest::{header, Client};
 use routes::LinkResult;
 use serenity::all::GatewayIntents;
 use tokio::sync::Mutex;
-
-use oauth::models::Config;
-use reqwest::{header, Client};
 use tower::ServiceBuilder;
-use tower_http::trace::TraceLayer;
-use tower_http::validate_request::ValidateRequestHeaderLayer;
-use tower_http::{timeout::TimeoutLayer, ServiceBuilderExt};
+use tower_http::{
+    timeout::TimeoutLayer, trace::TraceLayer, validate_request::ValidateRequestHeaderLayer,
+    ServiceBuilderExt,
+};
 use traits::json::JsonSync;
 use uuid::Uuid;
 use websocket::MessageOut;
@@ -42,10 +37,7 @@ pub mod websocket;
 #[allow(clippy::type_complexity)]
 struct Channels {
     links: OneshotBus<Uuid, LinkResult>,
-    messages: Arc<(
-        Mutex<UnboundedSender<MessageOut>>,
-        Mutex<UnboundedReceiver<MessageOut>>,
-    )>,
+    messages: Arc<(Mutex<UnboundedSender<MessageOut>>, Mutex<UnboundedReceiver<MessageOut>>)>,
 }
 
 impl Channels {
@@ -55,7 +47,7 @@ impl Channels {
             messages: {
                 let (tx, rx) = mpsc::unbounded();
                 Arc::new((Mutex::new(tx), Mutex::new(rx)))
-            }
+            },
         }
     }
 }
@@ -111,10 +103,7 @@ pub struct Clients {
 
 impl Clients {
     fn new(serenity: serenity::Client) -> Self {
-        Self {
-            reqwest: Client::new(),
-            serenity,
-        }
+        Self { reqwest: Client::new(), serenity }
     }
 }
 
@@ -143,7 +132,7 @@ async fn main() {
             Sqlite::new(&db_path).await
         }
     } else {
-         Sqlite::new(&db_path).await
+        Sqlite::new(&db_path).await
     };
 
     db.run_migrations().await;
@@ -156,10 +145,11 @@ async fn main() {
         panic!("Please change the configuration file on {:?}.", config_path)
     }
 
-
     let token = std::env::var("DISCORD_BOT_TOKEN").expect("Expected a discord bot token in path.");
 
-    let client = serenity::Client::builder(&token, GatewayIntents::GUILD_MODERATION).await.expect("Error while building client");
+    let client = serenity::Client::builder(&token, GatewayIntents::GUILD_MODERATION)
+        .await
+        .expect("Error while building client");
 
     let state = Arc::new(AppState::new(db, Arc::new(config), client));
 
@@ -180,33 +170,18 @@ async fn main() {
         .layer(ValidateRequestHeaderLayer::bearer(&token));
 
     let server = Router::new()
-        .route(
-            "/:server_id/enable",
-            patch(routes::enable).layer(authenticated.clone()),
-        )
-        .route(
-            "/:server_id/disable",
-            patch(routes::disable).layer(authenticated.clone()),
-        )
+        .route("/:server_id/enable", patch(routes::enable).layer(authenticated.clone()))
+        .route("/:server_id/disable", patch(routes::disable).layer(authenticated.clone()))
         .route("/:server_id", get(routes::get_server))
-        .route(
-            "/:server_id",
-            delete(routes::delete_server).layer(authenticated.clone()),
-        )
-        .route(
-            "/",
-            post(routes::create_server).layer(authenticated.clone()),
-        );
+        .route("/:server_id", delete(routes::delete_server).layer(authenticated.clone()))
+        .route("/", post(routes::create_server).layer(authenticated.clone()));
 
     let user = Router::new()
         .route("/exists", get(routes::user_exists))
         .route("/:user_id", get(routes::get_user))
         .route("/by-name/:username", get(routes::get_user_by_name))
         .route("/by-discord/:discord_id", get(routes::get_user_by_discord))
-        .route(
-            "/:user_id",
-            delete(routes::delete_user).layer(authenticated.clone()),
-        )
+        .route("/:user_id", delete(routes::delete_user).layer(authenticated.clone()))
         .route("/", post(routes::create_user).layer(authenticated.clone()));
 
     let auth = Router::new()
@@ -216,7 +191,7 @@ async fn main() {
         .route("/allow", post(routes::allow_cidr))
         // .route("/disallow", post(routes::disallow_cidr))
         // .route("/disallow-ingame", post(routes::disallow_cidr_ingame))
-        .route("/cidr", get(routes::cidr_check))        
+        .route("/cidr", get(routes::cidr_check))
         .route("/exists", get(routes::account_exists))
         .route("/:server_id/logoff", post(routes::logoff))
         .route("/:server_id/login", post(routes::login))

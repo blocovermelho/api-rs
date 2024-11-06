@@ -68,9 +68,7 @@ where
     K: Eq + Hash,
 {
     pub fn new() -> Self {
-        Self {
-            inner: Mutex::new(HashMap::new()),
-        }
+        Self { inner: Mutex::new(HashMap::new()) }
     }
 
     pub async fn send(&self, k: K, v: T) -> Result<(), T> {

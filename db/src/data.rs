@@ -155,11 +155,7 @@ pub struct Viewport {
 
 impl Default for Viewport {
     fn default() -> Self {
-        Self {
-            loc: Loc::default(),
-            yaw: 0.0,
-            pitch: 0.0,
-        }
+        Self { loc: Loc::default(), yaw: 0.0, pitch: 0.0 }
     }
 }
 
@@ -170,11 +166,11 @@ pub struct Pronoun {
 }
 
 pub mod stub {
-    use crate::data::Modpack;
     use serde::Deserialize;
     use uuid::Uuid;
 
     use super::{Account, Server, User};
+    use crate::data::Modpack;
 
     #[derive(Debug, Clone, Deserialize)]
     pub struct UserStub {
@@ -185,7 +181,9 @@ pub mod stub {
 
     impl PartialEq<User> for UserStub {
         fn eq(&self, other: &User) -> bool {
-            self.uuid == other.uuid && self.discord_id == other.discord_id && self.username == other.username
+            self.uuid == other.uuid &&
+                self.discord_id == other.discord_id &&
+                self.username == other.username
         }
     }
 
@@ -216,9 +214,10 @@ pub mod stub {
 }
 
 pub mod result {
-    use crate::data::{Allowlist, Blacklist, Viewport};
     use serde::Serialize;
     use uuid::Uuid;
+
+    use crate::data::{Allowlist, Blacklist, Viewport};
 
     pub enum PasswordCheck {
         Correct,

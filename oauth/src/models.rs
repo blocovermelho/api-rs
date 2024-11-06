@@ -32,7 +32,7 @@ impl JsonSync for Config {
             client_secret: String::new(),
             redirect_url: String::new(),
             guild_id: String::new(),
-            role_id: String::new()
+            role_id: String::new(),
         }
     }
 

@@ -37,9 +37,7 @@ pub async fn migrate(database_path: &PathBuf, json_path: &PathBuf) -> Response<S
 
 // Let's start by the easiest part. Server data
 pub async fn migrate_server_data(
-    sqlite: &Sqlite,
-    old: &JsonDriver,
-    mappings: &mut HashMap<Uuid, Uuid>,
+    sqlite: &Sqlite, old: &JsonDriver, mappings: &mut HashMap<Uuid, Uuid>,
 ) -> Response<()> {
     let servers = old.get_all_servers().await?;
     println!("[Server Data] Migration Started. Count: {}", servers.len());
@@ -63,17 +61,12 @@ pub async fn migrate_server_data(
 
 // Now onto User data. This is done prior to accounts since accounts needs an user to already exist.
 pub async fn migrate_user_data(
-    sqlite: &Sqlite,
-    old: &JsonDriver,
-    server_id_mappings: &HashMap<Uuid, Uuid>,
+    sqlite: &Sqlite, old: &JsonDriver, server_id_mappings: &HashMap<Uuid, Uuid>,
 ) -> Response<()> {
     let users = old.get_all_users().await?;
     let servers = old.get_all_servers().await?;
     println!("[User Data] Migration Started. Count: {}", users.len());
-    println!(
-        "[User Data] Server Id Mappings: {}",
-        server_id_mappings.len()
-    );
+    println!("[User Data] Server Id Mappings: {}", server_id_mappings.len());
     println!("[Mappings] {:?}", server_id_mappings);
 
     for id in users {
@@ -93,9 +86,9 @@ pub async fn migrate_user_data(
         for server_id in servers.clone() {
             // We cant be sure if an user has a playtime on that server.
             // We have to handle this correctly.
-             let mapped_id = *server_id_mappings
-                    .get(&server_id)
-                    .ok_or(DriverError::DatabaseError(NotFoundError::Server))?;
+            let mapped_id = *server_id_mappings
+                .get(&server_id)
+                .ok_or(DriverError::DatabaseError(NotFoundError::Server))?;
 
             println!("[User Data] Mapped Server: {id} -> {mapped_id}");
 
@@ -104,10 +97,7 @@ pub async fn migrate_user_data(
             if let Ok(viewport) = old.get_viewport(&id, &server_id).await {
                 println!("[User Data] Got Viewport for: {}", server_id);
                 sqlite.create_savedata(&id, &mapped_id).await?;
-                println!(
-                    "[SaveData] Created for user: {} @ server: {}",
-                    id, &mapped_id
-                );
+                println!("[SaveData] Created for user: {} @ server: {}", id, &mapped_id);
                 created = true;
 
                 _ = sqlite.update_viewport(&id, &mapped_id, viewport).await;
@@ -115,18 +105,11 @@ pub async fn migrate_user_data(
             }
 
             if let Ok(playtime) = old.get_playtime(&id, &server_id).await {
-                println!(
-                    "[User Data] Got playtime for {}: {}s",
-                    server_id,
-                    playtime.as_secs()
-                );
+                println!("[User Data] Got playtime for {}: {}s", server_id, playtime.as_secs());
 
                 if !created {
                     sqlite.create_savedata(&id, &mapped_id).await?;
-                    println!(
-                        "[SaveData] Created for user: {} @ server: {}",
-                        id, &mapped_id
-                    );
+                    println!("[SaveData] Created for user: {} @ server: {}", id, &mapped_id);
                 }
 
                 sqlite.update_playtime(&id, &mapped_id, playtime).await?;
@@ -143,20 +126,14 @@ pub async fn migrate_user_data(
 // This should also include all previous ip addresses that that player connected.
 pub async fn migrate_account_data(sqlite: &Sqlite, old: &JsonDriver) -> Response<()> {
     let accounts = old.get_all_accounts().await?;
-    println!(
-        "[Account Data] Migration Started. Count: {}",
-        accounts.len()
-    );
+    println!("[Account Data] Migration Started. Count: {}", accounts.len());
 
     for id in &accounts {
         let account = old.get_account(id).await?;
         let entries = old.get_allowlists(id).await?;
 
         sqlite
-            .create_account(AccountStub {
-                uuid: account.uuid,
-                password: account.password,
-            })
+            .create_account(AccountStub { uuid: account.uuid, password: account.password })
             .await?;
 
         for entry in &entries {

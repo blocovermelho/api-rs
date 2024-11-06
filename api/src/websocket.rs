@@ -10,8 +10,7 @@ use uuid::Uuid;
 use crate::{routes::LinkResult, AppState};
 
 pub async fn handle_socket(
-    ws: WebSocketUpgrade<MessageOut, MessageIn>,
-    State(state): State<Arc<AppState>>,
+    ws: WebSocketUpgrade<MessageOut, MessageIn>, State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     ws.on_upgrade(|socket| link_socket(socket, state))
 }
@@ -24,9 +23,9 @@ async fn link_socket(socket: WebSocket<MessageOut, MessageIn>, state: Arc<AppSta
     let mut read_task = tokio::spawn(async move {
         while let Some(message) = recv.next().await {
             match message {
-                Ok(Message::Item(MessageIn::LinkRequest(request))) =>  {
+                Ok(Message::Item(MessageIn::LinkRequest(request))) => {
                     handle_link_request(request, &read_state).await;
-                },
+                }
                 Ok(_) => {
                     handle_unknown(&read_state).await;
                 }
@@ -57,11 +56,12 @@ async fn link_socket(socket: WebSocket<MessageOut, MessageIn>, state: Arc<AppSta
 
 async fn handle_error(e: axum_typed_websockets::Error<serde_json::Error>, state: &AppState) {
     let mut buff = state.channel.messages.0.lock().await;
-    let _ = buff.send(MessageOut::Error {
-        source_event: "generic".to_owned(),
-        error: e.to_string(),
-    })
-    .await;
+    let _ = buff
+        .send(MessageOut::Error {
+            source_event: "generic".to_owned(),
+            error: e.to_string(),
+        })
+        .await;
 }
 
 async fn handle_link_request(request: Uuid, state: &AppState) {
@@ -72,20 +72,22 @@ async fn handle_link_request(request: Uuid, state: &AppState) {
         return;
     }
 
-    let _  = buff.send(MessageOut::Error {
-        source_event: "link_request".to_owned(),
-        error: "An error has occoured while processing your request".to_owned(),
-    })
-    .await;
+    let _ = buff
+        .send(MessageOut::Error {
+            source_event: "link_request".to_owned(),
+            error: "An error has occoured while processing your request".to_owned(),
+        })
+        .await;
 }
 
 async fn handle_unknown(state: &AppState) {
     let mut buff = state.channel.messages.0.lock().await;
-    let _ = buff.send(MessageOut::Error {
-        source_event: "generic".to_owned(),
-        error: "Unknown Message".to_owned(),
-    })
-    .await;
+    let _ = buff
+        .send(MessageOut::Error {
+            source_event: "generic".to_owned(),
+            error: "Unknown Message".to_owned(),
+        })
+        .await;
 }
 
 #[derive(Deserialize)]
@@ -100,6 +102,6 @@ pub enum MessageIn {
 pub enum MessageOut {
     LinkResponse(LinkResult),
     CidrSyn(Uuid),
-    CidrSynAwk(User) ,
+    CidrSynAwk(User),
     Error { source_event: String, error: String },
 }

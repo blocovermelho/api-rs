@@ -27,9 +27,7 @@ pub fn authorize(client: &BasicClient) -> oauth2::AuthorizationRequest<'_> {
 }
 
 pub async fn get_guild(
-    client: &Client,
-    token: &BasicTokenResponse,
-    config: &Config,
+    client: &Client, token: &BasicTokenResponse, config: &Config,
 ) -> Result<Member, reqwest::Error> {
     let req = client
         .get(BASE_URI.to_owned() + "/users/@me/guilds/" + &config.guild_id + "/member")

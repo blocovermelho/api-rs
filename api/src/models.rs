@@ -34,7 +34,7 @@ pub struct Account {
     #[serde(skip_serializing, skip_deserializing)]
     pub current_join: DateTime<Utc>,
     pub last_login: Option<DateTime<Utc>>,
-    pub cidr: HashSet<Ipv4Net>
+    pub cidr: HashSet<Ipv4Net>,
 }
 
 impl From<CreateUser> for User {
@@ -121,7 +121,7 @@ pub enum ModpackSource {
 pub enum CidrResponse {
     Allowed,
     Banned,
-    Unknown
+    Unknown,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -130,21 +130,21 @@ pub enum CidrKind {
     Allowed {
         user_id: u64,
         self_registered: bool,
-        time: DateTime<Utc>
+        time: DateTime<Utc>,
     },
     /// Iff this CIDR was banned
     Banned {
         uuid: Uuid,
         time: DateTime<Utc>,
         issuer: BanIssuer,
-        ip: Ipv4Addr
-    }
+        ip: Ipv4Addr,
+    },
 }
 
 #[derive(Deserialize, Serialize, Clone)]
 pub enum BanIssuer {
     Manual(Uuid),
-    Automatic
+    Automatic,
 }
 
 #[derive(Serialize, Clone)]
@@ -152,12 +152,11 @@ pub enum BanResponse {
     Existing,
     Merged,
     New,
-    Invalid
+    Invalid,
 }
-
 
 #[derive(Serialize, Clone)]
 pub enum GraceResponse {
     Invalid,
-    Grace(Ipv4Addr)
+    Grace(Ipv4Addr),
 }
