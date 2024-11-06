@@ -60,7 +60,12 @@ pub trait DataSource {
         server_uuid: &Uuid,
         player_uuid: &Uuid,
     ) -> Response<result::ServerJoin>;
-    async fn leave_server(&self, server_uuid: &Uuid, player_uuid: &Uuid) -> Response<result::ServerLeave>;
+    async fn leave_server(
+        &self,
+        server_uuid: &Uuid,
+        player_uuid: &Uuid,
+    ) -> Response<result::ServerLeave>;
+    async fn update_server_status(&self, server_uuid: &Uuid, online: bool) -> Response<bool>;
 
     async fn update_viewport(
         &self,

@@ -335,6 +335,10 @@ impl DataSource for JsonDriver {
         unimplemented!();
     }
 
+    async fn update_server_status(&self, server_uuid: &Uuid, online: bool) -> Response<bool> {
+        unimplemented!();
+    }
+
     async fn update_viewport(
         &self,
         player_uuid: &Uuid,
