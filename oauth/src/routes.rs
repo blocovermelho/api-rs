@@ -7,16 +7,16 @@ use reqwest::Client;
 
 use crate::models::{Config, Member, User};
 
-pub const BASE_URI: &'static str = "https://discord.com/api";
+pub const BASE_URI: &str = "https://discord.com/api";
 
-pub fn get_client(config: Config) -> Result<BasicClient, ParseError> {
+pub fn get_client(config: &Config) -> Result<BasicClient, ParseError> {
     Ok(BasicClient::new(
-        ClientId::new(config.client_id),
-        Some(ClientSecret::new(config.client_secret)),
+        ClientId::new(config.client_id.clone()),
+        Some(ClientSecret::new(config.client_secret.clone())),
         AuthUrl::new(format!("{}{}", BASE_URI, "/oauth2/authorize"))?,
         Some(TokenUrl::new(format!("{}{}", BASE_URI, "/oauth2/token"))?),
     )
-    .set_redirect_uri(RedirectUrl::new(config.redirect_url)?))
+    .set_redirect_uri(RedirectUrl::new(config.redirect_url.clone())?))
 }
 
 pub fn authorize(client: &BasicClient) -> oauth2::AuthorizationRequest<'_> {
@@ -27,9 +27,7 @@ pub fn authorize(client: &BasicClient) -> oauth2::AuthorizationRequest<'_> {
 }
 
 pub async fn get_guild(
-    client: &Client,
-    token: &BasicTokenResponse,
-    config: &Config,
+    client: &Client, token: &BasicTokenResponse, config: &Config,
 ) -> Result<Member, reqwest::Error> {
     let req = client
         .get(BASE_URI.to_owned() + "/users/@me/guilds/" + &config.guild_id + "/member")

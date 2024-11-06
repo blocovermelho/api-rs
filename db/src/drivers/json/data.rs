@@ -72,12 +72,12 @@ pub enum ModpackSource {
     Other,
 }
 
-impl Into<data::ModpackSource> for ModpackSource {
-    fn into(self) -> data::ModpackSource {
-        match self {
-            ModpackSource::Modrinth => data::ModpackSource::Modrinth,
-            ModpackSource::Curseforge => data::ModpackSource::Curseforge,
-            ModpackSource::Other => data::ModpackSource::Other,
+impl From<ModpackSource> for data::ModpackSource {
+    fn from(val: ModpackSource) -> Self {
+        match val {
+            ModpackSource::Modrinth => Self::Modrinth,
+            ModpackSource::Curseforge => Self::Curseforge,
+            ModpackSource::Other => Self::Other,
         }
     }
 }

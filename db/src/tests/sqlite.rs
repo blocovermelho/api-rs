@@ -52,12 +52,9 @@ async fn mock_server(db: &Sqlite) -> Server {
 }
 
 async fn mock_account(db: &Sqlite, uuid: uuid::Uuid) {
-    db.create_account(AccountStub {
-        uuid,
-        password: "SuperSecretSettings".to_owned(),
-    })
-    .await
-    .unwrap()
+    db.create_account(AccountStub { uuid, password: "SuperSecretSettings".to_owned() })
+        .await
+        .unwrap()
 }
 
 // CREATE
@@ -133,10 +130,7 @@ async fn create_blacklist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
     let ip = Ipv4Addr::new(127, 0, 0, 1);
     let res = db
-        .create_blacklist(
-            ip,
-            crate::data::BanActor::AutomatedSystem("Database Testing".to_owned()),
-        )
+        .create_blacklist(ip, crate::data::BanActor::AutomatedSystem("Database Testing".to_owned()))
         .await
         .unwrap();
 
@@ -212,7 +206,6 @@ async fn get_users_by_discord_id(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result
         username: "another_user".to_owned(),
         discord_id: discord_id.clone(),
     };
-
 
     db.create_user(stub).await.unwrap();
     db.create_user(stub2).await.unwrap();
@@ -450,8 +443,16 @@ async fn migrate_user(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let new_uuid = offline_uuid("alikindsys");
     let db = get_wrapper(pool).await.unwrap();
 
-    let old_stub = UserStub { uuid: old_uuid, username: "roridev".to_owned(), discord_id: "-Discord ID-".to_owned() };
-    let new_stub = UserStub { uuid: new_uuid, username: "alikindsys".to_owned(), discord_id: "-Discord ID-".to_owned() };
+    let old_stub = UserStub {
+        uuid: old_uuid,
+        username: "roridev".to_owned(),
+        discord_id: "-Discord ID-".to_owned(),
+    };
+    let new_stub = UserStub {
+        uuid: new_uuid,
+        username: "alikindsys".to_owned(),
+        discord_id: "-Discord ID-".to_owned(),
+    };
 
     let old = db.create_user(old_stub).await.unwrap();
     db.create_user(new_stub).await.unwrap();
@@ -474,7 +475,10 @@ async fn add_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
         discord_id: "-Discord ID-".to_owned(),
     };
 
-    let pronoun = Pronoun { pronoun: "ela/dela".to_owned(), color: "#F5A9B8".to_owned() };
+    let pronoun = Pronoun {
+        pronoun: "ela/dela".to_owned(),
+        color: "#F5A9B8".to_owned(),
+    };
 
     db.create_user(stub.clone()).await.unwrap();
     let pronouns = db.add_pronoun(&uuid, pronoun).await.unwrap();
@@ -495,7 +499,10 @@ async fn remove_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
         discord_id: "-Discord ID-".to_owned(),
     };
 
-    let pronoun = Pronoun { pronoun: "ela/dela".to_owned(), color: "#F5A9B8".to_owned() };
+    let pronoun = Pronoun {
+        pronoun: "ela/dela".to_owned(),
+        color: "#F5A9B8".to_owned(),
+    };
 
     db.create_user(stub.clone()).await.unwrap();
     db.add_pronoun(&uuid, pronoun.clone()).await.unwrap();
@@ -518,13 +525,22 @@ async fn update_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
         discord_id: "-Discord ID-".to_owned(),
     };
 
-    let pronoun = Pronoun { pronoun: "ela/dela".to_owned(), color: "#F5A9B8".to_owned() };
-    let update = Pronoun { pronoun: "ela/dela".to_owned(), color: "#5BCEFA".to_owned()};
+    let pronoun = Pronoun {
+        pronoun: "ela/dela".to_owned(),
+        color: "#F5A9B8".to_owned(),
+    };
+    let update = Pronoun {
+        pronoun: "ela/dela".to_owned(),
+        color: "#5BCEFA".to_owned(),
+    };
 
     db.create_user(stub.clone()).await.unwrap();
     db.add_pronoun(&uuid, pronoun.clone()).await.unwrap();
 
-    let pronouns = db.update_pronoun(&uuid, &pronoun, update.clone()).await.unwrap();
+    let pronouns = db
+        .update_pronoun(&uuid, &pronoun, update.clone())
+        .await
+        .unwrap();
 
     assert_eq!(pronouns.get(0).unwrap().color, update.color);
     assert_eq!(pronouns.len(), 1);
@@ -648,12 +664,9 @@ async fn update_password(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
     let user = mock_user(&db, "alikindsys").await;
 
-    db.create_account(AccountStub {
-        uuid: user.uuid,
-        password: "oldpass".to_owned(),
-    })
-    .await
-    .unwrap();
+    db.create_account(AccountStub { uuid: user.uuid, password: "oldpass".to_owned() })
+        .await
+        .unwrap();
 
     db.update_password(&user.uuid, "newpass".to_owned())
         .await
@@ -843,12 +856,9 @@ async fn delete_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 
     let user = mock_user(&db, "alikindsys").await;
 
-    db.create_account(AccountStub {
-        uuid: user.uuid,
-        password: "oldpass".to_owned(),
-    })
-    .await
-    .unwrap();
+    db.create_account(AccountStub { uuid: user.uuid, password: "oldpass".to_owned() })
+        .await
+        .unwrap();
 
     let res = db.delete_account(&user.uuid).await.unwrap();
     let read = db.get_account(&user.uuid).await.unwrap_err();

@@ -21,3 +21,6 @@ async-trait = "0.1.83"
 sqlite = []
 legacy = []
 testing = []
+
+[lints]
+workspace = true

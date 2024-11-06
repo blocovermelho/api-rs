@@ -54,32 +54,39 @@ where
     inner: Mutex<OneshotBackend<K, T>>,
 }
 
+impl<K, T> Default for OneshotBus<K, T>
+where
+    K: Eq + Hash,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K, T> OneshotBus<K, T>
 where
     K: Eq + Hash,
 {
     pub fn new() -> Self {
-        Self {
-            inner: Mutex::new(HashMap::new()),
-        }
+        Self { inner: Mutex::new(HashMap::new()) }
     }
 
     pub async fn send(&self, k: K, v: T) -> Result<(), T> {
         let sender = self.get_sender(k).await;
 
-        return match sender {
+        match sender {
             Some(s) => s.send(v),
             None => Err(v),
-        };
+        }
     }
 
     pub async fn recv(&self, k: K) -> Result<T, ()> {
         let receiver = self.get_receiver(k).await;
 
-        return match receiver {
+        match receiver {
             Some(r) => r.await.or(Err(())),
             None => Err(()),
-        };
+        }
     }
 
     async fn get_receiver(&self, k: K) -> Option<Receiver<T>> {
@@ -87,10 +94,10 @@ where
 
         let deferred: &DefferedOneshotChannel<T> = data.get(&k).unwrap_or(&(None, None));
 
-        let thisside = has_receiver(&deferred);
-        let otherside = has_sender(&deferred);
+        let thisside = has_receiver(deferred);
+        let otherside = has_sender(deferred);
 
-        return if !thisside && !otherside {
+        if !thisside && !otherside {
             let (s, r) = channel();
             data.insert(k, (Some(s), None));
 
@@ -99,7 +106,7 @@ where
             unset_receiver(&mut data, k)
         } else {
             None
-        };
+        }
     }
 
     async fn get_sender(&self, k: K) -> Option<Sender<T>> {
@@ -107,10 +114,10 @@ where
 
         let deferred: &DefferedOneshotChannel<T> = data.get(&k).unwrap_or(&(None, None));
 
-        let thisside = has_sender(&deferred);
-        let otherside = has_receiver(&deferred);
+        let thisside = has_sender(deferred);
+        let otherside = has_receiver(deferred);
 
-        return if !thisside && !otherside {
+        if !thisside && !otherside {
             let (s, r) = channel();
             data.insert(k, (None, Some(r)));
             Some(s)
@@ -118,6 +125,6 @@ where
             unset_sender(&mut data, k)
         } else {
             None
-        };
+        }
     }
 }

@@ -1,10 +1,11 @@
+#[allow(unused_variables)]
 #[cfg(feature = "legacy")]
 pub mod json;
-#[allow(unused_variables)]
+
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
 
-pub const MAX_SESSION_TIME_MINUTE : i64 = 15;
+pub const MAX_SESSION_TIME_MINUTE: i64 = 15;
 
 pub mod err {
     pub mod base {
@@ -17,8 +18,11 @@ pub mod err {
             User(Uuid), // Equivalent to: Server{Join,Leave}::InvalidUser, {Viewport,Playtime}Update::InvalidUser
             DiscordAccount, // Didn't exist.
             Account(Uuid), // Equivalent to: Password{Check,Modify}::Unregistered
-            UserData { server_uuid: Uuid, player_uuid: Uuid }, // Didn't exist
-            Session, // Equivalent to: SessionCheck::Deny
+            UserData {
+                server_uuid: Uuid,
+                player_uuid: Uuid,
+            }, // Didn't exist
+            Session,    // Equivalent to: SessionCheck::Deny
             WhitelistEntry, // Didn't exist.
             BlacklistEntry, // Equivalent to: PardonAttempt::NotBanned
         }
@@ -26,7 +30,7 @@ pub mod err {
         /// When user input is invalid.
         #[derive(Debug)]
         pub enum InvalidError {
-            Password, // Equivalent to: Password{Check,Modify}::InvalidPassword
+            Password,    // Equivalent to: Password{Check,Modify}::InvalidPassword
             OldPassword, // Didn't exist.
         }
 

@@ -3,8 +3,8 @@ use std::{collections::HashSet, net::Ipv4Addr};
 use ipnet::Ipv4Net;
 use iprange::IpRange;
 
-pub const MIN_COMMON_PREFIX : u8 = 16;
-pub const HOST_PREFIX : u8 = 32;
+pub const MIN_COMMON_PREFIX: u8 = 16;
+pub const HOST_PREFIX: u8 = 32;
 
 pub fn lowest_common_prefix(net: &Ipv4Net, ip: &Ipv4Addr) -> Option<u8> {
     let mut current = net.prefix_len();
@@ -15,8 +15,8 @@ pub fn lowest_common_prefix(net: &Ipv4Net, ip: &Ipv4Addr) -> Option<u8> {
         return Some(current);
     }
 
-    let mut query : String;
-    let mut tester : Ipv4Net;
+    let mut query: String;
+    let mut tester: Ipv4Net;
 
     // Try checking each lower CIDR until a match is found
     while current >= MIN_COMMON_PREFIX {
@@ -38,7 +38,6 @@ pub fn lowest_common_prefix(net: &Ipv4Net, ip: &Ipv4Addr) -> Option<u8> {
     }
 }
 
-
 pub fn any_match(cidr: &HashSet<Ipv4Net>, ip: &Ipv4Addr) -> bool {
     for network in cidr {
         if network.contains(ip) {
@@ -50,19 +49,15 @@ pub fn any_match(cidr: &HashSet<Ipv4Net>, ip: &Ipv4Addr) -> bool {
 }
 
 pub fn get_exact_match(cidr: &HashSet<Ipv4Net>, ip: &Ipv4Addr) -> Option<Ipv4Net> {
-    for network in cidr.clone() {
-        if network.contains(ip) {
-            return Some(network);
-        }
-    }
-
-    None
+    cidr.clone()
+        .into_iter()
+        .find(|&network| network.contains(ip))
 }
 
 pub fn match_with_merge(cidr: &HashSet<Ipv4Net>, ip: &Ipv4Addr) -> Option<(Ipv4Net, Ipv4Net)> {
     // Iterate each network and attempt to merge the current IP with it.
     for network in cidr.clone() {
-        if let Some(prefix) =  lowest_common_prefix(&network, ip) {
+        if let Some(prefix) = lowest_common_prefix(&network, ip) {
             // Found Candidate.
             return Some((network, swap_prefix(&network, prefix)));
         }
@@ -75,7 +70,7 @@ pub fn try_merge(cidr: &HashSet<Ipv4Net>) -> Option<HashSet<Ipv4Net>> {
     let mut range = as_range(cidr);
     range.simplify();
 
-    let networks : HashSet<Ipv4Net> = range.into_iter().map(|it| it).collect();
+    let networks: HashSet<Ipv4Net> = range.into_iter().collect();
 
     if networks.len() < cidr.len() {
         Some(networks)
@@ -85,21 +80,20 @@ pub fn try_merge(cidr: &HashSet<Ipv4Net>) -> Option<HashSet<Ipv4Net>> {
 }
 
 fn as_range(cidr: &HashSet<Ipv4Net>) -> IpRange<Ipv4Net> {
-    let mut range : IpRange<Ipv4Net> = IpRange::new();
+    let mut range: IpRange<Ipv4Net> = IpRange::new();
 
     for addr in cidr.clone() {
         range.add(addr);
     }
 
-    return range;
+    range
 }
 
 pub fn encode(net: &Ipv4Net) -> String {
     format!("{}/{}", net.addr(), net.prefix_len())
 }
 
-
-pub fn decode(str: &String) -> Option<Ipv4Net> {
+pub fn decode(str: &str) -> Option<Ipv4Net> {
     str.parse().ok()
 }
 

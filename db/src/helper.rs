@@ -2,7 +2,7 @@ use std::net::Ipv4Addr;
 
 use ipnet::Ipv4Net;
 
-use crate::{data::Allowlist, interface::NetworkProvider};
+use crate::interface::NetworkProvider;
 
 pub const LOWEST_PREFIX_LEN: u8 = 16;
 
@@ -17,7 +17,7 @@ where
 
         let mut mask = entry.get_mask();
         while mask >= LOWEST_PREFIX_LEN {
-            mask = mask - 1;
+            mask -= 1;
             if entry.with_mask(mask).contains(&ip) {
                 return CidrAction::MaskUpdate(entry, mask);
             }

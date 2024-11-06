@@ -1,4 +1,4 @@
-use core::time::{self, Duration};
+use core::time::Duration;
 use std::net::Ipv4Addr;
 
 use chrono::{DateTime, Utc};
@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::interface::NetworkProvider;
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(sqlx::FromRow, Debug, Serialize)]
 pub struct User {
     pub uuid: Uuid,
     pub username: String,
@@ -26,7 +26,7 @@ pub struct Account {
     pub current_join: DateTime<Utc>,
 }
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(sqlx::FromRow, Debug, Clone)]
 pub struct Allowlist {
     pub uuid: Uuid,
     pub base_ip: u32,
@@ -57,7 +57,7 @@ pub struct SaveData {
     pub playtime: Json<Duration>,
 }
 
-#[derive(sqlx::FromRow, Debug, PartialEq)]
+#[derive(sqlx::FromRow, Debug, PartialEq, Serialize)]
 pub struct Server {
     pub uuid: Uuid,
     pub name: String,
@@ -82,7 +82,7 @@ pub enum ModpackSource {
     Other,
 }
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(sqlx::FromRow, Debug, Clone)]
 pub struct Blacklist {
     pub created_at: DateTime<Utc>,
     pub actor: Json<BanActor>,
@@ -108,14 +108,14 @@ impl NetworkProvider for Blacklist {
 impl Blacklist {
     pub fn decrement_hitcount(&mut self) -> i64 {
         if self.hits > 0 {
-            self.hits = self.hits - 1;
+            self.hits -= 1;
         }
 
         self.hits
     }
 
     pub fn increment_hitcount(&mut self) -> i64 {
-        self.hits = self.hits + 1;
+        self.hits += 1;
 
         self.hits
     }
@@ -155,11 +155,7 @@ pub struct Viewport {
 
 impl Default for Viewport {
     fn default() -> Self {
-        Self {
-            loc: Loc::default(),
-            yaw: 0.0,
-            pitch: 0.0,
-        }
+        Self { loc: Loc::default(), yaw: 0.0, pitch: 0.0 }
     }
 }
 
@@ -170,12 +166,13 @@ pub struct Pronoun {
 }
 
 pub mod stub {
-    use crate::data::Modpack;
+    use serde::Deserialize;
     use uuid::Uuid;
 
     use super::{Account, Server, User};
+    use crate::data::Modpack;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Deserialize)]
     pub struct UserStub {
         pub uuid: Uuid,
         pub username: String,
@@ -184,7 +181,9 @@ pub mod stub {
 
     impl PartialEq<User> for UserStub {
         fn eq(&self, other: &User) -> bool {
-            self.uuid == other.uuid && self.discord_id == other.discord_id && self.username == other.username
+            self.uuid == other.uuid &&
+                self.discord_id == other.discord_id &&
+                self.username == other.username
         }
     }
 
@@ -200,7 +199,7 @@ pub mod stub {
         }
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Deserialize)]
     pub struct ServerStub {
         pub name: String,
         pub supported_versions: Vec<String>,
@@ -215,8 +214,10 @@ pub mod stub {
 }
 
 pub mod result {
-    use crate::data::{Allowlist, Blacklist, Viewport};
+    use serde::Serialize;
     use uuid::Uuid;
+
+    use crate::data::{Allowlist, Blacklist, Viewport};
 
     pub enum PasswordCheck {
         Correct,
@@ -268,6 +269,7 @@ pub mod result {
         Error(String),
     }
 
+    #[derive(Serialize)]
     pub enum ServerJoin {
         FirstJoin,
         Resume(Viewport),

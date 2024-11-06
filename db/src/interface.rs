@@ -1,9 +1,15 @@
-use std::net::Ipv4Addr;
-use std::time::Duration;
-use chrono::{DateTime, Utc};
+use std::{net::Ipv4Addr, time::Duration};
+
 use ipnet::Ipv4Net;
 use uuid::Uuid;
-use crate::{data::{result, stub, Account, Allowlist, BanActor, Blacklist, Pronoun, SaveData, Server, User, Viewport}, drivers::err::Response};
+
+use crate::{
+    data::{
+        result, stub, Account, Allowlist, BanActor, Blacklist, Pronoun, SaveData, Server, User,
+        Viewport,
+    },
+    drivers::err::Response,
+};
 
 #[async_trait::async_trait]
 pub trait DataSource {
@@ -20,21 +26,17 @@ pub trait DataSource {
     async fn get_account(&self, uuid: &Uuid) -> Response<Account>;
     async fn get_all_accounts(&self) -> Response<Vec<Uuid>>;
     async fn update_password(&self, player_uuid: &Uuid, new_password: String) -> Response<()>;
+    async fn update_current_join(&self, player_uuid: &Uuid) -> Response<()>;
     async fn migrate_account(&self, from: &Uuid, to: &Uuid) -> Response<()>;
     async fn delete_account(&self, player_uuid: &Uuid) -> Response<()>;
 
     async fn create_allowlist(&self, player_uuid: &Uuid, ip: Ipv4Addr) -> Response<Allowlist>;
     async fn get_allowlists(&self, player_uuid: &Uuid) -> Response<Vec<Allowlist>>;
     async fn get_allowlists_with_ip(
-        &self,
-        player_uuid: &Uuid,
-        ip: Ipv4Addr,
+        &self, player_uuid: &Uuid, ip: Ipv4Addr,
     ) -> Response<Vec<Allowlist>>;
     async fn get_allowlists_with_range(
-        &self,
-        player_uuid: &Uuid,
-        ip: Ipv4Addr,
-        mask: u8,
+        &self, player_uuid: &Uuid, ip: Ipv4Addr, mask: u8,
     ) -> Response<Vec<Allowlist>>;
     async fn bump_allowlist(&self, entry: Allowlist) -> Response<()>;
     async fn broaden_allowlist_mask(&self, entry: Allowlist, new_mask: u8) -> Response<()>;
@@ -55,31 +57,28 @@ pub trait DataSource {
     async fn get_all_servers(&self) -> Response<Vec<Uuid>>;
 
     async fn join_server(
-        &self,
-        server_uuid: &Uuid,
-        player_uuid: &Uuid,
+        &self, server_uuid: &Uuid, player_uuid: &Uuid,
     ) -> Response<result::ServerJoin>;
-    async fn leave_server(&self, server_uuid: &Uuid, player_uuid: &Uuid) -> Response<result::ServerLeave>;
+    async fn leave_server(
+        &self, server_uuid: &Uuid, player_uuid: &Uuid,
+    ) -> Response<result::ServerLeave>;
+    async fn update_server_status(&self, server_uuid: &Uuid, online: bool) -> Response<bool>;
 
     async fn update_viewport(
-        &self,
-        player_uuid: &Uuid,
-        server_uuid: &Uuid,
-        viewport: Viewport,
+        &self, player_uuid: &Uuid, server_uuid: &Uuid, viewport: Viewport,
     ) -> Response<Viewport>;
     async fn get_viewport(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Viewport>;
 
     async fn update_playtime(
-        &self,
-        player_uuid: &Uuid,
-        server_uuid: &Uuid,
-        new_playtime: Duration,
+        &self, player_uuid: &Uuid, server_uuid: &Uuid, new_playtime: Duration,
     ) -> Response<()>;
     async fn get_playtime(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Duration>;
 
     async fn add_pronoun(&self, player_uuid: &Uuid, pronoun: Pronoun) -> Response<Vec<Pronoun>>;
     async fn remove_pronoun(&self, player_uuid: &Uuid, pronoun: Pronoun) -> Response<Vec<Pronoun>>;
-    async fn update_pronoun(&self, player_uuid: &Uuid, old: &Pronoun, new: Pronoun) -> Response<Vec<Pronoun>>;
+    async fn update_pronoun(
+        &self, player_uuid: &Uuid, old: &Pronoun, new: Pronoun,
+    ) -> Response<Vec<Pronoun>>;
 
     async fn create_savedata(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<SaveData>;
 }

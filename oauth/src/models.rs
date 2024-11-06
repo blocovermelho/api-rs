@@ -28,11 +28,11 @@ impl JsonSync for Config {
 
     fn new() -> Self::T {
         Self {
-            client_id: "".to_owned(),
-            client_secret: "".to_owned(),
-            redirect_url: "".to_owned(),
-            guild_id: "".to_owned(),
-            role_id: "".to_owned()
+            client_id: String::new(),
+            client_secret: String::new(),
+            redirect_url: String::new(),
+            guild_id: String::new(),
+            role_id: String::new(),
         }
     }
 
