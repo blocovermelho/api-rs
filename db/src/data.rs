@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::interface::NetworkProvider;
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(sqlx::FromRow, Debug, Serialize)]
 pub struct User {
     pub uuid: Uuid,
     pub username: String,
@@ -57,7 +57,7 @@ pub struct SaveData {
     pub playtime: Json<Duration>,
 }
 
-#[derive(sqlx::FromRow, Debug, PartialEq)]
+#[derive(sqlx::FromRow, Debug, PartialEq, Serialize)]
 pub struct Server {
     pub uuid: Uuid,
     pub name: String,
@@ -216,6 +216,7 @@ pub mod stub {
 
 pub mod result {
     use crate::data::{Allowlist, Blacklist, Viewport};
+    use serde::Serialize;
     use uuid::Uuid;
 
     pub enum PasswordCheck {
@@ -268,6 +269,7 @@ pub mod result {
         Error(String),
     }
 
+    #[derive(Serialize)]
     pub enum ServerJoin {
         FirstJoin,
         Resume(Viewport),
