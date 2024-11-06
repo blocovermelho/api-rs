@@ -1,6 +1,7 @@
+#[allow(unused_variables)]
 #[cfg(feature = "legacy")]
 pub mod json;
-#[allow(unused_variables)]
+
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
 
