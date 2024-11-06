@@ -277,7 +277,7 @@ impl DataSource for Sqlite {
     /// Returns an [`DriverError::DuplicateKeyInsertion`] if an account with the given uuid or ip address can be found.
     #[tracing::instrument(skip(ip))]
     async fn create_allowlist(&self, player_uuid: &Uuid, ip: Ipv4Addr) -> Response<Allowlist> {
-        let user = self.get_account(player_uuid).await?;
+        let _ = self.get_account(player_uuid).await?;
 
         let query = sqlx::query_as::<_, Allowlist>(
             "INSERT INTO allowlist (uuid, base_ip, mask, last_join, hits) VALUES ($1, $2, $3, $4, $5) RETURNING *"
@@ -879,7 +879,7 @@ impl DataSource for Sqlite {
     /// - [`DriverError::DuplicateKeyInsertion`] if that user/server pair already existed.
     #[tracing::instrument]
     async fn create_savedata(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<SaveData> {
-        let user = self.get_user_by_uuid(player_uuid).await?;
+        let _ = self.get_user_by_uuid(player_uuid).await?;
         let _ = self.get_server(server_uuid).await?;
 
         let query = sqlx::query_as::<_, SaveData>("INSERT INTO savedata (server_uuid, player_uuid, playtime, viewport) VALUES ($1, $2, $3, $4) RETURNING *")
