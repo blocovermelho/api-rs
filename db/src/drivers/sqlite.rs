@@ -219,6 +219,23 @@ impl DataSource for Sqlite {
         )
     }
 
+    /// Updates an [`Account`]'s current join time.
+    ///
+    /// Returns an [`base::NotFoundError::Account`] wrapped inside a [`DriverError::DatabaseError`] if an account with the given uuid can't be found.
+    #[tracing::instrument]
+    async fn update_current_join(&self, player_uuid: &uuid::Uuid) -> Response<()> {
+        let query = sqlx::query("UPDATE accounts SET current_join = $1 WHERE uuid = $2")
+            .bind(Utc::now())
+            .bind(player_uuid)
+            .execute(&self.0)
+            .await;
+
+        map_or_log(
+            query.map(|_| ()),
+            DriverError::DatabaseError(base::NotFoundError::Account(player_uuid.clone())),
+        )
+    }
+
     /// Migrates an [`Account`]'s password to a new Account, returing the unit value on success.
     ///
     /// Returns an [`base::NotFoundError::User`] wrapped inside a [`DriverError::DatabaseError`] if either user with the provided uuid can't be found.  
