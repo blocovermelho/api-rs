@@ -93,6 +93,27 @@ pub async fn migrate_user_data(
         for server_id in servers.clone() {
             // We cant be sure if an user has a playtime on that server.
             // We have to handle this correctly.
+             let mapped_id = server_id_mappings
+                    .get(&server_id)
+                    .ok_or(DriverError::DatabaseError(NotFoundError::Server))?
+                    .clone();
+
+            println!("[User Data] Mapped Server: {id} -> {mapped_id}");
+
+            let mut created = false;
+
+            if let Ok(viewport) = old.get_viewport(&id, &server_id).await {
+                println!("[User Data] Got Viewport for: {}", server_id);
+                sqlite.create_savedata(&id, &mapped_id).await?;
+                println!(
+                    "[SaveData] Created for user: {} @ server: {}",
+                    id, &mapped_id
+                );
+                created = true;
+
+                _ = sqlite.update_viewport(&id, &mapped_id, viewport).await;
+                println!("[SaveData] Updated viewport.");
+            }
 
             if let Ok(playtime) = old.get_playtime(&id, &server_id).await {
                 println!(
@@ -100,20 +121,14 @@ pub async fn migrate_user_data(
                     server_id,
                     playtime.as_secs()
                 );
-                // Ah, we also need to convert the ids.
-                let mapped_id = server_id_mappings
-                    .get(&server_id)
-                    .ok_or(DriverError::DatabaseError(NotFoundError::Server))?
-                    .clone();
 
-                println!("[User Data] Mapped Server: {id} -> {mapped_id}");
-
-                sqlite.create_savedata(&id, &mapped_id).await?;
-
-                println!(
-                    "[SaveData] Created for user: {} @ server: {}",
-                    id, &mapped_id
-                );
+                if !created {
+                    sqlite.create_savedata(&id, &mapped_id).await?;
+                    println!(
+                        "[SaveData] Created for user: {} @ server: {}",
+                        id, &mapped_id
+                    );
+                }
 
                 sqlite.update_playtime(&id, &mapped_id, playtime).await?;
                 println!("[SaveData] Updated playime.");
