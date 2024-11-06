@@ -26,7 +26,7 @@ pub struct Account {
     pub current_join: DateTime<Utc>,
 }
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(sqlx::FromRow, Debug, Clone)]
 pub struct Allowlist {
     pub uuid: Uuid,
     pub base_ip: u32,
@@ -82,7 +82,7 @@ pub enum ModpackSource {
     Other,
 }
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(sqlx::FromRow, Debug, Clone)]
 pub struct Blacklist {
     pub created_at: DateTime<Utc>,
     pub actor: Json<BanActor>,
