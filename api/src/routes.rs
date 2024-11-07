@@ -6,6 +6,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use bv_discord::utils::notify;
 use chrono::{DateTime, Utc};
 use db::{
     data::{
@@ -100,9 +101,11 @@ pub async fn link(
     };
 
     let mut buff = state.channel.messages.0.lock().await;
-    let _ = buff.send(MessageOut::LinkResponse(link_result)).await;
+    let _ = buff
+        .send(MessageOut::LinkResponse(link_result.clone()))
+        .await;
 
-    Err(ErrKind::Internal(Err::new("Not implemented.")))
+    Ok(Json(link_result))
 }
 
 /// [GET] /api/oauth?uuid=<ID>
@@ -675,6 +678,29 @@ pub async fn cidr_check(
         }
     }
 
+    let server_name = match params.server {
+        Some(uuid) => {
+            if let Ok(server) = state.db.get_server(&uuid).await {
+                server.name
+            } else {
+                "Servidor Desconhecido".to_string()
+            }
+        }
+        None => "Servidor Desconhecido".to_string(),
+    };
+
+    // An user exist and can be notified.
+    if let Ok(user) = state.db.get_user_by_uuid(&params.uuid).await {
+        notify::unknown_ip(
+            &state.client.serenity,
+            &user,
+            &server_name,
+            &params.ip,
+            &state.config.verification_channel_id,
+        )
+        .await;
+    }
+
     Ok(Json(CidrResponse::Unknown))
 }
 
@@ -828,6 +854,8 @@ pub struct MinecraftDenyCidrQueryParams {
 pub struct CheckCidrQueryParam {
     pub uuid: Uuid,
     pub ip: Ipv4Addr,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server: Option<Uuid>,
 }
 
 #[derive(Deserialize)]

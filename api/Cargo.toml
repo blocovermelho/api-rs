@@ -29,6 +29,7 @@ bimap = { version = "0.6.3" }
 oauth = { path = "../oauth" }
 traits = { path = "../traits" }
 db = { path = "../db", features = ["sqlite", "legacy"] }
+bv-discord = { path = "../discord" }
 uuid-mc = { version = "0.3.0" } 
 
 oauth2 = "4.4.2"
