@@ -65,7 +65,7 @@ async fn create_user(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
     let stub = UserStub {
-        uuid: uuid.clone(),
+        uuid,
         username: "alikindsys".to_owned(),
         discord_id: "-Discord ID-".to_owned(),
     };
@@ -166,7 +166,7 @@ async fn get_user_by_uuid(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
     let stub = UserStub {
-        uuid: uuid.clone(),
+        uuid,
         username: "alikindsys".to_owned(),
         discord_id: "-Discord ID-".to_owned(),
     };
@@ -470,7 +470,7 @@ async fn add_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
     let stub = UserStub {
-        uuid: uuid.clone(),
+        uuid,
         username: "alikindsys".to_owned(),
         discord_id: "-Discord ID-".to_owned(),
     };
@@ -494,7 +494,7 @@ async fn remove_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
     let stub = UserStub {
-        uuid: uuid.clone(),
+        uuid,
         username: "alikindsys".to_owned(),
         discord_id: "-Discord ID-".to_owned(),
     };
@@ -520,7 +520,7 @@ async fn update_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
     let stub = UserStub {
-        uuid: uuid.clone(),
+        uuid,
         username: "alikindsys".to_owned(),
         discord_id: "-Discord ID-".to_owned(),
     };
@@ -819,7 +819,7 @@ async fn delete_user(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
     let stub = UserStub {
-        uuid: uuid.clone(),
+        uuid,
         username: "alikindsys".to_owned(),
         discord_id: "-Discord ID-".to_owned(),
     };
