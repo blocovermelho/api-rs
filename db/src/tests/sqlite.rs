@@ -608,6 +608,22 @@ async fn leave_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 }
 
 #[test(sqlx::test(migrations = "src/migrations"))]
+async fn update_server_status(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    // Setup
+    let server = mock_server(&db).await;
+    let old = server.online.0;
+    // Action
+    let new = db.update_server_status(&server.uuid, !old).await.unwrap();
+    let new_server = db.get_server(&server.uuid).await.unwrap();
+    let check = new_server.online.0;
+    // Test
+    assert_eq!(check, new);
+    assert_ne!(new, old);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
 async fn update_viewport(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
