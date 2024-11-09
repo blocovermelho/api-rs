@@ -607,15 +607,15 @@ impl DataSource for Sqlite {
     /// Returns:
     /// - [`base::NotFoundError::Server`] if the server doesn't exists.
     async fn update_server_status(&self, server_uuid: &Uuid, online: bool) -> Response<bool> {
-        let query = sqlx::query_scalar::<_, bool>(
+        let query = sqlx::query_scalar::<_, Json<bool>>(
             "UPDATE servers SET online = $1 WHERE uuid = $2 RETURNING online",
         )
-        .bind(online)
+        .bind(Json(online))
         .bind(server_uuid)
         .fetch_one(&self.0)
         .await;
 
-        map_or_log(query, DriverError::DatabaseError(base::NotFoundError::Server))
+        map_or_log(query.map(|it| it.0), DriverError::DatabaseError(base::NotFoundError::Server))
     }
 
     /// Updates an [`User`]'s [`Viewport`] for a given [`Server`], returning the updated [`Viewport`].
