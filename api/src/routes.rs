@@ -265,7 +265,7 @@ pub async fn enable(State(state): State<Arc<AppState>>, Path(server_id): Path<Uu
 pub async fn disable(State(state): State<Arc<AppState>>, Path(server_id): Path<Uuid>) -> Res<bool> {
     let status = state
         .db
-        .update_server_status(&server_id, true)
+        .update_server_status(&server_id, false)
         .await
         .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?;
 
