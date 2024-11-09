@@ -14,6 +14,7 @@ use db::{
         stub::{AccountStub, ServerStub, UserStub},
         BanActor, Server, User, Viewport,
     },
+    drivers::err::{base::NotFoundError, DriverError},
     interface::{DataSource, NetworkProvider},
 };
 use futures::SinkExt;
@@ -398,6 +399,15 @@ pub async fn logoff(
         .await
         .map_err(|_| ErrKind::NotFound(Err::new("Account not foumd.")))?;
 
+    if let Err(DriverError::DatabaseError(NotFoundError::UserData{ server_uuid: _, player_uuid: _ })) = state
+        .db
+        .get_viewport(&session.uuid, &server.uuid)
+        .await
+       
+    {
+        let _ = state.db.create_savedata(&session.uuid, &server.uuid).await;
+    }
+    
     state
         .db
         .update_viewport(&session.uuid, &server.uuid, pos)
