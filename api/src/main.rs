@@ -204,7 +204,7 @@ async fn main() {
         .route("/:server_id/logoff", post(routes::logoff))
         .route("/:server_id/login", post(routes::login))
         .route("/:user_id", delete(routes::delete_account))
-        .route("/:user_id/resume", patch(routes::resume))
+        .route("/resume", patch(routes::resume))
         .route("/session", get(routes::get_session))
         .route("/changepw", patch(routes::changepw))
         .route("/ws", get(websocket::handle_socket))
