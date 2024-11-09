@@ -6,6 +6,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use bv_discord::utils::notify;
 use chrono::{DateTime, Utc};
 use db::{
     data::{
@@ -13,6 +14,7 @@ use db::{
         stub::{AccountStub, ServerStub, UserStub},
         BanActor, Server, User, Viewport,
     },
+    drivers::err::{base::NotFoundError, DriverError},
     interface::{DataSource, NetworkProvider},
 };
 use futures::SinkExt;
@@ -100,9 +102,11 @@ pub async fn link(
     };
 
     let mut buff = state.channel.messages.0.lock().await;
-    let _ = buff.send(MessageOut::LinkResponse(link_result)).await;
+    let _ = buff
+        .send(MessageOut::LinkResponse(link_result.clone()))
+        .await;
 
-    Err(ErrKind::Internal(Err::new("Not implemented.")))
+    Ok(Json(link_result))
 }
 
 /// [GET] /api/oauth?uuid=<ID>
@@ -262,7 +266,7 @@ pub async fn enable(State(state): State<Arc<AppState>>, Path(server_id): Path<Uu
 pub async fn disable(State(state): State<Arc<AppState>>, Path(server_id): Path<Uuid>) -> Res<bool> {
     let status = state
         .db
-        .update_server_status(&server_id, true)
+        .update_server_status(&server_id, false)
         .await
         .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?;
 
@@ -395,6 +399,15 @@ pub async fn logoff(
         .await
         .map_err(|_| ErrKind::NotFound(Err::new("Account not foumd.")))?;
 
+    if let Err(DriverError::DatabaseError(NotFoundError::UserData{ server_uuid: _, player_uuid: _ })) = state
+        .db
+        .get_viewport(&session.uuid, &server.uuid)
+        .await
+       
+    {
+        let _ = state.db.create_savedata(&session.uuid, &server.uuid).await;
+    }
+    
     state
         .db
         .update_viewport(&session.uuid, &server.uuid, pos)
@@ -424,6 +437,18 @@ pub async fn logoff(
         .leave_server(&server.uuid, &session.uuid)
         .await
         .unwrap();
+
+
+    // Bump allowlists at logoff.
+    if let Ok(entries) = state
+        .db
+        .get_allowlists_with_ip(&session.uuid, session.ip)
+        .await
+    {
+        for entry in entries {
+            let _ = state.db.bump_allowlist(entry).await;
+        }
+    }
 
     let _ = client
         .http
@@ -675,6 +700,29 @@ pub async fn cidr_check(
         }
     }
 
+    let server_name = match params.server {
+        Some(uuid) => {
+            if let Ok(server) = state.db.get_server(&uuid).await {
+                server.name
+            } else {
+                "Servidor Desconhecido".to_string()
+            }
+        }
+        None => "Servidor Desconhecido".to_string(),
+    };
+
+    // An user exist and can be notified.
+    if let Ok(user) = state.db.get_user_by_uuid(&params.uuid).await {
+        notify::unknown_ip(
+            &state.client.serenity,
+            &user,
+            &server_name,
+            &params.ip,
+            &state.config.verification_channel_id,
+        )
+        .await;
+    }
+
     Ok(Json(CidrResponse::Unknown))
 }
 
@@ -828,6 +876,8 @@ pub struct MinecraftDenyCidrQueryParams {
 pub struct CheckCidrQueryParam {
     pub uuid: Uuid,
     pub ip: Ipv4Addr,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server: Option<Uuid>,
 }
 
 #[derive(Deserialize)]

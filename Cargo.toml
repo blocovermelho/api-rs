@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "api", "oauth", "traits", "db"
+    "api", "oauth", "traits", "db", "discord"
 ]
 
 resolver = "2"

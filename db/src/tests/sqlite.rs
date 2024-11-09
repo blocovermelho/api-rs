@@ -65,7 +65,7 @@ async fn create_user(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
     let stub = UserStub {
-        uuid: uuid.clone(),
+        uuid,
         username: "alikindsys".to_owned(),
         discord_id: "-Discord ID-".to_owned(),
     };
@@ -166,7 +166,7 @@ async fn get_user_by_uuid(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
     let stub = UserStub {
-        uuid: uuid.clone(),
+        uuid,
         username: "alikindsys".to_owned(),
         discord_id: "-Discord ID-".to_owned(),
     };
@@ -470,7 +470,7 @@ async fn add_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
     let stub = UserStub {
-        uuid: uuid.clone(),
+        uuid,
         username: "alikindsys".to_owned(),
         discord_id: "-Discord ID-".to_owned(),
     };
@@ -494,7 +494,7 @@ async fn remove_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
     let stub = UserStub {
-        uuid: uuid.clone(),
+        uuid,
         username: "alikindsys".to_owned(),
         discord_id: "-Discord ID-".to_owned(),
     };
@@ -520,7 +520,7 @@ async fn update_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
     let stub = UserStub {
-        uuid: uuid.clone(),
+        uuid,
         username: "alikindsys".to_owned(),
         discord_id: "-Discord ID-".to_owned(),
     };
@@ -608,6 +608,22 @@ async fn leave_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 }
 
 #[test(sqlx::test(migrations = "src/migrations"))]
+async fn update_server_status(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    // Setup
+    let server = mock_server(&db).await;
+    let old = server.online.0;
+    // Action
+    let new = db.update_server_status(&server.uuid, !old).await.unwrap();
+    let new_server = db.get_server(&server.uuid).await.unwrap();
+    let check = new_server.online.0;
+    // Test
+    assert_eq!(check, new);
+    assert_ne!(new, old);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
 async fn update_viewport(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
@@ -675,6 +691,30 @@ async fn update_password(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let acc = db.get_account(&user.uuid).await.unwrap();
 
     assert_eq!(acc.password, "newpass".to_owned());
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn update_current_join(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+
+    // Setup
+    let user = mock_user(&db, "alikindsys").await;
+    mock_account(&db, user.uuid).await;
+    let account = db.get_account(&user.uuid).await.unwrap();
+
+    // Action
+    let old = account.current_join;
+    db.update_current_join(&user.uuid).await.unwrap();
+
+    let new_acc = db.get_account(&user.uuid).await.unwrap();
+    let new = new_acc.current_join;
+
+    // Test
+    assert!(new > old);
+    assert_ne!(new, old);
+    assert_eq!(account.uuid, new_acc.uuid);
 
     Ok(())
 }
@@ -819,7 +859,7 @@ async fn delete_user(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
     let stub = UserStub {
-        uuid: uuid.clone(),
+        uuid,
         username: "alikindsys".to_owned(),
         discord_id: "-Discord ID-".to_owned(),
     };

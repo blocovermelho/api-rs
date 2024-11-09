@@ -6,6 +6,7 @@ use axum::{
 };
 use bimap::BiHashMap;
 use bus::OneshotBus;
+use bv_discord::framework;
 use db::drivers::sqlite::Sqlite;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use migrate::migrate;
@@ -63,9 +64,9 @@ pub struct AppState {
 }
 
 impl AppState {
-    fn new(db: Sqlite, config: Arc<Config>, serenity: serenity::Client) -> Self {
+    fn new(db: Arc<Sqlite>, config: Arc<Config>, serenity: serenity::Client) -> Self {
         Self {
-            db: Arc::new(db),
+            db,
             ephemeral: Arc::new(Mutex::new(Ephemeral::new())),
             config,
             client: Arc::new(Clients::new(serenity)),
@@ -127,12 +128,12 @@ async fn main() {
                         .unwrap_or_else(|_| PathBuf::from("data.json"))
                 ),
             }
-            db
+            Arc::new(db)
         } else {
-            Sqlite::new(&db_path).await
+            Arc::new(Sqlite::new(&db_path).await)
         }
     } else {
-        Sqlite::new(&db_path).await
+        Arc::new(Sqlite::new(&db_path).await)
     };
 
     db.run_migrations().await;
@@ -145,20 +146,27 @@ async fn main() {
         panic!("Please change the configuration file on {:?}.", config_path)
     }
 
+    let bot_fw = framework(db.clone()).await;
+
     let token = std::env::var("DISCORD_BOT_TOKEN").expect("Expected a discord bot token in path.");
 
-    let client = serenity::Client::builder(&token, GatewayIntents::GUILD_MODERATION)
+    let http_client = serenity::Client::builder(&token, GatewayIntents::GUILD_MODERATION)
         .await
         .expect("Error while building client");
 
-    let state = Arc::new(AppState::new(db, Arc::new(config), client));
+    let mut gateway_client = serenity::Client::builder(&token, GatewayIntents::GUILD_MODERATION)
+        .framework(bot_fw)
+        .await
+        .expect("Error while building client");
+
+    let state = Arc::new(AppState::new(db, Arc::new(config), http_client));
 
     tracing_subscriber::fmt::init();
 
     let sensitive_headers: Arc<[_]> = vec![header::AUTHORIZATION, header::COOKIE].into();
 
     let stack = ServiceBuilder::new()
-        .sensitive_request_headers(sensitive_headers.clone())
+        .sensitive_request_headers(sensitive_headers)
         .layer(TimeoutLayer::new(Duration::from_secs(20)))
         .compression();
 
@@ -196,7 +204,7 @@ async fn main() {
         .route("/:server_id/logoff", post(routes::logoff))
         .route("/:server_id/login", post(routes::login))
         .route("/:user_id", delete(routes::delete_account))
-        .route("/:user_id/resume", patch(routes::resume))
+        .route("/resume", patch(routes::resume))
         .route("/session", get(routes::get_session))
         .route("/changepw", patch(routes::changepw))
         .route("/ws", get(websocket::handle_socket))
@@ -217,8 +225,10 @@ async fn main() {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .expect("server err");
+    // Threads
+    let api = axum::Server::bind(&addr).serve(app.into_make_service());
+    let bot = gateway_client.start();
+
+    // Spawn the threads
+    let _ = tokio::join!(tokio::spawn(api), bot);
 }

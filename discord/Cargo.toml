@@ -1,0 +1,16 @@
+[package]
+name = "bv-discord"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+poise =  "0.6.1"
+uuid = { version = "1.5.0", features = ["v4", "fast-rng", "serde" ] }
+bcrypt = "0.15"
+tokio = {version = "1.40.0", features = ["rt", "macros"]}
+chrono = { version = "^0.4" }
+db = { path = "../db/" , features = ["sqlite"]}
+uuid-mc = "0.3.0"
+
+[lints]
+workspace = true
