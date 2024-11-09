@@ -4,12 +4,12 @@
 
 ARG RUST_VERSION=1.74.0
 ARG APP_NAME=new-api-rs
-FROM rust:${RUST_VERSION}-slim-bullseye AS build
+FROM rust:${RUST_VERSION}-slim-bookworm AS build
 ARG APP_NAME
 WORKDIR /app
 
 RUN apt update
-RUN apt install -y pkg-config libssl-dev
+RUN apt install -y pkg-config libssl-dev gcc make perl
 
 RUN --mount=type=bind,source=api,target=api \
     --mount=type=bind,source=traits,target=traits \
@@ -26,7 +26,10 @@ EOF
 
 ######### Run Stage
 
-FROM debian:bullseye-slim AS final
+FROM debian:bookworm-slim AS final
+
+RUN apt-get update
+RUN apt-get install -y ca-certificates libssl-dev
 
 WORKDIR /home
 
