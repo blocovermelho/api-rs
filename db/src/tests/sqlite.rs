@@ -680,6 +680,30 @@ async fn update_password(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 }
 
 #[test(sqlx::test(migrations = "src/migrations"))]
+async fn update_current_join(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+
+    // Setup
+    let user = mock_user(&db, "alikindsys").await;
+    mock_account(&db, user.uuid).await;
+    let account = db.get_account(&user.uuid).await.unwrap();
+
+    // Action
+    let old = account.current_join;
+    db.update_current_join(&user.uuid).await.unwrap();
+
+    let new_acc = db.get_account(&user.uuid).await.unwrap();
+    let new = new_acc.current_join;
+
+    // Test
+    assert!(new > old);
+    assert_ne!(new, old);
+    assert_eq!(account.uuid, new_acc.uuid);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
 async fn migrate_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
