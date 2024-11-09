@@ -428,6 +428,18 @@ pub async fn logoff(
         .await
         .unwrap();
 
+
+    // Bump allowlists at logoff.
+    if let Ok(entries) = state
+        .db
+        .get_allowlists_with_ip(&session.uuid, session.ip)
+        .await
+    {
+        for entry in entries {
+            let _ = state.db.bump_allowlist(entry).await;
+        }
+    }
+
     let _ = client
         .http
         .remove_member_role(
