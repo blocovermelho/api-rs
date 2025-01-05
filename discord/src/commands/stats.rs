@@ -7,8 +7,6 @@
 // [/stats server <server_name> playtime (<page>)]
 // Shows a ranking of the playtime for server
 
-// [/stats self]
-// Shows current user statistics
 use std::collections::HashMap;
 
 use db::{
@@ -112,7 +110,58 @@ pub async fn player(
 }
 
 // [/stats member <@member>]
-// Show statistics for all players connected to a discord account
+/// Mostra as estatíscas da(s) conta(s) de um membre do discord
+#[poise::command(slash_command)]
+pub async fn member(
+    ctx: Context<'_>,
+    #[description = "A conta do discord"]
+    // #[autocomplete = "crate::autocomplete::members"]
+    user: Member,
+) -> Result<(), Error> {
+    let discord_id = user.user.id;
+    let db = &ctx.data().db;
+    let server_ids = db.get_all_servers().await.unwrap();
+
+    //WARN: This is stupid we should have a cache, but cache invalidation is a bitch.
+    let mut servers: HashMap<Uuid, Server> = HashMap::new();
+    let mut playtimes: HashMap<Uuid, Vec<PlaytimeEntry>> = HashMap::new();
+
+    for id in server_ids {
+        let info = db.get_server(&id).await.unwrap();
+        servers.insert(id, info);
+        let times = db.get_playtimes(&id).await.unwrap();
+        playtimes.insert(id, times);
+    }
+
+    let embeds = match db.get_users_by_discord_id(discord_id.to_string()).await {
+        Ok(accounts) => {
+            let mut embeds: Vec<CreateEmbed> = vec![];
+
+            for account in accounts {
+                embeds.push(get_user_embed(account, &playtimes, &servers));
+            }
+
+            embeds
+        }
+        Err(_) => {
+            vec![embed::error(
+                "Nenhuma conta encontrada",
+                "Você não possui contas linkadas ao discord.",
+            )]
+        }
+    };
+
+    let mut reply = CreateReply::default();
+
+    for embed in embeds {
+        reply = reply.embed(embed)
+    }
+
+    ctx.send(reply).await.unwrap();
+
+    Ok(())
+}
+
 fn get_user_embed(
     user: User, playtimes: &HashMap<Uuid, Vec<PlaytimeEntry>>, servers: &HashMap<Uuid, Server>,
 ) -> CreateEmbed {
