@@ -73,6 +73,19 @@ pub fn user(
     )
 }
 
+pub fn server_field(
+    embed: &CreateEmbed, playtime: std::time::Duration, name: impl Display, rank: usize,
+) -> CreateEmbed {
+    let duration = chrono::Duration::from_std(playtime).unwrap();
+    let duration_str = duration_format(&duration);
+
+    embed.clone().field(
+        format!("Servidor: {}", name),
+        format!("**Tempo de Jogo**: {} `#{}`", duration_str, rank),
+        false,
+    )
+}
+
 pub fn new_ip(
     username: impl Display, server_name: impl Display, ip: &Ipv4Addr, when: DateTime<Utc>,
 ) -> CreateEmbed {
