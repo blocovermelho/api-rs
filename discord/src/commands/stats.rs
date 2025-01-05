@@ -19,6 +19,9 @@ use poise::{
     serenity_prelude::{CreateEmbed, Member},
     CreateReply,
 };
+use uuid::Uuid;
+use uuid_mc::PlayerUuid;
+
 use crate::{render::embed, Context, Error};
 
 /// Mostra as estatíscas das sua(s) conta(s)
@@ -69,7 +72,44 @@ pub async fn _self(ctx: Context<'_>) -> Result<(), Error> {
 }
 
 // [/stats player <player_name>]
-// Show statistics for a player
+/// Mostra as estatísticas de um nick do minecraft
+#[poise::command(slash_command)]
+pub async fn player(
+    ctx: Context<'_>,
+    #[description = "O nick da conta"]
+    #[autocomplete = "crate::autocomplete::players"]
+    name: String,
+) -> Result<(), Error> {
+    let db = &ctx.data().db;
+    let user_id = PlayerUuid::new_with_offline_username(&name);
+    let account = db.get_user_by_uuid(user_id.as_uuid()).await;
+
+    //WARN: This is stupid we should have a cache, but cache invalidation is a bitch.
+    let mut servers: HashMap<Uuid, Server> = HashMap::new();
+    let mut playtimes: HashMap<Uuid, Vec<PlaytimeEntry>> = HashMap::new();
+    let server_ids = db.get_all_servers().await.unwrap();
+
+    for id in server_ids {
+        let info = db.get_server(&id).await.unwrap();
+        servers.insert(id, info);
+        let times = db.get_playtimes(&id).await.unwrap();
+        playtimes.insert(id, times);
+    }
+
+    let embed = match account {
+        Ok(user) => get_user_embed(user, &playtimes, &servers),
+        Err(_) => embed::error(
+            "Usuário não encontrado",
+            format!("A conta de: {} não existe no servidor.", name),
+        ),
+    };
+
+    let reply = CreateReply::default().embed(embed);
+
+    let _ = ctx.send(reply).await;
+
+    Ok(())
+}
 
 // [/stats member <@member>]
 // Show statistics for all players connected to a discord account
