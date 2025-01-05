@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use db::interface::DataSource;
 use poise::serenity_prelude::futures::{future, stream, Stream, StreamExt};
 
@@ -16,3 +18,22 @@ pub async fn username<'a>(ctx: Context<'_>, partial: &'a str) -> impl Stream<Ite
 
     stream::iter(users).filter(move |it| future::ready(it.starts_with(partial)))
 }
+
+/// Autocompletion for minecraft nicknames
+pub async fn players<'a>(ctx: Context<'_>, partial: &'a str) -> impl Stream<Item = String> + 'a {
+    let db = &ctx.data().db;
+    let user_ids = db.get_all_users().await.unwrap_or_default();
+
+    let mut users: HashSet<_> = HashSet::new();
+
+    for id in user_ids {
+        if let Ok(user) = db.get_user_by_uuid(&id).await {
+            if partial.is_empty() || user.username.starts_with(partial) {
+                users.insert(user.username);
+            }
+        }
+    }
+
+    stream::iter(users)
+}
+
