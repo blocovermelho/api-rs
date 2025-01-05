@@ -54,6 +54,25 @@ pub fn no_permissions(brief: impl Display, data: impl Display) -> CreateEmbed {
         .color(colors::NO_PERM)
 }
 
+pub fn user(
+    username: impl Display, creation_date: DateTime<Utc>, discord_id: impl Display,
+    last_server: Option<String>,
+) -> CreateEmbed {
+    info(
+        format!("Estatísticas de {}", username),
+        format!(
+            "
+        **Conta criada em**: <t:{}:f>
+        **Discord**: <@{}>
+        **Último Servidor**: {}
+        ",
+            creation_date.timestamp(),
+            discord_id,
+            last_server.unwrap_or_else(|| "Desconhecido".to_string())
+        ),
+    )
+}
+
 pub fn new_ip(
     username: impl Display, server_name: impl Display, ip: &Ipv4Addr, when: DateTime<Utc>,
 ) -> CreateEmbed {
