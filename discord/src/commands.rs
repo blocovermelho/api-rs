@@ -3,3 +3,4 @@
 
 pub mod change_password;
 pub mod stats;
+pub mod rank;
