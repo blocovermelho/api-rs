@@ -24,6 +24,7 @@ pub async fn framework(db: Arc<Sqlite>) -> poise::Framework<Data, Error> {
     let options = poise::FrameworkOptions {
         commands: vec![
             commands::change_password::changepw(),
+            commands::stats::stats(),
             render::embed::embed_test(),
         ],
         event_handler: |ctx, event, fw, _data| Box::pin(event_handler(ctx, fw, event)),

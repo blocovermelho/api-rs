@@ -22,6 +22,11 @@ use uuid_mc::PlayerUuid;
 
 use crate::{render::embed, Context, Error};
 
+#[poise::command(slash_command, subcommands("_self", "member", "player"))]
+pub async fn stats(_ctx: Context<'_>) -> Result<(), Error> {
+    Ok(())
+}
+
 /// Mostra as estatíscas das sua(s) conta(s)
 #[poise::command(slash_command)]
 pub async fn _self(ctx: Context<'_>) -> Result<(), Error> {
