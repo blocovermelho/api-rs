@@ -73,6 +73,26 @@ pub fn user(
     )
 }
 
+pub fn duration_format(duration: &chrono::Duration) -> String {
+    let days = duration.num_days();
+    let hours = duration.num_hours();
+    let mins = duration.num_minutes() - (hours * 60);
+    let secs = duration.num_seconds() - (duration.num_minutes() * 60);
+
+    if days > 0 {
+        format!("{:04}d{:02}h{:02}m ({:03}h)", days, (hours - days * 24), mins, hours)
+    } else if hours > 0 {
+        format!("{:02}h{:02}m{:02}s", hours, mins, secs)
+    } else {
+        format!(
+            "{:02}m:{:02}s.{:03}",
+            mins,
+            secs,
+            duration.num_milliseconds() - (duration.num_seconds() * 1000)
+        )
+    }
+}
+
 pub fn server_field(
     embed: &CreateEmbed, playtime: std::time::Duration, name: impl Display, rank: usize,
 ) -> CreateEmbed {
