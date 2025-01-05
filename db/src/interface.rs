@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use crate::{
     data::{
-        result, stub, Account, Allowlist, BanActor, Blacklist, Pronoun, SaveData, Server, User,
-        Viewport,
+        result::{self, PlaytimeEntry},
+        stub, Account, Allowlist, BanActor, Blacklist, Pronoun, SaveData, Server, User, Viewport,
     },
     drivers::err::Response,
 };
@@ -26,6 +26,7 @@ pub trait DataSource {
     async fn get_account(&self, uuid: &Uuid) -> Response<Account>;
     async fn get_all_accounts(&self) -> Response<Vec<Uuid>>;
     async fn update_password(&self, player_uuid: &Uuid, new_password: String) -> Response<()>;
+
     async fn update_current_join(&self, player_uuid: &Uuid) -> Response<()>;
     async fn migrate_account(&self, from: &Uuid, to: &Uuid) -> Response<()>;
     async fn delete_account(&self, player_uuid: &Uuid) -> Response<()>;
@@ -73,6 +74,7 @@ pub trait DataSource {
         &self, player_uuid: &Uuid, server_uuid: &Uuid, new_playtime: Duration,
     ) -> Response<()>;
     async fn get_playtime(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Duration>;
+    async fn get_playtimes(&self, server_uuid: &Uuid) -> Response<Vec<PlaytimeEntry>>;
 
     async fn add_pronoun(&self, player_uuid: &Uuid, pronoun: Pronoun) -> Response<Vec<Pronoun>>;
     async fn remove_pronoun(&self, player_uuid: &Uuid, pronoun: Pronoun) -> Response<Vec<Pronoun>>;

@@ -21,8 +21,9 @@ use uuid::Uuid;
 use super::err::Response;
 use crate::{
     data::{
-        result, stub, Account, Allowlist, BanActor, Blacklist, Loc, Modpack, Pronoun, SaveData,
-        Server, User, Viewport,
+        result::{self, PlaytimeEntry},
+        stub, Account, Allowlist, BanActor, Blacklist, Loc, Modpack, Pronoun, SaveData, Server,
+        User, Viewport,
     },
     drivers::err::{base::NotFoundError, DriverError},
     interface::DataSource,
@@ -222,6 +223,10 @@ impl DataSource for JsonDriver {
     }
 
     // Uninmplemented
+
+    async fn get_playtimes(&self, server_uuid: &Uuid) -> Response<Vec<PlaytimeEntry>> {
+        unimplemented!();
+    }
 
     /// The original system behind blacklisting was severely flawed.
     /// I decided to start from a blank slate where only infractors beyond any reasonable doubt
