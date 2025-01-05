@@ -15,8 +15,58 @@ use db::{
     data::{result::PlaytimeEntry, Server, User},
     interface::DataSource,
 };
+use poise::{
+    serenity_prelude::{CreateEmbed, Member},
+    CreateReply,
+};
 use crate::{render::embed, Context, Error};
 
+/// Mostra as estatíscas das sua(s) conta(s)
+#[poise::command(slash_command)]
+pub async fn _self(ctx: Context<'_>) -> Result<(), Error> {
+    let discord_id = ctx.author().id;
+    let db = &ctx.data().db;
+    let server_ids = db.get_all_servers().await.unwrap();
+
+    //WARN: This is stupid we should have a cache, but cache invalidation is a bitch.
+    let mut servers: HashMap<Uuid, Server> = HashMap::new();
+    let mut playtimes: HashMap<Uuid, Vec<PlaytimeEntry>> = HashMap::new();
+
+    for id in server_ids {
+        let info = db.get_server(&id).await.unwrap();
+        servers.insert(id, info);
+        let times = db.get_playtimes(&id).await.unwrap();
+        playtimes.insert(id, times);
+    }
+
+    let embeds = match db.get_users_by_discord_id(discord_id.to_string()).await {
+        Ok(accounts) => {
+            let mut embeds: Vec<CreateEmbed> = vec![];
+
+            for account in accounts {
+                embeds.push(get_user_embed(account, &playtimes, &servers));
+            }
+
+            embeds
+        }
+        Err(_) => {
+            vec![embed::error(
+                "Nenhuma conta encontrada",
+                "Você não possui contas linkadas ao discord.",
+            )]
+        }
+    };
+
+    let mut reply = CreateReply::default();
+
+    for embed in embeds {
+        reply = reply.embed(embed)
+    }
+
+    ctx.send(reply).await.unwrap();
+
+    Ok(())
+}
 
 // [/stats player <player_name>]
 // Show statistics for a player
