@@ -54,6 +54,58 @@ pub fn no_permissions(brief: impl Display, data: impl Display) -> CreateEmbed {
         .color(colors::NO_PERM)
 }
 
+pub fn user(
+    username: impl Display, creation_date: DateTime<Utc>, discord_id: impl Display,
+    last_server: Option<String>,
+) -> CreateEmbed {
+    info(
+        format!("Estatísticas de {}", username),
+        format!(
+            "
+        **Conta criada em**: <t:{}:f>
+        **Discord**: <@{}>
+        **Último Servidor**: {}
+        ",
+            creation_date.timestamp(),
+            discord_id,
+            last_server.unwrap_or_else(|| "Desconhecido".to_string())
+        ),
+    )
+}
+
+pub fn duration_format(duration: &chrono::Duration) -> String {
+    let days = duration.num_days();
+    let hours = duration.num_hours();
+    let mins = duration.num_minutes() - (hours * 60);
+    let secs = duration.num_seconds() - (duration.num_minutes() * 60);
+
+    if days > 0 {
+        format!("{:04}d{:02}h{:02}m ({:03}h)", days, (hours - days * 24), mins, hours)
+    } else if hours > 0 {
+        format!("{:02}h{:02}m{:02}s", hours, mins, secs)
+    } else {
+        format!(
+            "{:02}m:{:02}s.{:03}",
+            mins,
+            secs,
+            duration.num_milliseconds() - (duration.num_seconds() * 1000)
+        )
+    }
+}
+
+pub fn server_field(
+    embed: &CreateEmbed, playtime: std::time::Duration, name: impl Display, rank: usize,
+) -> CreateEmbed {
+    let duration = chrono::Duration::from_std(playtime).unwrap();
+    let duration_str = duration_format(&duration);
+
+    embed.clone().field(
+        format!("Servidor: {}", name),
+        format!("**Tempo de Jogo**: {} `#{}`", duration_str, rank),
+        false,
+    )
+}
+
 pub fn new_ip(
     username: impl Display, server_name: impl Display, ip: &Ipv4Addr, when: DateTime<Utc>,
 ) -> CreateEmbed {

@@ -10,7 +10,7 @@ use super::err::{base, DriverError, Response};
 use crate::{
     data::{
         self,
-        result::{ServerJoin, ServerLeave},
+        result::{PlaytimeEntry, ServerJoin, ServerLeave},
         Account, Allowlist, BanActor, Blacklist, SaveData, Server, User, Viewport,
     },
     interface::DataSource,
@@ -733,6 +733,21 @@ impl DataSource for Sqlite {
                 player_uuid: *player_uuid,
             }),
         )
+    }
+
+    /// Gets all [`PlaytimeEntry`]s for a given [`Server`]
+    ///
+    /// Returns:
+    /// - [base::NotFoundError] if the [`Server`] doesn't exist.
+    /// - May return an empty list if no players have joined yet.
+    async fn get_playtimes(&self, server_uuid: &Uuid) -> Response<Vec<PlaytimeEntry>> {
+        // TODO: Limit this query.
+        let query = sqlx::query_as::<_, PlaytimeEntry>("SELECT username,player_uuid,playtime from savedata INNER JOIN users ON users.uuid = savedata.player_uuid WHERE server_uuid = $1")
+	    .bind(server_uuid)
+	    .fetch_all(&self.0)
+	    .await;
+
+        map_or_log(query, DriverError::DatabaseError(base::NotFoundError::Server))
     }
 
     /// Adds an [`Pronoun`] for an [`User`].

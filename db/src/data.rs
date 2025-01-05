@@ -214,7 +214,10 @@ pub mod stub {
 }
 
 pub mod result {
+    use std::time::Duration;
+
     use serde::Serialize;
+    use sqlx::types::Json;
     use uuid::Uuid;
 
     use crate::data::{Allowlist, Blacklist, Viewport};
@@ -297,5 +300,12 @@ pub mod result {
     pub enum UserAction {
         InvalidUser,
         Accepted,
+    }
+
+    #[derive(sqlx::FromRow)]
+    pub struct PlaytimeEntry {
+        pub username: String,
+        pub player_uuid: Uuid,
+        pub playtime: Json<Duration>,
     }
 }
