@@ -179,6 +179,17 @@ async fn get_user_by_uuid(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 }
 
 #[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_user_by_name(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let user = mock_user(&db, "alikindsys").await;
+    let test = db.get_user_by_name("alikindsys".to_string()).await.unwrap();
+
+    assert_eq!(user.uuid, test.uuid);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
 async fn get_all_users(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
     mock_user(&db, "alikindsys").await;
