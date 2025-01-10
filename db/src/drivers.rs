@@ -29,6 +29,7 @@ pub mod err {
             Session(Uuid), // Equivalent to: SessionCheck::Deny
             WhitelistEntry, // Didn't exist.
             BlacklistEntry, // Equivalent to: PardonAttempt::NotBanned
+            Migration(Uuid),
         }
 
         impl Display for NotFoundError {
@@ -52,6 +53,7 @@ pub mod err {
                     }
                     Self::WhitelistEntry => write!(f, "No whitelist entries found"),
                     Self::BlacklistEntry => write!(f, "No blacklist entries found"),
+                    Self::Migration(uuid) => write!(f, "Migration with id: {} not found", uuid),
                 }
             }
         }
