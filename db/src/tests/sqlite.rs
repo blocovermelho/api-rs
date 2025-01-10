@@ -11,7 +11,10 @@ use crate::{
         BanActor, Loc, Pronoun, Server, User, Viewport,
     },
     drivers::{
-        err::{DriverError, Response},
+        err::{
+            base::{self, InvalidError},
+            DriverError, Response,
+        },
         sqlite::Sqlite,
     },
     interface::{DataSource, NetworkProvider},
@@ -911,6 +914,40 @@ async fn broaden_allowlist_mask(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<
 
     assert_eq!(read.len(), 1);
     assert_eq!(read.get(0).unwrap().mask, 16);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn add_completed_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+    let migration = db
+        .create_migration(old.username, new.username, old.current_migration)
+        .await
+        .unwrap();
+
+    assert_eq!(migration.finished_servers.len(), 0);
+
+    let update = db
+        .add_completed_server(&migration.id, &server.uuid)
+        .await
+        .unwrap();
+
+    assert_eq!(update, vec![server.uuid]);
+
+    // Try to update an already migrated server
+
+    let err = db.add_completed_server(&migration.id, &server.uuid).await;
+
+    assert!(matches!(
+        err,
+        Err(DriverError::InvalidInput(InvalidError::AlreadyMigrated))
+    ));
 
     Ok(())
 }
