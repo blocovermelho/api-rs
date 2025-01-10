@@ -22,8 +22,8 @@ use super::err::Response;
 use crate::{
     data::{
         result::{self, PlaytimeEntry},
-        stub, Account, Allowlist, BanActor, Blacklist, Loc, Modpack, Pronoun, SaveData, Server,
-        User, Viewport,
+        stub, Account, Allowlist, BanActor, Blacklist, Loc, Migration, Modpack, Pronoun, SaveData,
+        Server, User, Viewport,
     },
     drivers::err::{base::NotFoundError, DriverError},
     interface::DataSource,
@@ -408,6 +408,12 @@ impl DataSource for JsonDriver {
 
     async fn get_user_by_name(&self, name: String) -> Response<User> {
         unimplemented!()
+    }
+
+    async fn create_migration(
+        &self, old_account: String, new_account: String, parent: Option<Uuid>,
+    ) -> Response<Migration> {
+        unimplemented!();
     }
 
 }

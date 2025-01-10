@@ -11,7 +11,7 @@ use crate::{
     data::{
         self,
         result::{PlaytimeEntry, ServerJoin, ServerLeave},
-        Account, Allowlist, BanActor, Blacklist, SaveData, Server, User, Viewport,
+        Account, Allowlist, BanActor, Blacklist, Migration, SaveData, Server, User, Viewport,
     },
     interface::DataSource,
 };
@@ -861,6 +861,36 @@ impl DataSource for Sqlite {
             .await;
 
         map_or_log(query, DriverError::DatabaseError(base::NotFoundError::User(*player_uuid)))
+    }
+
+    async fn create_migration(
+        &self, old_account: String, new_account: String, parent: Option<Uuid>,
+    ) -> Response<Migration> {
+        let old = self.get_user_by_name(old_account).await?;
+        let new = self.get_user_by_name(new_account).await?;
+
+        // Get affected servers
+        let old_servers: Vec<_> = self
+            .get_savedatas(&old.uuid)
+            .await?
+            .into_iter()
+            .map(|it| it.server_uuid)
+            .collect();
+
+        let query = sqlx::query_as::<_, Migration>("INSERT INTO namehist (id, parent, old, new, started_at, finished_at, affected_servers, finished_servers, visible) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *")
+       	.bind(Uuid::new_v4())
+       	.bind(parent)
+       	.bind(old.username)
+       	.bind(new.username)
+       	.bind(Utc::now())
+       	.bind(None::<chrono::DateTime<Utc>>)
+       	.bind(Json(old_servers))
+       	.bind("[]")
+       	.bind(Json(false))
+       	.fetch_one(&self.0)
+       	.await;
+
+        map_or_log(query, DriverError::Unreachable)
     }
 
 }

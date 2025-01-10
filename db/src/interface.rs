@@ -6,7 +6,8 @@ use uuid::Uuid;
 use crate::{
     data::{
         result::{self, PlaytimeEntry},
-        stub, Account, Allowlist, BanActor, Blacklist, Pronoun, SaveData, Server, User, Viewport,
+        stub, Account, Allowlist, BanActor, Blacklist, Migration, Pronoun, SaveData, Server, User,
+        Viewport,
     },
     drivers::err::Response,
 };
@@ -86,6 +87,9 @@ pub trait DataSource {
     async fn create_savedata(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<SaveData>;
     async fn get_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>>;
 
+    async fn create_migration(
+        &self, old_account: String, new_account: String, parent: Option<Uuid>,
+    ) -> Response<Migration>;
 }
 
 pub trait NetworkProvider {
