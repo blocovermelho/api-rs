@@ -17,6 +17,7 @@ pub struct User {
     pub created_at: DateTime<Utc>,
     pub pronouns: Json<Vec<Pronoun>>,
     pub last_server: Option<Uuid>,
+    pub current_migration: Option<Uuid>,
 }
 
 #[derive(sqlx::FromRow, Debug)]

@@ -108,6 +108,7 @@ impl DataSource for JsonDriver {
                 created_at: Utc::now(),       // We don't have created_at. LEL.
                 pronouns: Default::default(), // We know pronouns are empty for all ysers since it was a work in progress.
                 last_server: old_user.last_server,
+                current_migration: None,
             })
         } else {
             Err(DriverError::DatabaseError(NotFoundError::User(*uuid)))
@@ -179,6 +180,7 @@ impl DataSource for JsonDriver {
                 created_at: Utc::now(),
                 pronouns: Default::default(),
                 last_server: v.last_server,
+                current_migration: None,
             })
             .collect())
     }
