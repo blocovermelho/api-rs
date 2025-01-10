@@ -36,6 +36,30 @@ pub struct Allowlist {
     pub hits: i64,
 }
 
+// A User migration.
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct Migration {
+    // The migration Id. It has no relationship with the user's username.
+    pub id: Uuid,
+    // The parent of the migration
+    pub parent: Option<Uuid>,
+    pub old: String,
+    pub new: String,
+    pub started_at: DateTime<Utc>,
+    pub finished_at: Option<DateTime<Utc>>,
+    // All servers that are affected by this migration
+    // Servers here would be notified when the new/old user joins.
+    pub affected_servers: Json<Vec<Uuid>>,
+    // When the finished servers are the same as the affected servers
+    // A migration is considered complete, and at that point finished_at is set.
+    pub finished_servers: Json<Vec<Uuid>>,
+    // Visibility. Since migrations are usually done by trans members of our community
+    // In order to hide their deadnames, this field is necessary and is set as "false"
+    // by default. A member can opt-in into making their migration history public in a
+    // per-migration basis.
+    pub visible: Json<bool>,
+}
+
 impl NetworkProvider for Allowlist {
     fn get_addr(&self) -> std::net::Ipv4Addr {
         Ipv4Addr::from_bits(self.base_ip)
