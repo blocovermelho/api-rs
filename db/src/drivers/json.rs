@@ -420,4 +420,8 @@ impl DataSource for JsonDriver {
         unimplemented!()
     }
 
+    async fn add_completed_server(&self, migration: &Uuid, server: &Uuid) -> Response<Vec<Uuid>> {
+        unimplemented!()
+    }
+
 }

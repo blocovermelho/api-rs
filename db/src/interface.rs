@@ -91,6 +91,7 @@ pub trait DataSource {
         &self, old_account: String, new_account: String, parent: Option<Uuid>,
     ) -> Response<Migration>;
     async fn get_migration(&self, migration: &Uuid) -> Response<Migration>;
+    async fn add_completed_server(&self, migration: &Uuid, server: &Uuid) -> Response<Vec<Uuid>>;
 }
 
 pub trait NetworkProvider {

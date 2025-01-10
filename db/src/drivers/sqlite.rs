@@ -906,4 +906,38 @@ impl DataSource for Sqlite {
         map_or_log(query, DriverError::DatabaseError(base::NotFoundError::Migration(*migration)))
     }
 
+    /// Marks an [`Server`] as completed for a given [`Migration`]
+    ///
+    /// Returns:
+    /// - [`base::NotFoundError`] if either [`Server`] or [`M̀igration`] doesn't exist.
+    /// - [`base::InvalidError`] if the [`Server`] has already migrated.
+    /// - [`base::InvalidError`] if the [`Server`] wasn't affected by the migration.
+    /// - [`DriverError::Unreachable`] if something *bad* happened.
+    async fn add_completed_server(&self, migration: &Uuid, server: &Uuid) -> Response<Vec<Uuid>> {
+        let _ = self.get_server(server).await?;
+        let migration = self.get_migration(migration).await?;
+
+        if !migration.affected_servers.0.contains(server) {
+            return Err(DriverError::InvalidInput(base::InvalidError::UnaffectedServer));
+        }
+
+        let mut finished = migration.finished_servers.0;
+
+        if finished.contains(server) {
+            return Err(DriverError::InvalidInput(base::InvalidError::AlreadyMigrated));
+        }
+
+        finished.push(*server);
+
+        let query = sqlx::query_as::<_, Migration>(
+            "UPDATE namehist SET finished_servers = $1 WHERE id = $2 RETURNING *",
+        )
+        .bind(Json(finished))
+        .bind(migration.id)
+        .fetch_one(&self.0)
+        .await;
+
+        map_or_log(query.map(|it| it.finished_servers.0), DriverError::Unreachable)
+    }
+
 }
