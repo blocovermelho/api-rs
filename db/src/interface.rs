@@ -90,6 +90,7 @@ pub trait DataSource {
     async fn create_migration(
         &self, old_account: String, new_account: String, parent: Option<Uuid>,
     ) -> Response<Migration>;
+    async fn get_migration(&self, migration: &Uuid) -> Response<Migration>;
 }
 
 pub trait NetworkProvider {

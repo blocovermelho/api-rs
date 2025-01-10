@@ -416,4 +416,8 @@ impl DataSource for JsonDriver {
         unimplemented!();
     }
 
+    async fn get_migration(&self, migration: &Uuid) -> Response<Migration> {
+        unimplemented!()
+    }
+
 }

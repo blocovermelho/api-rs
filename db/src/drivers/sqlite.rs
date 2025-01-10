@@ -893,4 +893,17 @@ impl DataSource for Sqlite {
         map_or_log(query, DriverError::Unreachable)
     }
 
+    /// Get a [`Migration`] from its id.
+    ///
+    /// Returns:
+    /// - [`base::NotFoundError`] if no [`Migration`] exists with that Id.
+    async fn get_migration(&self, migration: &Uuid) -> Response<Migration> {
+        let query = sqlx::query_as::<_, Migration>("SELECT * FROM namehist WHERE id = $1")
+            .bind(migration)
+            .fetch_one(&self.0)
+            .await;
+
+        map_or_log(query, DriverError::DatabaseError(base::NotFoundError::Migration(*migration)))
+    }
+
 }
