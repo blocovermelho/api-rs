@@ -949,6 +949,30 @@ async fn add_completed_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()
         Err(DriverError::InvalidInput(InvalidError::AlreadyMigrated))
     ));
 
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn set_current_migration(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+    let migration = db
+        .create_migration(old.username, new.username, old.current_migration)
+        .await
+        .unwrap();
+
+    assert_eq!(new.current_migration, None);
+
+    let update = db
+        .set_current_migration(&new.uuid, &migration.id)
+        .await
+        .unwrap();
+
+    let new_user = db.get_user_by_uuid(&new.uuid).await.unwrap();
+
+    assert_eq!(new_user.current_migration, Some(update));
+
     Ok(())
 }
 
