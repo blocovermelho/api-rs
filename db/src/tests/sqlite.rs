@@ -473,6 +473,32 @@ async fn get_allowlists_with_range(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Resu
     Ok(())
 }
 
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_migration(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+
+    let server = mock_server(&db).await;
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+
+    let migration = db
+        .create_migration(old.username.clone(), new.username.clone(), old.current_migration)
+        .await
+        .unwrap();
+
+    let test = db.get_migration(&migration.id).await.unwrap();
+
+    assert_eq!(test.id, migration.id);
+    assert_eq!(test.old, migration.old);
+    assert_eq!(test.new, migration.new);
+    assert_eq!(test.new, new.username);
+    assert_eq!(test.old, old.username);
+
+    Ok(())
+}
+
 // UPDATE
 
 #[test(sqlx::test(migrations = "src/migrations"))]
