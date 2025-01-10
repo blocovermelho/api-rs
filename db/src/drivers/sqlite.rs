@@ -67,6 +67,19 @@ impl DataSource for Sqlite {
         map_or_log(query, DriverError::DatabaseError(base::NotFoundError::User(*uuid)))
     }
 
+    /// Gets an [User] by its Name.
+    ///
+    /// Returns an [`base::NotFoundError::User`] wrapped inside a [`DriverError::DatabaseError`] if a user with the given uuid can't be found.
+    #[tracing::instrument]
+    async fn get_user_by_name(&self, name: String) -> Response<User> {
+        let query = sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = ?")
+            .bind(name)
+            .fetch_one(&self.0)
+            .await;
+
+        map_or_log(query, DriverError::DatabaseError(base::NotFoundError::User(Uuid::nil())))
+    }
+
     /// Gets *all* [`User`]s registered to an Discord account.
     ///
     /// ### Note: Multiple users can share the same Discord account.
@@ -836,4 +849,5 @@ impl DataSource for Sqlite {
 
         map_or_log(query, DriverError::DuplicateKeyInsertion)
     }
+
 }

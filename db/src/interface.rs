@@ -14,6 +14,7 @@ use crate::{
 #[async_trait::async_trait]
 pub trait DataSource {
     async fn get_user_by_uuid(&self, uuid: &Uuid) -> Response<User>;
+    async fn get_user_by_name(&self, name: String) -> Response<User>;
     async fn get_users_by_discord_id(&self, discord_id: String) -> Response<Vec<User>>;
     async fn get_all_users(&self) -> Response<Vec<Uuid>>;
 
