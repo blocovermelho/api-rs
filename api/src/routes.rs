@@ -22,7 +22,6 @@ use oauth2::{reqwest::async_http_client, AuthorizationCode};
 use serde::{Deserialize, Serialize};
 use serenity::all::{GuildId, RoleId, UserId};
 use uuid::Uuid;
-use uuid_mc::PlayerUuid;
 
 use crate::{
     cidr::{lowest_common_prefix, MIN_COMMON_PREFIX},
@@ -149,10 +148,9 @@ pub async fn get_user(State(state): State<Arc<AppState>>, Path(user_id): Path<Uu
 pub async fn get_user_by_name(
     State(state): State<Arc<AppState>>, Path(username): Path<String>,
 ) -> Res<User> {
-    let user_id = PlayerUuid::new_with_offline_username(&username);
     let data = state
         .db
-        .get_user_by_uuid(user_id.as_uuid())
+        .get_user_by_name(username)
         .await
         .map_err(|_| ErrKind::Internal(Err::new("User not found.")))?;
 
