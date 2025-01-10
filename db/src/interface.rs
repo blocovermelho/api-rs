@@ -92,6 +92,7 @@ pub trait DataSource {
     ) -> Response<Migration>;
     async fn get_migration(&self, migration: &Uuid) -> Response<Migration>;
     async fn add_completed_server(&self, migration: &Uuid, server: &Uuid) -> Response<Vec<Uuid>>;
+    async fn set_current_migration(&self, user: &Uuid, migration: &Uuid) -> Response<Uuid>;
 }
 
 pub trait NetworkProvider {
