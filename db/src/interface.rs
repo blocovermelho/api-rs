@@ -84,6 +84,8 @@ pub trait DataSource {
     ) -> Response<Vec<Pronoun>>;
 
     async fn create_savedata(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<SaveData>;
+    async fn get_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>>;
+
 }
 
 pub trait NetworkProvider {

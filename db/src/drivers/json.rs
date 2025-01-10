@@ -399,6 +399,11 @@ impl DataSource for JsonDriver {
     async fn create_savedata(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<SaveData> {
         unimplemented!();
     }
+
+    async fn get_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>> {
+        unimplemented!();
+    }
+
     async fn get_user_by_name(&self, name: String) -> Response<User> {
         unimplemented!()
     }

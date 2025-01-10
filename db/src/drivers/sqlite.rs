@@ -850,4 +850,17 @@ impl DataSource for Sqlite {
         map_or_log(query, DriverError::DuplicateKeyInsertion)
     }
 
+    /// Gets all [`SaveData`]s for an [`User`].
+    /// Useful for gathering all servers an user has joined.
+    async fn get_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>> {
+        let _ = self.get_user_by_uuid(player_uuid).await?;
+
+        let query = sqlx::query_as::<_, SaveData>("SELECT * FROM savedata WHERE player_uuid = $1")
+            .bind(player_uuid)
+            .fetch_all(&self.0)
+            .await;
+
+        map_or_log(query, DriverError::DatabaseError(base::NotFoundError::User(*player_uuid)))
+    }
+
 }
