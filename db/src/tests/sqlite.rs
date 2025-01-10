@@ -159,6 +159,33 @@ async fn create_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     Ok(())
 }
 
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn create_migration(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+
+    let server = mock_server(&db).await;
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+
+    // Creates a valid savedata for a server, linking an user to a server.
+    // Without this no migrations can be done. You can't migrate from an empty account.
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+
+    let migration = db
+        .create_migration(old.username.clone(), new.username.clone(), old.current_migration)
+        .await
+        .unwrap();
+
+    assert_eq!(migration.old, old.username);
+    assert_eq!(migration.new, new.username);
+    assert_eq!(migration.affected_servers.0, vec![server.uuid]);
+    assert_eq!(migration.finished_servers.0, vec![]);
+    assert_eq!(migration.visible.0, false);
+    assert_eq!(migration.finished_at, None);
+
+    Ok(())
+}
+
 // READ
 #[test(sqlx::test(migrations = "src/migrations"))]
 async fn get_user_by_uuid(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
