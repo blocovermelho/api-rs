@@ -979,4 +979,25 @@ impl DataSource for Sqlite {
         map_or_log(query.map(|it| it.0), DriverError::Unreachable)
     }
 
+    /// Changes the parent of a [`Migration`]
+    ///
+    /// Returns:
+    /// - [`base::NotFoundError`] if the [`Migration`] doesn't exist.
+    /// - [`DriverError::Unreachable`] if something *bad* happened.
+    async fn rebase_migration(
+        &self, migration: &Uuid, new_parent: Option<Uuid>,
+    ) -> Response<Migration> {
+        let _ = self.get_migration(migration).await?;
+
+        let query = sqlx::query_as::<_, Migration>(
+            "UPDATE namehist SET parent = $1 WHERE id = $2 RETURNING *",
+        )
+        .bind(new_parent)
+        .bind(migration)
+        .fetch_one(&self.0)
+        .await;
+
+        map_or_log(query, DriverError::Unreachable)
+    }
+
 }

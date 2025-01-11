@@ -432,4 +432,10 @@ impl DataSource for JsonDriver {
         unimplemented!()
     }
 
+    async fn rebase_migration(
+        &self, migration: &Uuid, new_parent: Option<Uuid>,
+    ) -> Response<Migration> {
+        unimplemented!()
+    }
+
 }
