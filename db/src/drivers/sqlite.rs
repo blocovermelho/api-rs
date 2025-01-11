@@ -960,4 +960,23 @@ impl DataSource for Sqlite {
         map_or_log(query, DriverError::Unreachable)
     }
 
+    /// Updates the visibilty for a [`Migration`]
+    ///
+    /// Returns:
+    /// - [`base::NotFoundError`] if the [`Migration`] doesn't exist.
+    /// - [`DriverError::Unreachable`] if something *bad* happened.
+    async fn update_visibility(&self, migration: &Uuid, visible: bool) -> Response<bool> {
+        let _ = self.get_migration(migration).await?;
+
+        let query = sqlx::query_scalar::<_, Json<bool>>(
+            "UPDATE namehist SET visible = $1 WHERE id = $2 RETURNING visible",
+        )
+        .bind(Json(visible))
+        .bind(migration)
+        .fetch_one(&self.0)
+        .await;
+
+        map_or_log(query.map(|it| it.0), DriverError::Unreachable)
+    }
+
 }

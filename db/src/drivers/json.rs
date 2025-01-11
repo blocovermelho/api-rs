@@ -428,4 +428,8 @@ impl DataSource for JsonDriver {
         unimplemented!()
     }
 
+    async fn update_visibility(&self, migration: &Uuid, visible: bool) -> Response<bool> {
+        unimplemented!()
+    }
+
 }
