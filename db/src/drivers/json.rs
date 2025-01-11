@@ -438,4 +438,7 @@ impl DataSource for JsonDriver {
         unimplemented!()
     }
 
+    async fn delete_migration(&self, migration: &Uuid) -> Response<bool> {
+        unimplemented!()
+    }
 }

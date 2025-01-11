@@ -97,6 +97,7 @@ pub trait DataSource {
     async fn rebase_migration(
         &self, migration: &Uuid, new_parent: Option<Uuid>,
     ) -> Response<Migration>;
+    async fn delete_migration(&self, migration: &Uuid) -> Response<bool>;
 }
 
 pub trait NetworkProvider {

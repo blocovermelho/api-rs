@@ -1000,4 +1000,36 @@ impl DataSource for Sqlite {
         map_or_log(query, DriverError::Unreachable)
     }
 
+    /// Deletes a [`Migration`]. Updates all the children to point to the migration's parent.
+    ///
+    /// Returns:
+    /// - [`base::NotFoundError`] if the [`Migration`] doesn't exist.
+    /// - [`DriverError::Unreachable`] if something *bad* happened.
+    async fn delete_migration(&self, migration: &Uuid) -> Response<bool> {
+        // For deleting any of those we must get the migration's children and rebase them to the migration's parent.
+        // Then we can safely delete the migration
+
+        let current = self.get_migration(migration).await?;
+
+        // Step 1: Getting the chidren.
+        let children = sqlx::query_scalar::<_, Uuid>("SELECT id FROM namehist WHERE parent = $1")
+            .bind(migration)
+            .fetch_all(&self.0)
+            .await
+            .unwrap();
+
+        // If children exist, we rebase them.
+        for child in &children {
+            self.rebase_migration(child, current.parent).await?;
+        }
+
+        // Now we can safely delete the migration since nothing points to it.
+
+        let query = sqlx::query("DELETE from namehist WHERE id = $1")
+            .bind(migration)
+            .execute(&self.0)
+            .await;
+
+        map_or_log(query.map(|_| true), DriverError::Unreachable)
+    }
 }
