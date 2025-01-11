@@ -1139,3 +1139,86 @@ async fn delete_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 
     Ok(())
 }
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn delete_migration_simple(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+    let migration = db
+        .create_migration(old.username, new.username, old.current_migration)
+        .await
+        .unwrap();
+
+    let delete = db.delete_migration(&migration.id).await;
+
+    // The delete is sucessful
+    assert!(matches!(delete, Ok(true)));
+
+    let error = db.get_migration(&migration.id).await;
+
+    // Migration was deleted.
+    assert!(matches!(
+        error,
+        Err(DriverError::DatabaseError(crate::drivers::err::base::NotFoundError::Migration(
+            _
+        )))
+    ));
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn delete_migration_complex(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    // Try checking the rebasing feature of migrations
+    let db = get_wrapper(pool).await.unwrap();
+
+    let a = mock_user(&db, "roridev").await;
+    let b = mock_user(&db, "alikindsys").await;
+    let c = mock_user(&db, "alikind").await;
+
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&a.uuid, &server.uuid).await.unwrap();
+    let _ = db.create_savedata(&b.uuid, &server.uuid).await.unwrap();
+
+    let first = db
+        .create_migration(a.username, b.username.clone(), None)
+        .await
+        .unwrap();
+
+    let second = db
+        .create_migration(b.username, c.username, Some(first.id))
+        .await
+        .unwrap();
+
+    // We now will delete the first migration.
+    let delete = db.delete_migration(&first.id).await;
+
+    // It should be successful
+    assert!(matches!(delete, Ok(true)));
+
+    // It should also cause the second's parent to be set to it's parent. In this case "None".
+    let update = db.get_migration(&second.id).await.unwrap();
+
+    // This should be changed.
+    assert_ne!(update.parent, second.parent);
+    // And it should be changed to the first's parent.
+    assert_eq!(update.parent, first.parent);
+
+    // Now getting the first migration should fail.
+    let error = db.get_migration(&first.id).await;
+
+    // Migration was deleted.
+    assert!(matches!(
+        error,
+        Err(DriverError::DatabaseError(crate::drivers::err::base::NotFoundError::Migration(
+            _
+        )))
+    ));
+
+    Ok(())
+}
