@@ -1001,6 +1001,41 @@ async fn update_visibility(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     Ok(())
 }
 
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn rebase_migration(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+    let migration = db
+        .create_migration(old.username, new.username, old.current_migration)
+        .await
+        .unwrap();
+
+    assert_eq!(migration.parent, None);
+
+    // This is a random uuid thats an invalid migration
+    // Its fine for the test since there is no checks if the id is valid or not
+    let new_id = Uuid::new_v4();
+
+    let change = db
+        .rebase_migration(&migration.id, Some(new_id))
+        .await
+        .unwrap();
+
+    assert_eq!(change.parent, Some(new_id));
+
+    // Reseting test
+
+    let reset = db.rebase_migration(&migration.id, None).await.unwrap();
+
+    assert_eq!(reset.parent, None);
+
+    Ok(())
+}
+
 // DELETE
 
 #[test(sqlx::test(migrations = "src/migrations"))]
