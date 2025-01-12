@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     data::{
-        result::{ServerJoin, ServerLeave},
+        result::{NodeDeletion, ServerJoin, ServerLeave},
         stub::{AccountStub, ServerStub, UserStub},
         BanActor, Loc, Pronoun, Server, User, Viewport,
     },
@@ -1156,7 +1156,7 @@ async fn delete_migration_simple(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result
     let delete = db.delete_migration(&migration.id).await;
 
     // The delete is sucessful
-    assert!(matches!(delete, Ok(true)));
+    assert!(matches!(delete, Ok(NodeDeletion::First { is_orphan: true })));
 
     let error = db.get_migration(&migration.id).await;
 
@@ -1199,7 +1199,7 @@ async fn delete_migration_complex(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Resul
     let delete = db.delete_migration(&first.id).await;
 
     // It should be successful
-    assert!(matches!(delete, Ok(true)));
+    assert!(matches!(delete, Ok(NodeDeletion::First { is_orphan: false })));
 
     // It should also cause the second's parent to be set to it's parent. In this case "None".
     let update = db.get_migration(&second.id).await.unwrap();

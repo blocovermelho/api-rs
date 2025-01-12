@@ -21,7 +21,7 @@ use uuid::Uuid;
 use super::err::Response;
 use crate::{
     data::{
-        result::{self, PlaytimeEntry},
+        result::{self, NodeDeletion, PlaytimeEntry},
         stub, Account, Allowlist, BanActor, Blacklist, Loc, Migration, Modpack, Pronoun, SaveData,
         Server, User, Viewport,
     },
@@ -438,7 +438,7 @@ impl DataSource for JsonDriver {
         unimplemented!()
     }
 
-    async fn delete_migration(&self, migration: &Uuid) -> Response<bool> {
+    async fn delete_migration(&self, migration: &Uuid) -> Response<NodeDeletion> {
         unimplemented!()
     }
 }

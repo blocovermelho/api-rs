@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     data::{
-        result::{self, PlaytimeEntry},
+        result::{self, NodeDeletion, PlaytimeEntry},
         stub, Account, Allowlist, BanActor, Blacklist, Migration, Pronoun, SaveData, Server, User,
         Viewport,
     },
@@ -97,7 +97,7 @@ pub trait DataSource {
     async fn rebase_migration(
         &self, migration: &Uuid, new_parent: Option<Uuid>,
     ) -> Response<Migration>;
-    async fn delete_migration(&self, migration: &Uuid) -> Response<bool>;
+    async fn delete_migration(&self, migration: &Uuid) -> Response<NodeDeletion>;
 }
 
 pub trait NetworkProvider {

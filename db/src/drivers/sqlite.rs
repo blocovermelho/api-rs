@@ -10,7 +10,7 @@ use super::err::{base, DriverError, Response};
 use crate::{
     data::{
         self,
-        result::{PlaytimeEntry, ServerJoin, ServerLeave},
+        result::{NodeDeletion, PlaytimeEntry, ServerJoin, ServerLeave},
         Account, Allowlist, BanActor, Blacklist, Migration, SaveData, Server, User, Viewport,
     },
     interface::DataSource,
@@ -1005,11 +1005,13 @@ impl DataSource for Sqlite {
     /// Returns:
     /// - [`base::NotFoundError`] if the [`Migration`] doesn't exist.
     /// - [`DriverError::Unreachable`] if something *bad* happened.
-    async fn delete_migration(&self, migration: &Uuid) -> Response<bool> {
+    async fn delete_migration(&self, migration: &Uuid) -> Response<NodeDeletion> {
         // For deleting any of those we must get the migration's children and rebase them to the migration's parent.
         // Then we can safely delete the migration
 
         let current = self.get_migration(migration).await?;
+
+        let result: NodeDeletion;
 
         // Step 1: Getting the chidren.
         let children = sqlx::query_scalar::<_, Uuid>("SELECT id FROM namehist WHERE parent = $1")
@@ -1017,6 +1019,23 @@ impl DataSource for Sqlite {
             .fetch_all(&self.0)
             .await
             .unwrap();
+
+        // If nothing points to it but it points to something, it is the last node of the list
+        if current.parent.is_some() && children.is_empty() {
+            result = NodeDeletion::Last { replacement: current.parent.unwrap() };
+        }
+        // If it points to nothing but nothing points to it, it is an orphaned node.
+        else if current.parent.is_none() && children.is_empty() {
+            result = NodeDeletion::First { is_orphan: true };
+        }
+        // If it points to nothing and something points to it, its the first node but isn't orphaned.
+        else if current.parent.is_none() && !children.is_empty() {
+            result = NodeDeletion::First { is_orphan: false };
+        }
+        // Otherwise, its a node in the middle
+        else {
+            result = NodeDeletion::Middle;
+        }
 
         // If children exist, we rebase them.
         for child in &children {
@@ -1030,6 +1049,6 @@ impl DataSource for Sqlite {
             .execute(&self.0)
             .await;
 
-        map_or_log(query.map(|_| true), DriverError::Unreachable)
+        map_or_log(query.map(|_| result), DriverError::Unreachable)
     }
 }
