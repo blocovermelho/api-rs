@@ -1165,6 +1165,27 @@ async fn delete_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 }
 
 #[test(sqlx::test(migrations = "src/migrations"))]
+async fn delete_savedatas(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let user = mock_user(&db, "alikindsys").await;
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
+
+    let savedatas = db.get_savedatas(&user.uuid).await.unwrap();
+
+    let deleted = db.delete_savedatas(&user.uuid).await.unwrap();
+
+    assert_eq!(savedatas.len(), deleted.len());
+
+    let test = db.get_savedatas(&user.uuid).await.unwrap();
+
+    assert!(test.is_empty());
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
 async fn delete_migration_simple(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
     let old = mock_user(&db, "roridev").await;
