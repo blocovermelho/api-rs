@@ -92,7 +92,9 @@ pub trait DataSource {
     ) -> Response<Migration>;
     async fn get_migration(&self, migration: &Uuid) -> Response<Migration>;
     async fn add_completed_server(&self, migration: &Uuid, server: &Uuid) -> Response<Vec<Uuid>>;
-    async fn set_current_migration(&self, user: &Uuid, migration: &Uuid) -> Response<Uuid>;
+    async fn set_current_migration(
+        &self, user: &Uuid, migration: Option<Uuid>,
+    ) -> Response<Option<Uuid>>;
     async fn update_visibility(&self, migration: &Uuid, visible: bool) -> Response<bool>;
     async fn rebase_migration(
         &self, migration: &Uuid, new_parent: Option<Uuid>,

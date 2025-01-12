@@ -424,7 +424,9 @@ impl DataSource for JsonDriver {
         unimplemented!()
     }
 
-    async fn set_current_migration(&self, user: &Uuid, migration: &Uuid) -> Response<Uuid> {
+    async fn set_current_migration(
+        &self, user: &Uuid, migration: Option<Uuid>,
+    ) -> Response<Option<Uuid>> {
         unimplemented!()
     }
 

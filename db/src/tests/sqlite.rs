@@ -965,13 +965,13 @@ async fn set_current_migration(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<(
     assert_eq!(new.current_migration, None);
 
     let update = db
-        .set_current_migration(&new.uuid, &migration.id)
+        .set_current_migration(&new.uuid, Some(migration.id))
         .await
         .unwrap();
 
     let new_user = db.get_user_by_uuid(&new.uuid).await.unwrap();
 
-    assert_eq!(new_user.current_migration, Some(update));
+    assert_eq!(new_user.current_migration, update);
 
     Ok(())
 }

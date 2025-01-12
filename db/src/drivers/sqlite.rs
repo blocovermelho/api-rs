@@ -945,14 +945,20 @@ impl DataSource for Sqlite {
     /// Returns:
     /// - [`base::NotFoundError`] if either [`User`] or [`Migration`] doesn't exist.
     /// - [`DriverError::Unreachable`] if something *bad* happened.
-    async fn set_current_migration(&self, user: &Uuid, migration: &Uuid) -> Response<Uuid> {
+    async fn set_current_migration(
+        &self, user: &Uuid, migration: Option<Uuid>,
+    ) -> Response<Option<Uuid>> {
         let _ = self.get_user_by_uuid(user).await?;
-        let _ = self.get_migration(migration).await?;
 
-        let query = sqlx::query_scalar::<_, Uuid>(
+        // Check if migration is valid if one was passed
+        if let Some(migration) = migration {
+            let _ = self.get_migration(&migration).await?;
+        }
+
+        let query = sqlx::query_scalar::<_, Option<Uuid>>(
             "UPDATE users SET current_migration = $1 where uuid = $2 RETURNING current_migration",
         )
-        .bind(Some(migration))
+        .bind(migration)
         .bind(user)
         .fetch_one(&self.0)
         .await;
