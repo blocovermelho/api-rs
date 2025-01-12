@@ -95,6 +95,7 @@ pub trait DataSource {
     async fn set_current_migration(
         &self, user: &Uuid, migration: Option<Uuid>,
     ) -> Response<Option<Uuid>>;
+    async fn update_completion(&self, migration: &Uuid) -> Response<bool>;
     async fn update_visibility(&self, migration: &Uuid, visible: bool) -> Response<bool>;
     async fn rebase_migration(
         &self, migration: &Uuid, new_parent: Option<Uuid>,

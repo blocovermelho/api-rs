@@ -985,6 +985,18 @@ impl DataSource for Sqlite {
         map_or_log(query.map(|it| it.0), DriverError::Unreachable)
     }
 
+    async fn update_completion(&self, migration: &Uuid) -> Response<bool> {
+        let _ = self.get_migration(migration).await?;
+
+        let query = sqlx::query("UPDATE namehist SET finished_at = $1 WHERE id = $2")
+            .bind(Some(Utc::now()))
+            .bind(migration)
+            .execute(&self.0)
+            .await;
+
+        map_or_log(query.map(|_| true), DriverError::Unreachable)
+    }
+
     /// Changes the parent of a [`Migration`]
     ///
     /// Returns:
