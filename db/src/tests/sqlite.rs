@@ -977,6 +977,30 @@ async fn set_current_migration(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<(
 }
 
 #[test(sqlx::test(migrations = "src/migrations"))]
+async fn update_completion(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+    let migration = db
+        .create_migration(old.username, new.username, old.current_migration)
+        .await
+        .unwrap();
+
+    assert_eq!(migration.finished_at, None);
+
+    let change = db.update_completion(&migration.id).await.unwrap();
+
+    let test = db.get_migration(&migration.id).await.unwrap();
+
+    assert_ne!(test.finished_at, None);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
 async fn update_visibility(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
     let old = mock_user(&db, "roridev").await;
