@@ -41,7 +41,8 @@ pub async fn _self(ctx: Context<'_>) -> Result<(), Error> {
     for id in server_ids {
         let info = db.get_server(&id).await.unwrap();
         servers.insert(id, info);
-        let times = db.get_playtimes(&id).await.unwrap();
+        let mut times = db.get_playtimes(&id).await.unwrap();
+        times.sort_by(|a, b| b.playtime.0.cmp(&a.playtime.0));
         playtimes.insert(id, times);
     }
 
@@ -95,7 +96,8 @@ pub async fn player(
     for id in server_ids {
         let info = db.get_server(&id).await.unwrap();
         servers.insert(id, info);
-        let times = db.get_playtimes(&id).await.unwrap();
+        let mut times = db.get_playtimes(&id).await.unwrap();
+        times.sort_by(|a, b| b.playtime.0.cmp(&a.playtime.0));
         playtimes.insert(id, times);
     }
 
@@ -134,7 +136,8 @@ pub async fn member(
     for id in server_ids {
         let info = db.get_server(&id).await.unwrap();
         servers.insert(id, info);
-        let times = db.get_playtimes(&id).await.unwrap();
+        let mut times = db.get_playtimes(&id).await.unwrap();
+        times.sort_by(|a, b| b.playtime.0.cmp(&a.playtime.0));
         playtimes.insert(id, times);
     }
 
