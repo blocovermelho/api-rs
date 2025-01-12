@@ -327,6 +327,12 @@ pub mod result {
         Accepted,
     }
 
+    pub enum NodeDeletion {
+        First { is_orphan: bool },
+        Last { replacement: Uuid },
+        Middle,
+    }
+
     #[derive(sqlx::FromRow)]
     pub struct PlaytimeEntry {
         pub username: String,
