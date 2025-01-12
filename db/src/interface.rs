@@ -86,6 +86,7 @@ pub trait DataSource {
 
     async fn create_savedata(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<SaveData>;
     async fn get_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>>;
+    async fn delete_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>>;
 
     async fn create_migration(
         &self, old_account: String, new_account: String, parent: Option<Uuid>,

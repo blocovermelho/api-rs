@@ -406,6 +406,10 @@ impl DataSource for JsonDriver {
         unimplemented!();
     }
 
+    async fn delete_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>> {
+        unimplemented!();
+    }
+
     async fn get_user_by_name(&self, name: String) -> Response<User> {
         unimplemented!()
     }

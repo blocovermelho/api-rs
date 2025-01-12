@@ -863,6 +863,19 @@ impl DataSource for Sqlite {
         map_or_log(query, DriverError::DatabaseError(base::NotFoundError::User(*player_uuid)))
     }
 
+    async fn delete_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>> {
+        let _ = self.get_user_by_uuid(player_uuid).await?;
+
+        let query = sqlx::query_as::<_, SaveData>(
+            "DELETE FROM savedata WHERE player_uuid = $1 RETURNING *",
+        )
+        .bind(player_uuid)
+        .fetch_all(&self.0)
+        .await;
+
+        map_or_log(query, DriverError::DatabaseError(base::NotFoundError::User(*player_uuid)))
+    }
+
     async fn create_migration(
         &self, old_account: String, new_account: String, parent: Option<Uuid>,
     ) -> Response<Migration> {
