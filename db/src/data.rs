@@ -37,7 +37,7 @@ pub struct Allowlist {
 }
 
 // A User migration.
-#[derive(sqlx::FromRow, Debug, Clone)]
+#[derive(sqlx::FromRow, Serialize, Debug, Clone)]
 pub struct Migration {
     // The migration Id. It has no relationship with the user's username.
     pub id: Uuid,
