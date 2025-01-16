@@ -1201,6 +1201,12 @@ pub struct DiscordIdQueryParam {
     pub id: UserId,
 }
 
+#[derive(Deserialize)]
+pub struct MigrateQueryParam {
+    pub old: String,
+    pub new: String,
+}
+
 #[derive(Serialize, Clone, Debug)]
 pub struct LinkResult {
     pub discord_id: String,
