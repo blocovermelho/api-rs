@@ -210,6 +210,7 @@ async fn main() {
         .route("/changepw", patch(routes::changepw))
         .route("/ws", get(websocket::handle_socket))
         .route("/migrate", post(routes::create_migration))
+        .route("/migration", get(routes::get_migration))
         .route("/", post(routes::create_account))
         .layer(authenticated);
 

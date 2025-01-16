@@ -618,6 +618,20 @@ pub async fn create_migration(
     Ok(Json(migration))
 }
 
+/// [GET] /auth/migration?id=<uuid>
+pub async fn get_migration(
+    State(state): State<Arc<AppState>>, Query(migration_id): Query<UuidQueryParam>,
+) -> Res<Migration> {
+    let migration = state
+        .db
+        .get_migration(&migration_id.uuid)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Migration not found.")))?;
+
+    Ok(Json(migration))
+}
+
+
 /// [POST] /server/<uuid>/migrated?id=<uuid>
 pub async fn mark_migrated(
     State(state): State<Arc<AppState>>, Path(server_id): Path<Uuid>,
