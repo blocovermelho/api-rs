@@ -209,6 +209,7 @@ async fn main() {
         .route("/session", get(routes::get_session))
         .route("/changepw", patch(routes::changepw))
         .route("/ws", get(websocket::handle_socket))
+        .route("/migrate", post(routes::create_migration))
         .route("/", post(routes::create_account))
         .layer(authenticated);
 

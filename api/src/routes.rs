@@ -554,6 +554,70 @@ pub async fn account_exists(
 
     Ok(Json(data.is_ok()))
 }
+
+/// [POST] /auth/migrate?old=<old_username>&new=<new_username>
+pub async fn create_migration(
+    State(state): State<Arc<AppState>>, Query(migrate): Query<MigrateQueryParam>,
+) -> Res<Migration> {
+    let old_user = state
+        .db
+        .get_user_by_name(migrate.old.clone())
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Old user not found.")))?;
+
+    let mut new_user = state.db.get_user_by_name(migrate.new.clone()).await;
+
+    if new_user.is_err() {
+        let user_uuid = PlayerUuid::new_with_offline_username(&migrate.new);
+        new_user = state
+            .db
+            .create_user(UserStub {
+                uuid: *user_uuid.as_uuid(),
+                username: migrate.new.clone(),
+                discord_id: old_user.discord_id,
+            })
+            .await;
+    }
+
+    let new_user =
+        new_user.map_err(|_| ErrKind::Internal(Err::new("Couldn't get or create New User")))?;
+
+    // If the new account already has a pending migration, return that pending migration and dont create a new one.
+    if let Some(id) = new_user.current_migration {
+        let migration =
+            state.db.get_migration(&id).await.map_err(|_| {
+                ErrKind::NotFound(Err::new("Invalid Current Migration for New User."))
+            })?;
+
+        // Migration hasn't finished yet.
+        if migration.finished_at.is_none() {
+            return Ok(Json(migration));
+        }
+    }
+
+    // We now should create a new migration
+    let migration = state
+        .db
+        .create_migration(
+            migrate.old,
+            migrate.new,
+            old_user.current_migration.or(new_user.current_migration),
+        )
+        .await
+        .map_err(|e| ErrKind::Internal(Err::new("Couldn't create migration").with_inner(e)))?;
+
+    // And set it as the current migration for the new user.
+    let _ = state
+        .db
+        .set_current_migration(&new_user.uuid, Some(migration.id))
+        .await
+        .map_err(|e| {
+            ErrKind::Internal(Err::new("Couldn't set Current Migration for New User").with_inner(e))
+        })?;
+
+    Ok(Json(migration))
+}
+
 /// [POST] /server/<uuid>/migrated?id=<uuid>
 pub async fn mark_migrated(
     State(state): State<Arc<AppState>>, Path(server_id): Path<Uuid>,
