@@ -212,6 +212,7 @@ async fn main() {
         .route("/migrate", post(routes::create_migration))
         .route("/migration", get(routes::get_migration))
         .route("/migration", delete(routes::delete_migration))
+        .route("/migration/:migration_id/show", patch(routes::show_migration))
         .route("/", post(routes::create_account))
         .layer(authenticated);
 

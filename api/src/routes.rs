@@ -631,6 +631,26 @@ pub async fn get_migration(
     Ok(Json(migration))
 }
 
+/// [PATCH] /auth/migration/:uuid/show
+pub async fn show_migration(
+    State(state): State<Arc<AppState>>, Path(migration_id): Path<Uuid>,
+) -> Res<bool> {
+    let migration = state
+        .db
+        .get_migration(&migration_id)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Migration not found.")))?;
+
+    let result = state
+        .db
+        .update_visibility(&migration.id, true)
+        .await
+        .map_err(|_| ErrKind::Internal(Err::new("Couldn't update migration.")))?;
+
+    Ok(Json(result))
+}
+
+
 /// [DELETE] /auth/migration?id=<uuid>
 pub async fn delete_migration(
     State(state): State<Arc<AppState>>, Query(migration_id): Query<UuidQueryParam>,
