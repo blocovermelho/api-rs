@@ -631,6 +631,56 @@ pub async fn get_migration(
     Ok(Json(migration))
 }
 
+/// [DELETE] /auth/migration?id=<uuid>
+pub async fn delete_migration(
+    State(state): State<Arc<AppState>>, Query(migration_id): Query<UuidQueryParam>,
+) -> Res<bool> {
+    let migration = state
+        .db
+        .get_migration(&migration_id.uuid)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Migration not found.")))?;
+
+    let new_user = state
+        .db
+        .get_user_by_name(migration.new)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("New User not found.")))?;
+
+    let node = state
+        .db
+        .delete_migration(&migration_id.uuid)
+        .await
+        .map_err(|e| ErrKind::Internal(Err::new("Couldn't delete Migration").with_inner(e)))?;
+
+    match node {
+        NodeDeletion::Middle | NodeDeletion::First { is_orphan: false } => {}
+        NodeDeletion::First { is_orphan: true } => {
+            state
+                .db
+                .set_current_migration(&new_user.uuid, None)
+                .await
+                .map_err(|e| {
+                    ErrKind::Internal(
+                        Err::new("Couldn't update user state. Orphaned Node.").with_inner(e),
+                    )
+                })?;
+        }
+        NodeDeletion::Last { replacement } => {
+            state
+                .db
+                .set_current_migration(&new_user.uuid, Some(replacement))
+                .await
+                .map_err(|e| {
+                    ErrKind::Internal(
+                        Err::new("Couldn't update user state. Last Node.").with_inner(e),
+                    )
+                })?;
+        }
+    }
+
+    Ok(Json(true))
+}
 
 /// [POST] /server/<uuid>/migrated?id=<uuid>
 pub async fn mark_migrated(

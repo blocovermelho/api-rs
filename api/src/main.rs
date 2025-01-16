@@ -211,6 +211,7 @@ async fn main() {
         .route("/ws", get(websocket::handle_socket))
         .route("/migrate", post(routes::create_migration))
         .route("/migration", get(routes::get_migration))
+        .route("/migration", delete(routes::delete_migration))
         .route("/", post(routes::create_account))
         .layer(authenticated);
 
