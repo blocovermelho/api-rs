@@ -948,6 +948,7 @@ async fn add_completed_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()
         err,
         Err(DriverError::InvalidInput(InvalidError::AlreadyMigrated))
     ));
+}
 
 #[test(sqlx::test(migrations = "src/migrations"))]
 async fn set_current_migration(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
