@@ -1,4 +1,4 @@
-use std::{net::Ipv4Addr, sync::Arc};
+use std::{collections::HashSet, net::Ipv4Addr, sync::Arc, time::Duration};
 
 use axum::{
     extract::{Path, Query, State},
@@ -10,11 +10,14 @@ use bv_discord::utils::notify;
 use chrono::{DateTime, Utc};
 use db::{
     data::{
-        result::ServerJoin,
+        result::{NodeDeletion, ServerJoin},
         stub::{AccountStub, ServerStub, UserStub},
-        BanActor, Server, User, Viewport,
+        BanActor, Migration, Server, User, Viewport,
     },
-    drivers::err::{base::NotFoundError, DriverError},
+    drivers::err::{
+base::{InvalidError, NotFoundError},
+DriverError,
+},
     interface::{DataSource, NetworkProvider},
 };
 use futures::SinkExt;
@@ -22,6 +25,7 @@ use oauth2::{reqwest::async_http_client, AuthorizationCode};
 use serde::{Deserialize, Serialize};
 use serenity::all::{GuildId, RoleId, UserId};
 use uuid::Uuid;
+use uuid_mc::PlayerUuid;
 
 use crate::{
     cidr::{lowest_common_prefix, MIN_COMMON_PREFIX},
@@ -549,6 +553,148 @@ pub async fn account_exists(
     let data = state.db.get_account(&account.uuid).await;
 
     Ok(Json(data.is_ok()))
+}
+/// [POST] /server/<uuid>/migrated?id=<uuid>
+pub async fn mark_migrated(
+    State(state): State<Arc<AppState>>, Path(server_id): Path<Uuid>,
+    Query(migration_id): Query<UuidQueryParam>,
+) -> Res<bool> {
+    let _ = state
+        .db
+        .get_server(&server_id)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?;
+
+    let migration = state
+        .db
+        .get_migration(&migration_id.uuid)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Migration not found")))?;
+
+    let affected: HashSet<_> = migration.affected_servers.0.into_iter().collect();
+
+    let completed = state
+        .db
+        .add_completed_server(&migration_id.uuid, &server_id)
+        .await;
+
+    if matches!(completed, Err(DriverError::InvalidInput(InvalidError::UnaffectedServer))) {
+        return Ok(Json(false));
+    }
+
+    if matches!(completed, Err(DriverError::InvalidInput(InvalidError::AlreadyMigrated))) {
+        return Ok(Json(true));
+    }
+
+    if let Ok(completed) = completed {
+        let set: HashSet<_> = completed.into_iter().collect();
+        let diff: HashSet<_> = affected.symmetric_difference(&set).collect();
+
+        let old_user = state
+            .db
+            .get_user_by_name(migration.old)
+            .await
+            .map_err(|_| {
+                ErrKind::NotFound(Err::new(
+                    "Couldn't get Old User from Migration. Is it already deleted?",
+                ))
+            })?;
+
+        let new_user = state
+            .db
+            .get_user_by_name(migration.new)
+            .await
+            .map_err(|_| {
+                ErrKind::NotFound(Err::new(
+                    "Couldn't get New User from Migration. Is it already deleted?",
+                ))
+            })?;
+
+        // We actually dont know if the new account has a SaveData yet.
+        // As such we try to make a new SaveData for the new user.
+        // If this fails thats okay, it just means that the user has a SaveData already.
+        let _ = state.db.create_savedata(&new_user.uuid, &server_id).await;
+
+        // Migrate SaveData for this server
+        // Merge playtimes
+        let old_playtime = state
+            .db
+            .get_playtime(&old_user.uuid, &server_id)
+            .await
+            .unwrap_or(Duration::ZERO);
+        let new_playtime = state
+            .db
+            .get_playtime(&new_user.uuid, &server_id)
+            .await
+            .unwrap_or(Duration::ZERO);
+
+        let combined_playtime = old_playtime + new_playtime;
+
+        // We must set the old account's playtime to zero.
+        let _ = state
+            .db
+            .update_playtime(&old_user.uuid, &server_id, Duration::ZERO)
+            .await;
+        // And set the newest account to the combined playtime.
+        let _ = state
+            .db
+            .update_playtime(&new_user.uuid, &server_id, combined_playtime)
+            .await;
+
+        // Transfer last saved position if the newest account has a default viewport
+        let new_viewport = state
+            .db
+            .get_viewport(&new_user.uuid, &server_id)
+            .await
+            .unwrap_or_default();
+
+        if new_viewport == Viewport::default() {
+            let old_viewport = state
+                .db
+                .get_viewport(&old_user.uuid, &server_id)
+                .await
+                .unwrap_or_default();
+            let _ = state
+                .db
+                .update_viewport(&new_user.uuid, &server_id, old_viewport)
+                .await;
+        }
+
+        if diff.is_empty() {
+            // Update Completion of Migration
+            let _ = state.db.update_completion(&migration.id).await.unwrap();
+
+            // Do destructive actions.
+            // Migrate User
+            let _ = state
+                .db
+                .migrate_user(&old_user.uuid, &new_user.uuid)
+                .await
+                .unwrap();
+
+            let account = state.db.get_account(&new_user.uuid).await;
+
+            // Migrate account if the new account isn't registered yet.
+            if account.is_err() {
+                state
+                    .db
+                    .migrate_account(&old_user.uuid, &new_user.uuid)
+                    .await
+                    .unwrap();
+            }
+
+            // Delete Old Account
+            state.db.delete_account(&old_user.uuid).await.unwrap();
+
+            // Delete Old SaveDatas
+            let _ = state.db.delete_savedatas(&old_user.uuid).await.unwrap();
+
+            // Delete Old User
+            let _ = state.db.delete_user(&old_user.uuid).await.unwrap();
+        }
+    }
+
+    Ok(Json(true))
 }
 
 /// [POST] /auth/ban?uuid=<>&ip=<ip>
