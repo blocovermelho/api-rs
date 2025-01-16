@@ -5,8 +5,9 @@ use uuid::Uuid;
 
 use crate::{
     data::{
-        result::{self, PlaytimeEntry},
-        stub, Account, Allowlist, BanActor, Blacklist, Pronoun, SaveData, Server, User, Viewport,
+        result::{self, NodeDeletion, PlaytimeEntry},
+        stub, Account, Allowlist, BanActor, Blacklist, Migration, Pronoun, SaveData, Server, User,
+        Viewport,
     },
     drivers::err::Response,
 };
@@ -14,6 +15,7 @@ use crate::{
 #[async_trait::async_trait]
 pub trait DataSource {
     async fn get_user_by_uuid(&self, uuid: &Uuid) -> Response<User>;
+    async fn get_user_by_name(&self, name: String) -> Response<User>;
     async fn get_users_by_discord_id(&self, discord_id: String) -> Response<Vec<User>>;
     async fn get_all_users(&self) -> Response<Vec<Uuid>>;
 
@@ -83,6 +85,23 @@ pub trait DataSource {
     ) -> Response<Vec<Pronoun>>;
 
     async fn create_savedata(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<SaveData>;
+    async fn get_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>>;
+    async fn delete_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>>;
+
+    async fn create_migration(
+        &self, old_account: String, new_account: String, parent: Option<Uuid>,
+    ) -> Response<Migration>;
+    async fn get_migration(&self, migration: &Uuid) -> Response<Migration>;
+    async fn add_completed_server(&self, migration: &Uuid, server: &Uuid) -> Response<Vec<Uuid>>;
+    async fn set_current_migration(
+        &self, user: &Uuid, migration: Option<Uuid>,
+    ) -> Response<Option<Uuid>>;
+    async fn update_completion(&self, migration: &Uuid) -> Response<bool>;
+    async fn update_visibility(&self, migration: &Uuid, visible: bool) -> Response<bool>;
+    async fn rebase_migration(
+        &self, migration: &Uuid, new_parent: Option<Uuid>,
+    ) -> Response<Migration>;
+    async fn delete_migration(&self, migration: &Uuid) -> Response<NodeDeletion>;
 }
 
 pub trait NetworkProvider {

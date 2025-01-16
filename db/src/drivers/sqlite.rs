@@ -10,8 +10,8 @@ use super::err::{base, DriverError, Response};
 use crate::{
     data::{
         self,
-        result::{PlaytimeEntry, ServerJoin, ServerLeave},
-        Account, Allowlist, BanActor, Blacklist, SaveData, Server, User, Viewport,
+        result::{NodeDeletion, PlaytimeEntry, ServerJoin, ServerLeave},
+        Account, Allowlist, BanActor, Blacklist, Migration, SaveData, Server, User, Viewport,
     },
     interface::DataSource,
 };
@@ -65,6 +65,19 @@ impl DataSource for Sqlite {
             .await;
 
         map_or_log(query, DriverError::DatabaseError(base::NotFoundError::User(*uuid)))
+    }
+
+    /// Gets an [User] by its Name.
+    ///
+    /// Returns an [`base::NotFoundError::User`] wrapped inside a [`DriverError::DatabaseError`] if a user with the given uuid can't be found.
+    #[tracing::instrument]
+    async fn get_user_by_name(&self, name: String) -> Response<User> {
+        let query = sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = ?")
+            .bind(name)
+            .fetch_one(&self.0)
+            .await;
+
+        map_or_log(query, DriverError::DatabaseError(base::NotFoundError::User(Uuid::nil())))
     }
 
     /// Gets *all* [`User`]s registered to an Discord account.
@@ -835,5 +848,238 @@ impl DataSource for Sqlite {
             .await;
 
         map_or_log(query, DriverError::DuplicateKeyInsertion)
+    }
+
+    /// Gets all [`SaveData`]s for an [`User`].
+    /// Useful for gathering all servers an user has joined.
+    async fn get_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>> {
+        let _ = self.get_user_by_uuid(player_uuid).await?;
+
+        let query = sqlx::query_as::<_, SaveData>("SELECT * FROM savedata WHERE player_uuid = $1")
+            .bind(player_uuid)
+            .fetch_all(&self.0)
+            .await;
+
+        map_or_log(query, DriverError::DatabaseError(base::NotFoundError::User(*player_uuid)))
+    }
+
+    async fn delete_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>> {
+        let _ = self.get_user_by_uuid(player_uuid).await?;
+
+        let query = sqlx::query_as::<_, SaveData>(
+            "DELETE FROM savedata WHERE player_uuid = $1 RETURNING *",
+        )
+        .bind(player_uuid)
+        .fetch_all(&self.0)
+        .await;
+
+        map_or_log(query, DriverError::DatabaseError(base::NotFoundError::User(*player_uuid)))
+    }
+
+    async fn create_migration(
+        &self, old_account: String, new_account: String, parent: Option<Uuid>,
+    ) -> Response<Migration> {
+        let old = self.get_user_by_name(old_account).await?;
+        let new = self.get_user_by_name(new_account).await?;
+
+        // Get affected servers
+        let old_servers: Vec<_> = self
+            .get_savedatas(&old.uuid)
+            .await?
+            .into_iter()
+            .map(|it| it.server_uuid)
+            .collect();
+
+        let query = sqlx::query_as::<_, Migration>("INSERT INTO namehist (id, parent, old, new, started_at, finished_at, affected_servers, finished_servers, visible) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *")
+       	.bind(Uuid::new_v4())
+       	.bind(parent)
+       	.bind(old.username)
+       	.bind(new.username)
+       	.bind(Utc::now())
+       	.bind(None::<chrono::DateTime<Utc>>)
+       	.bind(Json(old_servers))
+       	.bind("[]")
+       	.bind(Json(false))
+       	.fetch_one(&self.0)
+       	.await;
+
+        map_or_log(query, DriverError::Unreachable)
+    }
+
+    /// Get a [`Migration`] from its id.
+    ///
+    /// Returns:
+    /// - [`base::NotFoundError`] if no [`Migration`] exists with that Id.
+    async fn get_migration(&self, migration: &Uuid) -> Response<Migration> {
+        let query = sqlx::query_as::<_, Migration>("SELECT * FROM namehist WHERE id = $1")
+            .bind(migration)
+            .fetch_one(&self.0)
+            .await;
+
+        map_or_log(query, DriverError::DatabaseError(base::NotFoundError::Migration(*migration)))
+    }
+
+    /// Marks an [`Server`] as completed for a given [`Migration`]
+    ///
+    /// Returns:
+    /// - [`base::NotFoundError`] if either [`Server`] or [`M̀igration`] doesn't exist.
+    /// - [`base::InvalidError`] if the [`Server`] has already migrated.
+    /// - [`base::InvalidError`] if the [`Server`] wasn't affected by the migration.
+    /// - [`DriverError::Unreachable`] if something *bad* happened.
+    async fn add_completed_server(&self, migration: &Uuid, server: &Uuid) -> Response<Vec<Uuid>> {
+        let _ = self.get_server(server).await?;
+        let migration = self.get_migration(migration).await?;
+
+        if !migration.affected_servers.0.contains(server) {
+            return Err(DriverError::InvalidInput(base::InvalidError::UnaffectedServer));
+        }
+
+        let mut finished = migration.finished_servers.0;
+
+        if finished.contains(server) {
+            return Err(DriverError::InvalidInput(base::InvalidError::AlreadyMigrated));
+        }
+
+        finished.push(*server);
+
+        let query = sqlx::query_as::<_, Migration>(
+            "UPDATE namehist SET finished_servers = $1 WHERE id = $2 RETURNING *",
+        )
+        .bind(Json(finished))
+        .bind(migration.id)
+        .fetch_one(&self.0)
+        .await;
+
+        map_or_log(query.map(|it| it.finished_servers.0), DriverError::Unreachable)
+    }
+
+    /// Sets the current [`Migration`] for an [`User`]
+    ///
+    /// Returns:
+    /// - [`base::NotFoundError`] if either [`User`] or [`Migration`] doesn't exist.
+    /// - [`DriverError::Unreachable`] if something *bad* happened.
+    async fn set_current_migration(
+        &self, user: &Uuid, migration: Option<Uuid>,
+    ) -> Response<Option<Uuid>> {
+        let _ = self.get_user_by_uuid(user).await?;
+
+        // Check if migration is valid if one was passed
+        if let Some(migration) = migration {
+            let _ = self.get_migration(&migration).await?;
+        }
+
+        let query = sqlx::query_scalar::<_, Option<Uuid>>(
+            "UPDATE users SET current_migration = $1 where uuid = $2 RETURNING current_migration",
+        )
+        .bind(migration)
+        .bind(user)
+        .fetch_one(&self.0)
+        .await;
+
+        map_or_log(query, DriverError::Unreachable)
+    }
+
+    /// Updates the visibilty for a [`Migration`]
+    ///
+    /// Returns:
+    /// - [`base::NotFoundError`] if the [`Migration`] doesn't exist.
+    /// - [`DriverError::Unreachable`] if something *bad* happened.
+    async fn update_visibility(&self, migration: &Uuid, visible: bool) -> Response<bool> {
+        let _ = self.get_migration(migration).await?;
+
+        let query = sqlx::query_scalar::<_, Json<bool>>(
+            "UPDATE namehist SET visible = $1 WHERE id = $2 RETURNING visible",
+        )
+        .bind(Json(visible))
+        .bind(migration)
+        .fetch_one(&self.0)
+        .await;
+
+        map_or_log(query.map(|it| it.0), DriverError::Unreachable)
+    }
+
+    async fn update_completion(&self, migration: &Uuid) -> Response<bool> {
+        let _ = self.get_migration(migration).await?;
+
+        let query = sqlx::query("UPDATE namehist SET finished_at = $1 WHERE id = $2")
+            .bind(Some(Utc::now()))
+            .bind(migration)
+            .execute(&self.0)
+            .await;
+
+        map_or_log(query.map(|_| true), DriverError::Unreachable)
+    }
+
+    /// Changes the parent of a [`Migration`]
+    ///
+    /// Returns:
+    /// - [`base::NotFoundError`] if the [`Migration`] doesn't exist.
+    /// - [`DriverError::Unreachable`] if something *bad* happened.
+    async fn rebase_migration(
+        &self, migration: &Uuid, new_parent: Option<Uuid>,
+    ) -> Response<Migration> {
+        let _ = self.get_migration(migration).await?;
+
+        let query = sqlx::query_as::<_, Migration>(
+            "UPDATE namehist SET parent = $1 WHERE id = $2 RETURNING *",
+        )
+        .bind(new_parent)
+        .bind(migration)
+        .fetch_one(&self.0)
+        .await;
+
+        map_or_log(query, DriverError::Unreachable)
+    }
+
+    /// Deletes a [`Migration`]. Updates all the children to point to the migration's parent.
+    ///
+    /// Returns:
+    /// - [`base::NotFoundError`] if the [`Migration`] doesn't exist.
+    /// - [`DriverError::Unreachable`] if something *bad* happened.
+    async fn delete_migration(&self, migration: &Uuid) -> Response<NodeDeletion> {
+        // For deleting any of those we must get the migration's children and rebase them to the migration's parent.
+        // Then we can safely delete the migration
+
+        let current = self.get_migration(migration).await?;
+
+        let result: NodeDeletion;
+
+        // Step 1: Getting the chidren.
+        let children = sqlx::query_scalar::<_, Uuid>("SELECT id FROM namehist WHERE parent = $1")
+            .bind(migration)
+            .fetch_all(&self.0)
+            .await
+            .unwrap();
+
+        // If nothing points to it but it points to something, it is the last node of the list
+        if current.parent.is_some() && children.is_empty() {
+            result = NodeDeletion::Last { replacement: current.parent.unwrap() };
+        }
+        // If it points to nothing but nothing points to it, it is an orphaned node.
+        else if current.parent.is_none() && children.is_empty() {
+            result = NodeDeletion::First { is_orphan: true };
+        }
+        // If it points to nothing and something points to it, its the first node but isn't orphaned.
+        else if current.parent.is_none() && !children.is_empty() {
+            result = NodeDeletion::First { is_orphan: false };
+        }
+        // Otherwise, its a node in the middle
+        else {
+            result = NodeDeletion::Middle;
+        }
+
+        // If children exist, we rebase them.
+        for child in &children {
+            self.rebase_migration(child, current.parent).await?;
+        }
+
+        // Now we can safely delete the migration since nothing points to it.
+
+        let query = sqlx::query("DELETE from namehist WHERE id = $1")
+            .bind(migration)
+            .execute(&self.0)
+            .await;
+
+        map_or_log(query.map(|_| result), DriverError::Unreachable)
     }
 }

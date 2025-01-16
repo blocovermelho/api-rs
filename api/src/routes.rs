@@ -1,4 +1,4 @@
-use std::{net::Ipv4Addr, sync::Arc};
+use std::{collections::HashSet, net::Ipv4Addr, sync::Arc, time::Duration};
 
 use axum::{
     extract::{Path, Query, State},
@@ -10,11 +10,14 @@ use bv_discord::utils::notify;
 use chrono::{DateTime, Utc};
 use db::{
     data::{
-        result::ServerJoin,
+        result::{NodeDeletion, ServerJoin},
         stub::{AccountStub, ServerStub, UserStub},
-        BanActor, Server, User, Viewport,
+        BanActor, Migration, Server, User, Viewport,
     },
-    drivers::err::{base::NotFoundError, DriverError},
+    drivers::err::{
+base::{InvalidError, NotFoundError},
+DriverError,
+},
     interface::{DataSource, NetworkProvider},
 };
 use futures::SinkExt;
@@ -149,10 +152,9 @@ pub async fn get_user(State(state): State<Arc<AppState>>, Path(user_id): Path<Uu
 pub async fn get_user_by_name(
     State(state): State<Arc<AppState>>, Path(username): Path<String>,
 ) -> Res<User> {
-    let user_id = PlayerUuid::new_with_offline_username(&username);
     let data = state
         .db
-        .get_user_by_uuid(user_id.as_uuid())
+        .get_user_by_name(username)
         .await
         .map_err(|_| ErrKind::Internal(Err::new("User not found.")))?;
 
@@ -553,6 +555,314 @@ pub async fn account_exists(
     Ok(Json(data.is_ok()))
 }
 
+/// [POST] /auth/migrate?old=<old_username>&new=<new_username>
+pub async fn create_migration(
+    State(state): State<Arc<AppState>>, Query(migrate): Query<MigrateQueryParam>,
+) -> Res<Migration> {
+    let old_user = state
+        .db
+        .get_user_by_name(migrate.old.clone())
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Old user not found.")))?;
+
+    let mut new_user = state.db.get_user_by_name(migrate.new.clone()).await;
+
+    if new_user.is_err() {
+        let user_uuid = PlayerUuid::new_with_offline_username(&migrate.new);
+        new_user = state
+            .db
+            .create_user(UserStub {
+                uuid: *user_uuid.as_uuid(),
+                username: migrate.new.clone(),
+                discord_id: old_user.discord_id,
+            })
+            .await;
+    }
+
+    let new_user =
+        new_user.map_err(|_| ErrKind::Internal(Err::new("Couldn't get or create New User")))?;
+
+    // If the new account already has a pending migration, return that pending migration and dont create a new one.
+    if let Some(id) = new_user.current_migration {
+        let migration =
+            state.db.get_migration(&id).await.map_err(|_| {
+                ErrKind::NotFound(Err::new("Invalid Current Migration for New User."))
+            })?;
+
+        // Migration hasn't finished yet.
+        if migration.finished_at.is_none() {
+            return Ok(Json(migration));
+        }
+    }
+
+    // We now should create a new migration
+    let migration = state
+        .db
+        .create_migration(
+            migrate.old,
+            migrate.new,
+            old_user.current_migration.or(new_user.current_migration),
+        )
+        .await
+        .map_err(|e| ErrKind::Internal(Err::new("Couldn't create migration").with_inner(e)))?;
+
+    // And set it as the current migration for the new user.
+    let _ = state
+        .db
+        .set_current_migration(&new_user.uuid, Some(migration.id))
+        .await
+        .map_err(|e| {
+            ErrKind::Internal(Err::new("Couldn't set Current Migration for New User").with_inner(e))
+        })?;
+
+    Ok(Json(migration))
+}
+
+/// [GET] /auth/migration?id=<uuid>
+pub async fn get_migration(
+    State(state): State<Arc<AppState>>, Query(migration_id): Query<UuidQueryParam>,
+) -> Res<Migration> {
+    let migration = state
+        .db
+        .get_migration(&migration_id.uuid)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Migration not found.")))?;
+
+    Ok(Json(migration))
+}
+
+/// [PATCH] /auth/migration/:uuid/show
+pub async fn show_migration(
+    State(state): State<Arc<AppState>>, Path(migration_id): Path<Uuid>,
+) -> Res<bool> {
+    let migration = state
+        .db
+        .get_migration(&migration_id)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Migration not found.")))?;
+
+    let result = state
+        .db
+        .update_visibility(&migration.id, true)
+        .await
+        .map_err(|_| ErrKind::Internal(Err::new("Couldn't update migration.")))?;
+
+    Ok(Json(result))
+}
+
+/// [PATCH] /auth/migration/:uuid/hide
+pub async fn hide_migration(
+    State(state): State<Arc<AppState>>, Path(migration_id): Path<Uuid>,
+) -> Res<bool> {
+    let migration = state
+        .db
+        .get_migration(&migration_id)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Migration not found.")))?;
+
+    let result = state
+        .db
+        .update_visibility(&migration.id, false)
+        .await
+        .map_err(|_| ErrKind::Internal(Err::new("Couldn't update migration.")))?;
+
+    Ok(Json(result))
+}
+
+/// [DELETE] /auth/migration?id=<uuid>
+pub async fn delete_migration(
+    State(state): State<Arc<AppState>>, Query(migration_id): Query<UuidQueryParam>,
+) -> Res<bool> {
+    let migration = state
+        .db
+        .get_migration(&migration_id.uuid)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Migration not found.")))?;
+
+    let new_user = state
+        .db
+        .get_user_by_name(migration.new)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("New User not found.")))?;
+
+    let node = state
+        .db
+        .delete_migration(&migration_id.uuid)
+        .await
+        .map_err(|e| ErrKind::Internal(Err::new("Couldn't delete Migration").with_inner(e)))?;
+
+    match node {
+        NodeDeletion::Middle | NodeDeletion::First { is_orphan: false } => {}
+        NodeDeletion::First { is_orphan: true } => {
+            state
+                .db
+                .set_current_migration(&new_user.uuid, None)
+                .await
+                .map_err(|e| {
+                    ErrKind::Internal(
+                        Err::new("Couldn't update user state. Orphaned Node.").with_inner(e),
+                    )
+                })?;
+        }
+        NodeDeletion::Last { replacement } => {
+            state
+                .db
+                .set_current_migration(&new_user.uuid, Some(replacement))
+                .await
+                .map_err(|e| {
+                    ErrKind::Internal(
+                        Err::new("Couldn't update user state. Last Node.").with_inner(e),
+                    )
+                })?;
+        }
+    }
+
+    Ok(Json(true))
+}
+
+/// [POST] /server/<uuid>/migrated?id=<uuid>
+pub async fn mark_migrated(
+    State(state): State<Arc<AppState>>, Path(server_id): Path<Uuid>,
+    Query(migration_id): Query<UuidQueryParam>,
+) -> Res<bool> {
+    let _ = state
+        .db
+        .get_server(&server_id)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Server not found.")))?;
+
+    let migration = state
+        .db
+        .get_migration(&migration_id.uuid)
+        .await
+        .map_err(|_| ErrKind::NotFound(Err::new("Migration not found")))?;
+
+    let affected: HashSet<_> = migration.affected_servers.0.into_iter().collect();
+
+    let completed = state
+        .db
+        .add_completed_server(&migration_id.uuid, &server_id)
+        .await;
+
+    if matches!(completed, Err(DriverError::InvalidInput(InvalidError::UnaffectedServer))) {
+        return Ok(Json(false));
+    }
+
+    if matches!(completed, Err(DriverError::InvalidInput(InvalidError::AlreadyMigrated))) {
+        return Ok(Json(true));
+    }
+
+    if let Ok(completed) = completed {
+        let set: HashSet<_> = completed.into_iter().collect();
+        let diff: HashSet<_> = affected.symmetric_difference(&set).collect();
+
+        let old_user = state
+            .db
+            .get_user_by_name(migration.old)
+            .await
+            .map_err(|_| {
+                ErrKind::NotFound(Err::new(
+                    "Couldn't get Old User from Migration. Is it already deleted?",
+                ))
+            })?;
+
+        let new_user = state
+            .db
+            .get_user_by_name(migration.new)
+            .await
+            .map_err(|_| {
+                ErrKind::NotFound(Err::new(
+                    "Couldn't get New User from Migration. Is it already deleted?",
+                ))
+            })?;
+
+        // We actually dont know if the new account has a SaveData yet.
+        // As such we try to make a new SaveData for the new user.
+        // If this fails thats okay, it just means that the user has a SaveData already.
+        let _ = state.db.create_savedata(&new_user.uuid, &server_id).await;
+
+        // Migrate SaveData for this server
+        // Merge playtimes
+        let old_playtime = state
+            .db
+            .get_playtime(&old_user.uuid, &server_id)
+            .await
+            .unwrap_or(Duration::ZERO);
+        let new_playtime = state
+            .db
+            .get_playtime(&new_user.uuid, &server_id)
+            .await
+            .unwrap_or(Duration::ZERO);
+
+        let combined_playtime = old_playtime + new_playtime;
+
+        // We must set the old account's playtime to zero.
+        let _ = state
+            .db
+            .update_playtime(&old_user.uuid, &server_id, Duration::ZERO)
+            .await;
+        // And set the newest account to the combined playtime.
+        let _ = state
+            .db
+            .update_playtime(&new_user.uuid, &server_id, combined_playtime)
+            .await;
+
+        // Transfer last saved position if the newest account has a default viewport
+        let new_viewport = state
+            .db
+            .get_viewport(&new_user.uuid, &server_id)
+            .await
+            .unwrap_or_default();
+
+        if new_viewport == Viewport::default() {
+            let old_viewport = state
+                .db
+                .get_viewport(&old_user.uuid, &server_id)
+                .await
+                .unwrap_or_default();
+            let _ = state
+                .db
+                .update_viewport(&new_user.uuid, &server_id, old_viewport)
+                .await;
+        }
+
+        if diff.is_empty() {
+            // Update Completion of Migration
+            let _ = state.db.update_completion(&migration.id).await.unwrap();
+
+            // Do destructive actions.
+            // Migrate User
+            let _ = state
+                .db
+                .migrate_user(&old_user.uuid, &new_user.uuid)
+                .await
+                .unwrap();
+
+            let account = state.db.get_account(&new_user.uuid).await;
+
+            // Migrate account if the new account isn't registered yet.
+            if account.is_err() {
+                state
+                    .db
+                    .migrate_account(&old_user.uuid, &new_user.uuid)
+                    .await
+                    .unwrap();
+            }
+
+            // Delete Old Account
+            state.db.delete_account(&old_user.uuid).await.unwrap();
+
+            // Delete Old SaveDatas
+            let _ = state.db.delete_savedatas(&old_user.uuid).await.unwrap();
+
+            // Delete Old User
+            let _ = state.db.delete_user(&old_user.uuid).await.unwrap();
+        }
+    }
+
+    Ok(Json(true))
+}
+
 /// [POST] /auth/ban?uuid=<>&ip=<ip>
 /// ```json
 /// "Automatic" |
@@ -889,6 +1199,12 @@ pub struct BanCidrQueryParam {
 #[derive(Deserialize)]
 pub struct DiscordIdQueryParam {
     pub id: UserId,
+}
+
+#[derive(Deserialize)]
+pub struct MigrateQueryParam {
+    pub old: String,
+    pub new: String,
 }
 
 #[derive(Serialize, Clone, Debug)]

@@ -21,9 +21,9 @@ use uuid::Uuid;
 use super::err::Response;
 use crate::{
     data::{
-        result::{self, PlaytimeEntry},
-        stub, Account, Allowlist, BanActor, Blacklist, Loc, Modpack, Pronoun, SaveData, Server,
-        User, Viewport,
+        result::{self, NodeDeletion, PlaytimeEntry},
+        stub, Account, Allowlist, BanActor, Blacklist, Loc, Migration, Modpack, Pronoun, SaveData,
+        Server, User, Viewport,
     },
     drivers::err::{base::NotFoundError, DriverError},
     interface::DataSource,
@@ -108,6 +108,7 @@ impl DataSource for JsonDriver {
                 created_at: Utc::now(),       // We don't have created_at. LEL.
                 pronouns: Default::default(), // We know pronouns are empty for all ysers since it was a work in progress.
                 last_server: old_user.last_server,
+                current_migration: None,
             })
         } else {
             Err(DriverError::DatabaseError(NotFoundError::User(*uuid)))
@@ -179,6 +180,7 @@ impl DataSource for JsonDriver {
                 created_at: Utc::now(),
                 pronouns: Default::default(),
                 last_server: v.last_server,
+                current_migration: None,
             })
             .collect())
     }
@@ -398,5 +400,55 @@ impl DataSource for JsonDriver {
 
     async fn create_savedata(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<SaveData> {
         unimplemented!();
+    }
+
+    async fn get_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>> {
+        unimplemented!();
+    }
+
+    async fn delete_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>> {
+        unimplemented!();
+    }
+
+    async fn get_user_by_name(&self, name: String) -> Response<User> {
+        unimplemented!()
+    }
+
+    async fn create_migration(
+        &self, old_account: String, new_account: String, parent: Option<Uuid>,
+    ) -> Response<Migration> {
+        unimplemented!();
+    }
+
+    async fn get_migration(&self, migration: &Uuid) -> Response<Migration> {
+        unimplemented!()
+    }
+
+    async fn add_completed_server(&self, migration: &Uuid, server: &Uuid) -> Response<Vec<Uuid>> {
+        unimplemented!()
+    }
+
+    async fn set_current_migration(
+        &self, user: &Uuid, migration: Option<Uuid>,
+    ) -> Response<Option<Uuid>> {
+        unimplemented!()
+    }
+
+    async fn update_visibility(&self, migration: &Uuid, visible: bool) -> Response<bool> {
+        unimplemented!()
+    }
+
+    async fn update_completion(&self, migration: &Uuid) -> Response<bool> {
+        unimplemented!()
+    }
+
+    async fn rebase_migration(
+        &self, migration: &Uuid, new_parent: Option<Uuid>,
+    ) -> Response<Migration> {
+        unimplemented!()
+    }
+
+    async fn delete_migration(&self, migration: &Uuid) -> Response<NodeDeletion> {
+        unimplemented!()
     }
 }

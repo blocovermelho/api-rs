@@ -17,6 +17,7 @@ pub struct User {
     pub created_at: DateTime<Utc>,
     pub pronouns: Json<Vec<Pronoun>>,
     pub last_server: Option<Uuid>,
+    pub current_migration: Option<Uuid>,
 }
 
 #[derive(sqlx::FromRow, Debug)]
@@ -33,6 +34,30 @@ pub struct Allowlist {
     pub mask: u8,
     pub last_join: DateTime<Utc>,
     pub hits: i64,
+}
+
+// A User migration.
+#[derive(sqlx::FromRow, Serialize, Debug, Clone)]
+pub struct Migration {
+    // The migration Id. It has no relationship with the user's username.
+    pub id: Uuid,
+    // The parent of the migration
+    pub parent: Option<Uuid>,
+    pub old: String,
+    pub new: String,
+    pub started_at: DateTime<Utc>,
+    pub finished_at: Option<DateTime<Utc>>,
+    // All servers that are affected by this migration
+    // Servers here would be notified when the new/old user joins.
+    pub affected_servers: Json<Vec<Uuid>>,
+    // When the finished servers are the same as the affected servers
+    // A migration is considered complete, and at that point finished_at is set.
+    pub finished_servers: Json<Vec<Uuid>>,
+    // Visibility. Since migrations are usually done by trans members of our community
+    // In order to hide their deadnames, this field is necessary and is set as "false"
+    // by default. A member can opt-in into making their migration history public in a
+    // per-migration basis.
+    pub visible: Json<bool>,
 }
 
 impl NetworkProvider for Allowlist {
@@ -300,6 +325,12 @@ pub mod result {
     pub enum UserAction {
         InvalidUser,
         Accepted,
+    }
+
+    pub enum NodeDeletion {
+        First { is_orphan: bool },
+        Last { replacement: Uuid },
+        Middle,
     }
 
     #[derive(sqlx::FromRow)]

@@ -6,12 +6,15 @@ use uuid::Uuid;
 
 use crate::{
     data::{
-        result::{ServerJoin, ServerLeave},
+        result::{NodeDeletion, ServerJoin, ServerLeave},
         stub::{AccountStub, ServerStub, UserStub},
         BanActor, Loc, Pronoun, Server, User, Viewport,
     },
     drivers::{
-        err::{DriverError, Response},
+        err::{
+            base::{self, InvalidError},
+            DriverError, Response,
+        },
         sqlite::Sqlite,
     },
     interface::{DataSource, NetworkProvider},
@@ -159,6 +162,33 @@ async fn create_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     Ok(())
 }
 
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn create_migration(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+
+    let server = mock_server(&db).await;
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+
+    // Creates a valid savedata for a server, linking an user to a server.
+    // Without this no migrations can be done. You can't migrate from an empty account.
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+
+    let migration = db
+        .create_migration(old.username.clone(), new.username.clone(), old.current_migration)
+        .await
+        .unwrap();
+
+    assert_eq!(migration.old, old.username);
+    assert_eq!(migration.new, new.username);
+    assert_eq!(migration.affected_servers.0, vec![server.uuid]);
+    assert_eq!(migration.finished_servers.0, vec![]);
+    assert_eq!(migration.visible.0, false);
+    assert_eq!(migration.finished_at, None);
+
+    Ok(())
+}
+
 // READ
 #[test(sqlx::test(migrations = "src/migrations"))]
 async fn get_user_by_uuid(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
@@ -175,6 +205,17 @@ async fn get_user_by_uuid(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let save = db.get_user_by_uuid(&uuid).await.unwrap();
 
     assert_eq!(stub, save);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_user_by_name(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let user = mock_user(&db, "alikindsys").await;
+    let test = db.get_user_by_name("alikindsys".to_string()).await.unwrap();
+
+    assert_eq!(user.uuid, test.uuid);
+
     Ok(())
 }
 
@@ -431,6 +472,32 @@ async fn get_allowlists_with_range(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Resu
     assert_eq!(read.len(), 2);
     assert_eq!(read.get(0).unwrap().uuid, user.uuid);
     assert_eq!(read.get(1).unwrap().uuid, user.uuid);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn get_migration(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+
+    let server = mock_server(&db).await;
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+
+    let migration = db
+        .create_migration(old.username.clone(), new.username.clone(), old.current_migration)
+        .await
+        .unwrap();
+
+    let test = db.get_migration(&migration.id).await.unwrap();
+
+    assert_eq!(test.id, migration.id);
+    assert_eq!(test.old, migration.old);
+    assert_eq!(test.new, migration.new);
+    assert_eq!(test.new, new.username);
+    assert_eq!(test.old, old.username);
 
     Ok(())
 }
@@ -851,6 +918,149 @@ async fn broaden_allowlist_mask(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<
     Ok(())
 }
 
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn add_completed_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+    let migration = db
+        .create_migration(old.username, new.username, old.current_migration)
+        .await
+        .unwrap();
+
+    assert_eq!(migration.finished_servers.len(), 0);
+
+    let update = db
+        .add_completed_server(&migration.id, &server.uuid)
+        .await
+        .unwrap();
+
+    assert_eq!(update, vec![server.uuid]);
+
+    // Try to update an already migrated server
+
+    let err = db.add_completed_server(&migration.id, &server.uuid).await;
+
+    assert!(matches!(
+        err,
+        Err(DriverError::InvalidInput(InvalidError::AlreadyMigrated))
+    ));
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn set_current_migration(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+    let migration = db
+        .create_migration(old.username, new.username, old.current_migration)
+        .await
+        .unwrap();
+
+    assert_eq!(new.current_migration, None);
+
+    let update = db
+        .set_current_migration(&new.uuid, Some(migration.id))
+        .await
+        .unwrap();
+
+    let new_user = db.get_user_by_uuid(&new.uuid).await.unwrap();
+
+    assert_eq!(new_user.current_migration, update);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn update_completion(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+    let migration = db
+        .create_migration(old.username, new.username, old.current_migration)
+        .await
+        .unwrap();
+
+    assert_eq!(migration.finished_at, None);
+
+    let change = db.update_completion(&migration.id).await.unwrap();
+
+    let test = db.get_migration(&migration.id).await.unwrap();
+
+    assert_ne!(test.finished_at, None);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn update_visibility(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+    let migration = db
+        .create_migration(old.username, new.username, old.current_migration)
+        .await
+        .unwrap();
+
+    assert_eq!(migration.visible.0, false);
+
+    let change = db.update_visibility(&migration.id, true).await.unwrap();
+
+    assert_eq!(change, true);
+
+    let test = db.get_migration(&migration.id).await.unwrap();
+
+    assert_eq!(test.visible.0, change);
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn rebase_migration(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+    let migration = db
+        .create_migration(old.username, new.username, old.current_migration)
+        .await
+        .unwrap();
+
+    assert_eq!(migration.parent, None);
+
+    // This is a random uuid thats an invalid migration
+    // Its fine for the test since there is no checks if the id is valid or not
+    let new_id = Uuid::new_v4();
+
+    let change = db
+        .rebase_migration(&migration.id, Some(new_id))
+        .await
+        .unwrap();
+
+    assert_eq!(change.parent, Some(new_id));
+
+    // Reseting test
+
+    let reset = db.rebase_migration(&migration.id, None).await.unwrap();
+
+    assert_eq!(reset.parent, None);
+
+    Ok(())
+}
+
 // DELETE
 
 #[test(sqlx::test(migrations = "src/migrations"))]
@@ -951,6 +1161,110 @@ async fn delete_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let read = db.get_allowlists(&user.uuid).await.unwrap();
 
     assert_eq!(read.len(), 0);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn delete_savedatas(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let user = mock_user(&db, "alikindsys").await;
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
+
+    let savedatas = db.get_savedatas(&user.uuid).await.unwrap();
+
+    let deleted = db.delete_savedatas(&user.uuid).await.unwrap();
+
+    assert_eq!(savedatas.len(), deleted.len());
+
+    let test = db.get_savedatas(&user.uuid).await.unwrap();
+
+    assert!(test.is_empty());
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn delete_migration_simple(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let old = mock_user(&db, "roridev").await;
+    let new = mock_user(&db, "alikindsys").await;
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&old.uuid, &server.uuid).await.unwrap();
+    let migration = db
+        .create_migration(old.username, new.username, old.current_migration)
+        .await
+        .unwrap();
+
+    let delete = db.delete_migration(&migration.id).await;
+
+    // The delete is sucessful
+    assert!(matches!(delete, Ok(NodeDeletion::First { is_orphan: true })));
+
+    let error = db.get_migration(&migration.id).await;
+
+    // Migration was deleted.
+    assert!(matches!(
+        error,
+        Err(DriverError::DatabaseError(crate::drivers::err::base::NotFoundError::Migration(
+            _
+        )))
+    ));
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/migrations"))]
+async fn delete_migration_complex(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    // Try checking the rebasing feature of migrations
+    let db = get_wrapper(pool).await.unwrap();
+
+    let a = mock_user(&db, "roridev").await;
+    let b = mock_user(&db, "alikindsys").await;
+    let c = mock_user(&db, "alikind").await;
+
+    let server = mock_server(&db).await;
+
+    let _ = db.create_savedata(&a.uuid, &server.uuid).await.unwrap();
+    let _ = db.create_savedata(&b.uuid, &server.uuid).await.unwrap();
+
+    let first = db
+        .create_migration(a.username, b.username.clone(), None)
+        .await
+        .unwrap();
+
+    let second = db
+        .create_migration(b.username, c.username, Some(first.id))
+        .await
+        .unwrap();
+
+    // We now will delete the first migration.
+    let delete = db.delete_migration(&first.id).await;
+
+    // It should be successful
+    assert!(matches!(delete, Ok(NodeDeletion::First { is_orphan: false })));
+
+    // It should also cause the second's parent to be set to it's parent. In this case "None".
+    let update = db.get_migration(&second.id).await.unwrap();
+
+    // This should be changed.
+    assert_ne!(update.parent, second.parent);
+    // And it should be changed to the first's parent.
+    assert_eq!(update.parent, first.parent);
+
+    // Now getting the first migration should fail.
+    let error = db.get_migration(&first.id).await;
+
+    // Migration was deleted.
+    assert!(matches!(
+        error,
+        Err(DriverError::DatabaseError(crate::drivers::err::base::NotFoundError::Migration(
+            _
+        )))
+    ));
 
     Ok(())
 }

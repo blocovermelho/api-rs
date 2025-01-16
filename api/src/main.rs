@@ -182,6 +182,7 @@ async fn main() {
         .route("/:server_id/disable", patch(routes::disable).layer(authenticated.clone()))
         .route("/:server_id", get(routes::get_server))
         .route("/:server_id", delete(routes::delete_server).layer(authenticated.clone()))
+        .route("/:server_id/migrated", post(routes::mark_migrated).layer(authenticated.clone()))
         .route("/", post(routes::create_server).layer(authenticated.clone()));
 
     let user = Router::new()
@@ -208,6 +209,11 @@ async fn main() {
         .route("/session", get(routes::get_session))
         .route("/changepw", patch(routes::changepw))
         .route("/ws", get(websocket::handle_socket))
+        .route("/migrate", post(routes::create_migration))
+        .route("/migration", get(routes::get_migration))
+        .route("/migration", delete(routes::delete_migration))
+        .route("/migration/:migration_id/show", patch(routes::show_migration))
+        .route("/migration/:migration_id/hide", patch(routes::hide_migration))
         .route("/", post(routes::create_account))
         .layer(authenticated);
 

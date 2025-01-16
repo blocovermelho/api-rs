@@ -29,6 +29,7 @@ pub mod err {
             Session(Uuid), // Equivalent to: SessionCheck::Deny
             WhitelistEntry, // Didn't exist.
             BlacklistEntry, // Equivalent to: PardonAttempt::NotBanned
+            Migration(Uuid),
         }
 
         impl Display for NotFoundError {
@@ -52,6 +53,7 @@ pub mod err {
                     }
                     Self::WhitelistEntry => write!(f, "No whitelist entries found"),
                     Self::BlacklistEntry => write!(f, "No blacklist entries found"),
+                    Self::Migration(uuid) => write!(f, "Migration with id: {} not found", uuid),
                 }
             }
         }
@@ -61,8 +63,10 @@ pub mod err {
         /// When user input is invalid.
         #[derive(Debug)]
         pub enum InvalidError {
-            Password,    // Equivalent to: Password{Check,Modify}::InvalidPassword
-            OldPassword, // Didn't exist.
+            Password,         // Equivalent to: Password{Check,Modify}::InvalidPassword
+            OldPassword,      // Didn't exist.
+            AlreadyMigrated,  // Server has already migrated
+            UnaffectedServer, // Server didn't need to be migrated
         }
 
         impl Display for InvalidError {
@@ -70,6 +74,12 @@ pub mod err {
                 match self {
                     Self::Password => write!(f, "Invalid password."),
                     Self::OldPassword => write!(f, "Invalid old password."),
+                    Self::AlreadyMigrated => {
+                        write!(f, "This server has already finished migrating")
+                    }
+                    Self::UnaffectedServer => {
+                        write!(f, "This server wasn't affected by this migration")
+                    }
                 }
             }
         }

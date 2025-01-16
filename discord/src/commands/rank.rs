@@ -26,7 +26,9 @@ pub async fn rank(
 
     let embed = match server_ {
         Ok(s) => {
-            let playtimes = db.get_playtimes(&s.uuid).await.unwrap_or_default();
+            let mut playtimes = db.get_playtimes(&s.uuid).await.unwrap();
+            playtimes.sort_by(|a, b| b.playtime.0.cmp(&a.playtime.0));
+
             let mut strs = vec![];
             for (idx, entry) in playtimes.iter().enumerate() {
                 strs.push(format_entry(entry, idx));
