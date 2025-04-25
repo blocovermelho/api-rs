@@ -1,3 +1,4 @@
+pub mod discord;
 pub mod prelude;
 
 use std::{collections::HashSet, net::Ipv4Addr, sync::Arc, time::Duration};
