@@ -7,7 +7,7 @@ use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{routes::LinkResult, AppState};
+use crate::{routes::prelude::responses::LinkResult, AppState};
 
 pub async fn handle_socket(
     ws: WebSocketUpgrade<MessageOut, MessageIn>, State(state): State<Arc<AppState>>,
