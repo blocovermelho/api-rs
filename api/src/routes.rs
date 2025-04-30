@@ -1,5 +1,6 @@
 pub mod discord;
 pub mod prelude;
+pub mod server;
 pub mod user;
 
 use std::{collections::HashSet, net::Ipv4Addr, sync::Arc, time::Duration};
