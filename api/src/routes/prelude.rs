@@ -79,4 +79,19 @@ pub mod responses {
         pub when: DateTime<Utc>,
         pub minecraft_uuid: Uuid,
     }
+
+    #[derive(Serialize, Clone)]
+    pub enum BanKind {
+        Existing,
+        Merged,
+        New,
+        Invalid,
+    }
+
+    #[derive(Serialize)]
+    pub enum IpKind {
+        Allowed,
+        Banned,
+        Unknown,
+    }
 }
