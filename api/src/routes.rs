@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod discord;
 pub mod prelude;
 pub mod server;
