@@ -23,9 +23,9 @@ pub async fn exists(
         .await
         .map_err(|_| ErrKind::NotFound(Err::new("Account not found.")))?;
 
-    for entry in entries
+    if let Some(entry) = entries
         .into_iter()
-        .filter(|x| (now - x.last_join).num_minutes() <= 10)
+        .find(|x| (now - x.last_join).num_minutes() <= 10)
     {
         let _ = state.db.bump_allowlist(entry).await;
         let _ = state.db.update_current_join(&attempt.uuid).await;
