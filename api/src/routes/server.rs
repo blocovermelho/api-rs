@@ -14,6 +14,15 @@ use crate::routes::prelude::*;
 
 pub const MAX_ATTEMPTS_PER_ACC: i32 = 5;
 
+/// [GET] /api/servers
+pub async fn get_all_servers(State(state): State<Arc<AppState>>) -> Res<Vec<Uuid>> {
+    let data = state.db.get_all_servers().await.map_err(|e| {
+        ErrKind::Internal(Err::new("Couldn't get all servers").with_inner(format!("{:?}", e)))
+    })?;
+
+    Ok(Json(data))
+}
+
 /// [GET] /`api/server/:server_id`
 pub async fn get(State(state): State<Arc<AppState>>, Path(server_uuid): Path<Uuid>) -> Res<Server> {
     let data = state
