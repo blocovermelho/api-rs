@@ -178,50 +178,54 @@ async fn main() {
         .layer(ValidateRequestHeaderLayer::bearer(&token));
 
     let server = Router::new()
-        .route("/:server_id/enable", patch(routes::enable).layer(authenticated.clone()))
-        .route("/:server_id/disable", patch(routes::disable).layer(authenticated.clone()))
-        .route("/:server_id", get(routes::get_server))
-        .route("/:server_id", delete(routes::delete_server).layer(authenticated.clone()))
-        .route("/:server_id/migrated", post(routes::mark_migrated).layer(authenticated.clone()))
-        .route("/", post(routes::create_server).layer(authenticated.clone()));
+        .route("/:server_id/enable", patch(routes::server::enable).layer(authenticated.clone()))
+        .route(
+            "/:server_id/disable",
+            patch(routes::server::disable).layer(authenticated.clone()),
+        )
+        .route("/:server_id", get(routes::server::get))
+        .route("/:server_id", delete(routes::server::delete).layer(authenticated.clone()))
+        .route(
+            "/:server_id/migrated",
+            post(routes::server::migrate_user).layer(authenticated.clone()),
+        )
+        .route("/", post(routes::server::create).layer(authenticated.clone()));
 
     let user = Router::new()
-        .route("/exists", get(routes::user_exists))
-        .route("/:user_id", get(routes::get_user))
-        .route("/by-name/:username", get(routes::get_user_by_name))
-        .route("/by-discord/:discord_id", get(routes::get_user_by_discord))
-        .route("/:user_id", delete(routes::delete_user).layer(authenticated.clone()))
-        .route("/", post(routes::create_user).layer(authenticated.clone()));
+        .route("/exists", get(routes::user::exists))
+        .route("/:user_id", get(routes::user::get_by_offline_id))
+        .route("/by-name/:username", get(routes::user::get_by_username))
+        .route("/by-discord/:discord_id", get(routes::user::get_linked_users))
+        .route("/:user_id", delete(routes::user::delete).layer(authenticated.clone()))
+        .route("/", post(routes::user::create).layer(authenticated.clone()));
 
     let auth = Router::new()
-        // .route("/handshake", post(routes::cidr_handshake))
-        // .route("/grace", post(routes::cidr_grace))
-        .route("/ban", post(routes::ban_cidr))
-        .route("/allow", post(routes::allow_cidr))
+        .route("/ban", post(routes::auth::session::ban_ip))
+        .route("/allow", post(routes::auth::session::whitelist_ip))
         // .route("/disallow", post(routes::disallow_cidr))
         // .route("/disallow-ingame", post(routes::disallow_cidr_ingame))
-        .route("/cidr", get(routes::cidr_check))
-        .route("/exists", get(routes::account_exists))
-        .route("/:server_id/logoff", post(routes::logoff))
-        .route("/:server_id/login", post(routes::login))
-        .route("/:user_id", delete(routes::delete_account))
-        .route("/resume", patch(routes::resume))
-        .route("/session", get(routes::get_session))
-        .route("/changepw", patch(routes::changepw))
+        .route("/cidr", get(routes::auth::session::check_ip))
+        .route("/exists", get(routes::auth::account::exists))
+        .route("/:server_id/logoff", post(routes::server::logoff))
+        .route("/:server_id/login", post(routes::server::login))
+        .route("/:user_id", delete(routes::auth::account::delete))
+        .route("/resume", patch(routes::auth::session::resume))
+        .route("/session", get(routes::auth::session::exists))
+        .route("/changepw", patch(routes::auth::account::change_password))
         .route("/ws", get(websocket::handle_socket))
-        .route("/migrate", post(routes::create_migration))
-        .route("/migration", get(routes::get_migration))
-        .route("/migration", delete(routes::delete_migration))
-        .route("/migration/:migration_id/show", patch(routes::show_migration))
-        .route("/migration/:migration_id/hide", patch(routes::hide_migration))
-        .route("/", post(routes::create_account))
+        .route("/migrate", post(routes::migration::create))
+        .route("/migration", get(routes::migration::get))
+        .route("/migration", delete(routes::migration::delete))
+        .route("/migration/:migration_id/show", patch(routes::migration::set_visible))
+        .route("/migration/:migration_id/hide", patch(routes::migration::set_hidden))
+        .route("/", post(routes::auth::account::create))
         .layer(authenticated);
 
     let app = Router::new()
-        .route("/link", get(routes::link))
-        .route("/oauth", get(routes::discord))
-        .route("/servers", get(routes::get_servers))
-        .route("/users", get(routes::get_users))
+        .route("/link", get(routes::discord::link_account))
+        .route("/oauth", get(routes::discord::get_oauth_url))
+        .route("/servers", get(routes::server::get_all_servers))
+        .route("/users", get(routes::user::get_all_users))
         .nest("/server", server)
         .nest("/user", user)
         .nest("/auth", auth)
