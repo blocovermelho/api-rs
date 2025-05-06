@@ -22,6 +22,7 @@ pub mod types {
         pub inner: Option<String>,
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     impl Err {
         pub fn new(message: impl ToString) -> Self {
             Self { error: message.to_string(), inner: None }
