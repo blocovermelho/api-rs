@@ -7,10 +7,50 @@ pub use axum::{
 pub use db::interface::DataSource;
 pub use uuid::Uuid;
 
-pub use crate::{
-    routes::{Err, ErrKind, Res},
-    AppState,
-};
+pub use crate::AppState;
+
+pub mod types {
+    use axum::{response::IntoResponse, Json};
+    use reqwest::StatusCode;
+    use serde::Serialize;
+
+    pub type Res<T> = Result<Json<T>, ErrKind>;
+
+    #[derive(Serialize, Clone)]
+    pub struct Err {
+        pub error: String,
+        pub inner: Option<String>,
+    }
+
+    impl Err {
+        pub fn new(message: impl ToString) -> Self {
+            Self { error: message.to_string(), inner: None }
+        }
+
+        pub fn with_inner(&mut self, inner: impl ToString) -> Self {
+            self.inner = Some(inner.to_string());
+            self.clone()
+        }
+    }
+
+    pub enum ErrKind {
+        NotFound(Err),
+        Internal(Err),
+        BadRequest(Err),
+    }
+
+    impl IntoResponse for ErrKind {
+        fn into_response(self) -> axum::response::Response {
+            match self {
+                Self::NotFound(e) => (StatusCode::NOT_FOUND, Json(e)).into_response(),
+                Self::Internal(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(e)).into_response(),
+                Self::BadRequest(e) => (StatusCode::BAD_REQUEST, Json(e)).into_response(),
+            }
+        }
+    }
+}
+
+pub use types::*;
 
 pub mod query_params {
     use std::net::Ipv4Addr;

@@ -12,7 +12,7 @@ use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use migrate::migrate;
 use oauth::models::Config;
 use reqwest::{header, Client};
-use routes::LinkResult;
+use crate::routes::prelude::responses::LinkResult;
 use serenity::all::GatewayIntents;
 use tokio::sync::Mutex;
 use tower::ServiceBuilder;
