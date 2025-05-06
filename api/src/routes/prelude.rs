@@ -66,7 +66,7 @@ pub mod query_params {
     }
 
     #[derive(Deserialize)]
-    struct InnerUuid {
+    pub struct InnerUuid {
         pub uuid: Uuid,
     }
 
@@ -78,7 +78,7 @@ pub mod query_params {
     }
 
     #[derive(Deserialize)]
-    struct InnerConnectionAttempt {
+    pub struct InnerConnectionAttempt {
         pub uuid: Uuid,
         pub ip: Ipv4Addr,
         #[serde(skip_serializing_if = "Option::is_none")]
