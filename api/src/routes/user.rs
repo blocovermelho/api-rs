@@ -69,3 +69,12 @@ pub async fn create(State(state): State<Arc<AppState>>, Json(stub): Json<UserStu
 
     Ok(Json(user))
 }
+
+/// [DELETE] /`api/user/:user_id`
+pub async fn delete(State(state): State<Arc<AppState>>, Path(user): Path<Uuid>) -> Res<User> {
+    let user = state.db.delete_user(&user).await.map_err(|e| {
+        ErrKind::Internal(Err::new("Couldn't flush data for User").with_inner(format!("{:?}", e)))
+    })?;
+
+    Ok(Json(user))
+}
