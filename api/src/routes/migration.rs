@@ -69,7 +69,7 @@ pub async fn create(
     Ok(Json(migration))
 }
 
-/// [GET] /auth/migration?id=<uuid>
+/// [GET] /auth/migration?uuid=<uuid>
 pub async fn get(
     State(state): State<Arc<AppState>>, Query(migration_id): Query<OfflineUuid>,
 ) -> Res<Migration> {
@@ -120,7 +120,7 @@ pub async fn set_hidden(
     Ok(Json(result))
 }
 
-/// [DELETE] /auth/migration?id=<uuid>
+/// [DELETE] /auth/migration?uuid=<uuid>
 pub async fn delete(
     State(state): State<Arc<AppState>>, Query(migration_id): Query<OfflineUuid>,
 ) -> Res<bool> {

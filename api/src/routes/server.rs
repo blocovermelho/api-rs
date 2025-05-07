@@ -244,7 +244,7 @@ pub async fn logoff(
     Ok(Json(true))
 }
 
-/// [POST] /server/<uuid>/migrated?id=<uuid>
+/// [POST] /server/<uuid>/migrated?uuid=<uuid>
 pub async fn migrate_user(
     State(state): State<Arc<AppState>>, Path(server_id): Path<Uuid>,
     Query(migration_id): Query<OfflineUuid>,
