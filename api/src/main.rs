@@ -38,6 +38,8 @@ pub mod routes;
 pub mod shim;
 mod utils;
 pub mod websocket;
+//TODO: Add configuration thingy so this only compiles with a flag
+pub mod tests;
 
 #[allow(clippy::type_complexity)]
 struct Channels {
