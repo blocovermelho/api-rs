@@ -40,6 +40,8 @@ tracing-subscriber = { version = "0.3" }
 
 serenity =  { version = "0.12", default-features = false, features = ["http", "client", "rustls_backend", "builder", "gateway"] } 
 flate2 = "^1.0.28"
+anyhow = { version = "1.0.98" , default-features = true }
+thiserror = { version = "2.0.12" }
 
 [lints]
 workspace = true
