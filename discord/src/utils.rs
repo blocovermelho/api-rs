@@ -1,3 +1,5 @@
+pub mod builtins;
+
 use poise::serenity_prelude::{
     self, async_trait, ComponentInteraction, Context, CreateActionRow, CreateEmbed,
     CreateInteractionResponse, CreateInteractionResponseMessage,
