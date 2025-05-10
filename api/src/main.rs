@@ -33,6 +33,7 @@ pub mod migrate;
 pub mod models;
 pub mod routes;
 // pub mod store;
+pub mod shim;
 pub mod websocket;
 
 #[allow(clippy::type_complexity)]
