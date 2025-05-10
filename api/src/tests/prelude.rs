@@ -10,7 +10,7 @@ pub mod stub {
     use db::data::stub::{AccountStub, UserStub};
     use uuid::Uuid;
 
-    use crate::tests::prelude::query_params::LoginAttempt;
+    use crate::tests::prelude::query_params::{IpCheck, LoginAttempt};
 
     pub fn login_attempt(name: &str, password: &str) -> LoginAttempt {
         LoginAttempt {
@@ -20,6 +20,10 @@ pub mod stub {
             ip: Ipv4Addr::LOCALHOST.into(),
             password: password.to_string(),
         }
+    }
+
+    pub fn ip_check(uuid: Uuid, ip: Ipv4Addr) -> IpCheck {
+        IpCheck { uuid, ip, server: None }
     }
 
     pub fn user(name: &str, discord_id: &str) -> UserStub {
