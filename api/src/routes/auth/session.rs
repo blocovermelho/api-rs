@@ -1,4 +1,3 @@
-use bv_discord::utils::notify;
 use db::{data::BanActor, drivers::json::data::BanIssuer, interface::NetworkProvider};
 use serenity::all::{GuildId, RoleId, UserId};
 
@@ -9,6 +8,7 @@ use crate::{
         responses::{BanKind, IpKind},
         *,
     },
+    utils::notify,
 };
 
 /// [GET] /auth/session?uuid=<ID>&ip=<IP>

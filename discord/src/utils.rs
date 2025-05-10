@@ -3,8 +3,6 @@ use poise::serenity_prelude::{
     CreateInteractionResponse, CreateInteractionResponseMessage,
 };
 
-pub mod notify;
-
 #[async_trait]
 pub trait CompInterExt {
     async fn update_message(

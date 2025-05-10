@@ -34,6 +34,7 @@ pub mod models;
 pub mod routes;
 // pub mod store;
 pub mod shim;
+mod utils;
 pub mod websocket;
 
 #[allow(clippy::type_complexity)]
