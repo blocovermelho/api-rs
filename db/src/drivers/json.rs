@@ -226,7 +226,7 @@ impl DataSource for JsonDriver {
 
     // Uninmplemented
 
-    async fn get_playtimes(&self, server_uuid: &Uuid) -> Response<Vec<PlaytimeEntry>> {
+    async fn get_playtimes(&self, _server_uuid: &Uuid) -> Response<Vec<PlaytimeEntry>> {
         unimplemented!();
     }
 
@@ -236,7 +236,7 @@ impl DataSource for JsonDriver {
     ///
     /// The risk of accidentally banning a player forever due to a flaw on the system and it
     /// being a pain to fix is high enough that I just wont do it.
-    async fn get_blacklists(&self, ip: Ipv4Addr) -> Response<Vec<Blacklist>> {
+    async fn get_blacklists(&self, _ip: Ipv4Addr) -> Response<Vec<Blacklist>> {
         unimplemented!();
     }
 
@@ -264,191 +264,197 @@ impl DataSource for JsonDriver {
         }));
     }
 
-    async fn create_user(&self, stub: stub::UserStub) -> Response<User> {
+    async fn create_user(&self, _stub: stub::UserStub) -> Response<User> {
         unimplemented!();
     }
 
-    async fn delete_user(&self, uuid: &Uuid) -> Response<User> {
+    async fn delete_user(&self, _uuid: &Uuid) -> Response<User> {
         unimplemented!();
     }
 
-    async fn migrate_user(&self, from: &Uuid, into: &Uuid) -> Response<User> {
+    async fn migrate_user(&self, _from: &Uuid, _into: &Uuid) -> Response<User> {
         unimplemented!();
     }
 
-    async fn create_account(&self, stub: stub::AccountStub) -> Response<()> {
+    async fn create_account(&self, _stub: stub::AccountStub) -> Response<()> {
         unimplemented!();
     }
 
-    async fn update_password(&self, player_uuid: &Uuid, new_password: String) -> Response<()> {
+    async fn update_password(&self, _player_uuid: &Uuid, _new_password: String) -> Response<()> {
         unimplemented!();
     }
 
-    async fn update_current_join(&self, player_uuid: &Uuid) -> Response<()> {
+    async fn update_current_join(&self, _player_uuid: &Uuid) -> Response<()> {
         unimplemented!();
     }
 
-    async fn migrate_account(&self, from: &Uuid, to: &Uuid) -> Response<()> {
+    async fn migrate_account(&self, _from: &Uuid, _to: &Uuid) -> Response<()> {
         unimplemented!();
     }
 
-    async fn delete_account(&self, player_uuid: &Uuid) -> Response<()> {
+    async fn delete_account(&self, _player_uuid: &Uuid) -> Response<()> {
         unimplemented!();
     }
 
-    async fn create_allowlist(&self, player_uuid: &Uuid, ip: Ipv4Addr) -> Response<Allowlist> {
+    async fn create_allowlist(&self, _player_uuid: &Uuid, _ip: Ipv4Addr) -> Response<Allowlist> {
         unimplemented!();
     }
 
-    async fn get_server_by_name(&self, name: String) -> Response<Server> {
+    async fn get_server_by_name(&self, _name: String) -> Response<Server> {
         unimplemented!();
     }
 
     async fn get_allowlists_with_ip(
-        &self, player_uuid: &Uuid, ip: Ipv4Addr,
+        &self, _player_uuid: &Uuid, _ip: Ipv4Addr,
     ) -> Response<Vec<Allowlist>> {
         unimplemented!();
     }
 
     async fn get_allowlists_with_range(
-        &self, player_uuid: &Uuid, ip: Ipv4Addr, mask: u8,
+        &self, _player_uuid: &Uuid, _ip: Ipv4Addr, _mask: u8,
     ) -> Response<Vec<Allowlist>> {
         unimplemented!();
     }
 
-    async fn bump_allowlist(&self, entry: Allowlist) -> Response<()> {
+    async fn bump_allowlist(&self, _entry: Allowlist) -> Response<()> {
         unimplemented!();
     }
 
-    async fn broaden_allowlist_mask(&self, entry: Allowlist, new_mask: u8) -> Response<()> {
+    async fn broaden_allowlist_mask(&self, _entry: Allowlist, _new_mask: u8) -> Response<()> {
         unimplemented!();
     }
 
-    async fn delete_allowlist(&self, entry: Allowlist) -> Response<()> {
+    async fn delete_allowlist(&self, _entry: Allowlist) -> Response<()> {
         unimplemented!();
     }
 
-    async fn create_blacklist(&self, ip: Ipv4Addr, actor: BanActor) -> Response<Blacklist> {
+    async fn create_blacklist(&self, _ip: Ipv4Addr, _actor: BanActor) -> Response<Blacklist> {
         unimplemented!();
     }
 
-    async fn get_blacklists_with_range(&self, ip: Ipv4Addr, mask: u8) -> Response<Vec<Blacklist>> {
+    async fn get_blacklists_with_range(
+        &self, _ip: Ipv4Addr, _mask: u8,
+    ) -> Response<Vec<Blacklist>> {
         unimplemented!();
     }
 
-    async fn bump_blacklist(&self, entry: Blacklist) -> Response<()> {
+    async fn bump_blacklist(&self, _entry: Blacklist) -> Response<()> {
         unimplemented!();
     }
 
-    async fn broaden_blacklist_mask(&self, entry: Blacklist, new_mask: u8) -> Response<()> {
+    async fn broaden_blacklist_mask(&self, _entry: Blacklist, _new_mask: u8) -> Response<()> {
         unimplemented!();
     }
 
-    async fn delete_blacklist(&self, entry: Blacklist) -> Response<()> {
+    async fn delete_blacklist(&self, _entry: Blacklist) -> Response<()> {
         unimplemented!();
     }
 
-    async fn create_server(&self, stub: stub::ServerStub) -> Response<Server> {
+    async fn create_server(&self, _stub: stub::ServerStub) -> Response<Server> {
         unimplemented!();
     }
 
-    async fn delete_server(&self, server_uuid: &Uuid) -> Response<Server> {
+    async fn delete_server(&self, _server_uuid: &Uuid) -> Response<Server> {
         unimplemented!();
     }
 
     async fn join_server(
-        &self, server_uuid: &Uuid, player_uuid: &Uuid,
+        &self, _server_uuid: &Uuid, _player_uuid: &Uuid,
     ) -> Response<result::ServerJoin> {
         unimplemented!();
     }
 
     async fn leave_server(
-        &self, server_uuid: &Uuid, player_uuid: &Uuid,
+        &self, _server_uuid: &Uuid, _player_uuid: &Uuid,
     ) -> Response<result::ServerLeave> {
         unimplemented!();
     }
 
-    async fn update_server_status(&self, server_uuid: &Uuid, online: bool) -> Response<bool> {
+    async fn update_server_status(&self, _server_uuid: &Uuid, _online: bool) -> Response<bool> {
         unimplemented!();
     }
 
     async fn update_viewport(
-        &self, player_uuid: &Uuid, server_uuid: &Uuid, viewport: Viewport,
+        &self, _player_uuid: &Uuid, _server_uuid: &Uuid, _viewport: Viewport,
     ) -> Response<Viewport> {
         unimplemented!();
     }
 
     async fn update_playtime(
-        &self, player_uuid: &Uuid, server_uuid: &Uuid, new_playtime: Duration,
+        &self, _player_uuid: &Uuid, _server_uuid: &Uuid, _new_playtime: Duration,
     ) -> Response<()> {
         unimplemented!();
     }
 
-    async fn add_pronoun(&self, player_uuid: &Uuid, pronoun: Pronoun) -> Response<Vec<Pronoun>> {
+    async fn add_pronoun(&self, _player_uuid: &Uuid, _pronoun: Pronoun) -> Response<Vec<Pronoun>> {
         unimplemented!();
     }
 
-    async fn remove_pronoun(&self, player_uuid: &Uuid, pronoun: Pronoun) -> Response<Vec<Pronoun>> {
-        unimplemented!();
-    }
-
-    async fn update_pronoun(
-        &self, player_uuid: &Uuid, old: &Pronoun, new: Pronoun,
+    async fn remove_pronoun(
+        &self, _player_uuid: &Uuid, _pronoun: Pronoun,
     ) -> Response<Vec<Pronoun>> {
         unimplemented!();
     }
 
-    async fn create_savedata(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<SaveData> {
+    async fn update_pronoun(
+        &self, _player_uuid: &Uuid, _old: &Pronoun, _new: Pronoun,
+    ) -> Response<Vec<Pronoun>> {
         unimplemented!();
     }
 
-    async fn get_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>> {
+    async fn create_savedata(
+        &self, _player_uuid: &Uuid, _server_uuid: &Uuid,
+    ) -> Response<SaveData> {
         unimplemented!();
     }
 
-    async fn delete_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>> {
+    async fn get_savedatas(&self, _player_uuid: &Uuid) -> Response<Vec<SaveData>> {
         unimplemented!();
     }
 
-    async fn get_user_by_name(&self, name: String) -> Response<User> {
+    async fn delete_savedatas(&self, _player_uuid: &Uuid) -> Response<Vec<SaveData>> {
+        unimplemented!();
+    }
+
+    async fn get_user_by_name(&self, _name: String) -> Response<User> {
         unimplemented!()
     }
 
     async fn create_migration(
-        &self, old_account: String, new_account: String, parent: Option<Uuid>,
+        &self, _old_account: String, _new_account: String, _parent: Option<Uuid>,
     ) -> Response<Migration> {
         unimplemented!();
     }
 
-    async fn get_migration(&self, migration: &Uuid) -> Response<Migration> {
+    async fn get_migration(&self, _migration: &Uuid) -> Response<Migration> {
         unimplemented!()
     }
 
-    async fn add_completed_server(&self, migration: &Uuid, server: &Uuid) -> Response<Vec<Uuid>> {
+    async fn add_completed_server(&self, _migration: &Uuid, _server: &Uuid) -> Response<Vec<Uuid>> {
         unimplemented!()
     }
 
     async fn set_current_migration(
-        &self, user: &Uuid, migration: Option<Uuid>,
+        &self, _user: &Uuid, _migration: Option<Uuid>,
     ) -> Response<Option<Uuid>> {
         unimplemented!()
     }
 
-    async fn update_visibility(&self, migration: &Uuid, visible: bool) -> Response<bool> {
+    async fn update_visibility(&self, _migration: &Uuid, _visible: bool) -> Response<bool> {
         unimplemented!()
     }
 
-    async fn update_completion(&self, migration: &Uuid) -> Response<bool> {
+    async fn update_completion(&self, _migration: &Uuid) -> Response<bool> {
         unimplemented!()
     }
 
     async fn rebase_migration(
-        &self, migration: &Uuid, new_parent: Option<Uuid>,
+        &self, _migration: &Uuid, _new_parent: Option<Uuid>,
     ) -> Response<Migration> {
         unimplemented!()
     }
 
-    async fn delete_migration(&self, migration: &Uuid) -> Response<NodeDeletion> {
+    async fn delete_migration(&self, _migration: &Uuid) -> Response<NodeDeletion> {
         unimplemented!()
     }
 }
