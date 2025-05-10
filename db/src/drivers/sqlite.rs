@@ -1,5 +1,5 @@
 use core::time;
-use std::{fmt::Display, net::Ipv4Addr, path::PathBuf, time::Duration};
+use std::{fmt::Display, net::Ipv4Addr, path::PathBuf, str::FromStr, time::Duration};
 
 use chrono::Utc;
 use sqlx::{sqlite::SqliteConnectOptions, types::Json, Pool, SqlitePool};
@@ -28,6 +28,14 @@ impl From<Pool<sqlx::Sqlite>> for Sqlite {
 impl Sqlite {
     pub async fn run_migrations(&self) {
         sqlx::migrate!("src/migrations").run(&self.0).await.unwrap();
+    }
+
+    pub fn from_mem() -> Self {
+        let opts = sqlx::sqlite::SqliteConnectOptions::from_str("sqlite::memory:").unwrap();
+
+        let pool = sqlx::SqlitePool::connect_lazy_with(opts);
+
+        Self(pool)
     }
 
     pub async fn new(path: &PathBuf) -> Self {
