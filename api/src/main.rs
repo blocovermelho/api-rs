@@ -79,6 +79,16 @@ impl AppState {
             channel: Arc::new(Channels::new()),
         }
     }
+
+    fn mock() -> Self {
+        Self {
+            db: Arc::new(Sqlite::from_mem()),
+            ephemeral: Arc::new(Mutex::new(Ephemeral::new())),
+            config: Arc::new(Config::new()),
+            client: Arc::new(Clients::mock()),
+            channel: Arc::new(Channels::new()),
+        }
+    }
 }
 
 // Ephemeral Data
