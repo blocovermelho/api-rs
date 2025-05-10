@@ -13,10 +13,12 @@ pub mod types {
     use axum::{response::IntoResponse, Json};
     use reqwest::StatusCode;
     use serde::Serialize;
+    use thiserror::Error;
 
     pub type Res<T> = Result<Json<T>, ErrKind>;
 
-    #[derive(Serialize, Clone)]
+    #[derive(Serialize, Clone, Debug, Error)]
+    #[error("{error}, {inner:?}")]
     pub struct Err {
         pub error: String,
         pub inner: Option<String>,
@@ -34,9 +36,13 @@ pub mod types {
         }
     }
 
+    #[derive(Debug, Error)]
     pub enum ErrKind {
+        #[error("Not Found: {0}")]
         NotFound(Err),
+        #[error("Internal Server Error: {0}")]
         Internal(Err),
+        #[error("Bad Request: {0}")]
         BadRequest(Err),
     }
 
