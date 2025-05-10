@@ -121,9 +121,9 @@ pub async fn ban_ip(
                 let _ = state.db.broaden_blacklist_mask(entry.clone(), nmask).await;
                 let _ = state.db.bump_blacklist(entry).await;
             }
-        }
 
-        return Ok(Json(BanKind::Merged));
+            return Ok(Json(BanKind::Merged));
+        }
     }
 
     let actor = match issuer {
