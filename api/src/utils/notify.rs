@@ -26,10 +26,7 @@ pub async fn unknown_ip(
     // - If the user allows direct messages from server members, send a DM
     // - As a backup, use the verification channel on the discord server
 
-    let backup = client
-        .get_channel(backup_channel.parse().unwrap())
-        .await
-        .expect("Invalid Backup Notification Channel");
+    let backup = client.get_channel(backup_channel.parse().unwrap()).await;
 
     if let Ok(ch) = client
         .create_dm_channel(user.discord_id.parse().unwrap())
@@ -45,7 +42,7 @@ pub async fn unknown_ip(
         let dm_message = client.send_message(ch.id, message).await;
 
         if dm_message.is_err() {
-            if let Channel::Guild(ch) = backup {
+            if let Ok(Channel::Guild(ch)) = backup {
                 let message = CreateMessage::new()
                     .add_embed(embed)
                     .add_embed(warning)
