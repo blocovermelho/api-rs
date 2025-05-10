@@ -4,4 +4,3 @@ pub mod migration;
 pub mod prelude;
 pub mod server;
 pub mod user;
-
