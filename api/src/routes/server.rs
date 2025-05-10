@@ -143,7 +143,6 @@ pub async fn login(
         }
 
         let _ = client
-            .http
             .add_member_role(
                 GuildId::new(cfg.guild_id.parse().unwrap()),
                 UserId::new(user.discord_id.parse().unwrap()),
@@ -232,7 +231,6 @@ pub async fn logoff(
     }
 
     let _ = client
-        .http
         .remove_member_role(
             GuildId::new(cfg.guild_id.parse().unwrap()),
             UserId::new(user.discord_id.parse().unwrap()),

@@ -8,6 +8,7 @@ use crate::{
         responses::{BanKind, IpKind},
         *,
     },
+    shim::discord::DiscordAccess,
     utils::notify,
 };
 
@@ -82,7 +83,6 @@ pub async fn resume(
     state.db.update_current_join(&attempt.uuid).await.unwrap();
 
     let _ = client
-        .http
         .add_member_role(
             GuildId::new(cfg.guild_id.parse().unwrap()),
             UserId::new(user.discord_id.parse().unwrap()),

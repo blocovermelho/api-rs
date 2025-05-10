@@ -14,6 +14,7 @@ use oauth::models::Config;
 use reqwest::{header, Client};
 use crate::routes::prelude::responses::LinkResult;
 use serenity::all::GatewayIntents;
+use shim::discord::{DiscordAccess, NoOpAccess};
 use tokio::sync::Mutex;
 use tower::ServiceBuilder;
 use tower_http::{
@@ -23,6 +24,7 @@ use tower_http::{
 use traits::json::JsonSync;
 use uuid::Uuid;
 use websocket::MessageOut;
+
 
 // use crate::store::Store;
 
@@ -101,12 +103,22 @@ impl Ephemeral {
 
 pub struct Clients {
     pub reqwest: reqwest::Client,
-    pub serenity: serenity::Client,
+    pub serenity: Arc<dyn DiscordAccess>,
 }
 
 impl Clients {
     fn new(serenity: serenity::Client) -> Self {
-        Self { reqwest: Client::new(), serenity }
+        Self {
+            reqwest: Client::new(),
+            serenity: Arc::new(serenity),
+        }
+    }
+
+    fn mock() -> Self {
+        Self {
+            reqwest: Client::new(),
+            serenity: Arc::new(NoOpAccess),
+        }
     }
 }
 
