@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use db::drivers::sqlite::Sqlite;
 use handler::event_handler;
-use poise::serenity_prelude::GuildId;
+use poise::serenity_prelude::{GuildId, UserId};
 
 pub mod autocomplete;
 pub mod commands;
@@ -14,6 +14,15 @@ pub mod utils;
 
 pub struct Data {
     db: Arc<Sqlite>,
+}
+
+pub struct ClientInfo {
+    /// The developer bot user id
+    pub dev_id: UserId,
+    /// Production bot user id
+    pub prod_id: UserId,
+    /// The guild the commands will be registered to
+    pub guild_id: GuildId,
 }
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
