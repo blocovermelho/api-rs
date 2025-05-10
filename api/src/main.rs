@@ -6,7 +6,7 @@ use axum::{
 };
 use bimap::BiHashMap;
 use bus::OneshotBus;
-use bv_discord::framework;
+use bv_discord::{framework, ClientInfo};
 use db::drivers::sqlite::Sqlite;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use migrate::migrate;
@@ -148,7 +148,12 @@ async fn main() {
         panic!("Please change the configuration file on {:?}.", config_path)
     }
 
-    let bot_fw = framework(db.clone()).await;
+    let bot_fw = framework(db.clone(), ClientInfo {
+        dev_id: config.dev_client_id.parse().unwrap(),
+        prod_id: config.client_id.parse().unwrap(),
+        guild_id: config.guild_id.parse().unwrap(),
+    })
+    .await;
 
     let token = std::env::var("DISCORD_BOT_TOKEN").expect("Expected a discord bot token in path.");
 

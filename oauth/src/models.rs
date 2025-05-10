@@ -17,6 +17,7 @@ pub struct User {
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Config {
     pub client_id: String,
+    pub dev_client_id: String,
     pub client_secret: String,
     pub redirect_url: String,
     pub guild_id: String,
@@ -30,6 +31,7 @@ impl JsonSync for Config {
     fn new() -> Self::T {
         Self {
             client_id: String::new(),
+            dev_client_id: String::new(),
             client_secret: String::new(),
             redirect_url: String::new(),
             guild_id: String::new(),

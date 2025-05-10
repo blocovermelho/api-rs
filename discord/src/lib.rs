@@ -14,6 +14,7 @@ pub mod utils;
 
 pub struct Data {
     db: Arc<Sqlite>,
+    info: Arc<ClientInfo>,
 }
 
 pub struct ClientInfo {
@@ -29,7 +30,7 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Context<'a> = poise::Context<'a, Data, Error>;
 pub type AppContext<'a> = poise::ApplicationContext<'a, Data, Error>;
 
-pub async fn framework(db: Arc<Sqlite>) -> poise::Framework<Data, Error> {
+pub async fn framework(db: Arc<Sqlite>, info: ClientInfo) -> poise::Framework<Data, Error> {
     let options = poise::FrameworkOptions {
         commands: vec![
             commands::change_password::changepw(),
@@ -47,16 +48,19 @@ pub async fn framework(db: Arc<Sqlite>) -> poise::Framework<Data, Error> {
     };
 
     poise::Framework::builder()
-        .setup(|ctx, _ready, fw| {
+        .setup(|ctx, ready, fw| {
             Box::pin(async move {
-                poise::builtins::register_in_guild(
+                utils::builtins::clear_guild_commands(ctx, info.guild_id).await?;
+                utils::builtins::set_guild_commands(
                     ctx,
+                    ready,
                     &fw.options().commands,
-                    GuildId::new(1038487852662661223),
+                    info.guild_id,
+                    info.dev_id,
                 )
                 .await?;
 
-                Ok(Data { db })
+                Ok(Data { db, info: Arc::new(info) })
             })
         })
         .options(options)
