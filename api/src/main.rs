@@ -84,7 +84,16 @@ impl AppState {
         Self {
             db: Arc::new(Sqlite::from_mem()),
             ephemeral: Arc::new(Mutex::new(Ephemeral::new())),
-            config: Arc::new(Config::new()),
+            // NonZeroU64 :(
+            config: Arc::new(Config {
+                client_id: "1".to_string(),
+                dev_client_id: "1".to_string(),
+                client_secret: "1".to_string(),
+                redirect_url: "1".to_string(),
+                guild_id: "1".to_string(),
+                role_id: "1".to_string(),
+                verification_channel_id: "1".to_string(),
+            }),
             client: Arc::new(Clients::mock()),
             channel: Arc::new(Channels::new()),
         }
