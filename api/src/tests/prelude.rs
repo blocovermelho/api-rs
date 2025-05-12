@@ -59,3 +59,20 @@ pub mod stub {
     }
 }
 
+pub mod macros {
+    macro_rules! test_route {
+    ($func_name:ident, $state:ident, $rest:expr) => {
+        #[tokio::test]
+        async fn $func_name() -> Result<(), anyhow::Error> {
+            let $state = get_state();
+            $state.db.run_migrations().await;
+            $rest
+            Ok(())
+        }
+    };
+    }
+
+    pub(crate) use test_route;
+}
+
+pub(crate) use macros::*;
