@@ -10,7 +10,7 @@ use db::{
 use query_params::{LoginAttempt, OfflineUuid};
 use serenity::all::{GuildId, RoleId, UserId};
 
-use crate::routes::prelude::*;
+use crate::{routes::prelude::*, tests::prelude::query_params::MigrationUuid};
 
 pub const MAX_ATTEMPTS_PER_ACC: i32 = 5;
 
@@ -245,7 +245,7 @@ pub async fn logoff(
 /// [POST] /server/<uuid>/migrated?uuid=<uuid>
 pub async fn migrate_user(
     State(state): State<Arc<AppState>>, Path(server_id): Path<Uuid>,
-    Query(migration_id): Query<OfflineUuid>,
+    Query(migration_id): Query<MigrationUuid>,
 ) -> Res<bool> {
     let _ = state
         .db
