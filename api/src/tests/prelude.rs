@@ -7,7 +7,7 @@ pub fn get_state() -> State<Arc<AppState>> {
 pub mod stub {
     use std::net::Ipv4Addr;
 
-    use db::data::stub::{AccountStub, UserStub};
+    use db::data::stub::{AccountStub, ServerStub, UserStub};
     use uuid::Uuid;
 
     use crate::tests::prelude::query_params::{IpCheck, LoginAttempt};
@@ -49,4 +49,13 @@ pub mod stub {
     pub fn account(uuid: Uuid, password: &str) -> AccountStub {
         AccountStub { uuid, password: password.into() }
     }
+
+    pub fn server(name: &str) -> ServerStub {
+        ServerStub {
+            name: name.into(),
+            supported_versions: vec!["1.21.5".into()],
+            current_modpack: None,
+        }
+    }
 }
+
