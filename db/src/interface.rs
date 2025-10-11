@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     data::{
         result::{self, NodeDeletion, PlaytimeEntry},
-        stub, Account, Allowlist, BanActor, Blacklist, Migration, Pronoun, SaveData, Server, User,
+        stub, Account, Allowlist, BanActor, Blacklist, Connection, Pronoun, SaveData, Server, User,
         Viewport,
     },
     drivers::err::Response,
@@ -88,20 +88,6 @@ pub trait DataSource {
     async fn get_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>>;
     async fn delete_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>>;
 
-    async fn create_migration(
-        &self, old_account: String, new_account: String, parent: Option<Uuid>,
-    ) -> Response<Migration>;
-    async fn get_migration(&self, migration: &Uuid) -> Response<Migration>;
-    async fn add_completed_server(&self, migration: &Uuid, server: &Uuid) -> Response<Vec<Uuid>>;
-    async fn set_current_migration(
-        &self, user: &Uuid, migration: Option<Uuid>,
-    ) -> Response<Option<Uuid>>;
-    async fn update_completion(&self, migration: &Uuid) -> Response<bool>;
-    async fn update_visibility(&self, migration: &Uuid, visible: bool) -> Response<bool>;
-    async fn rebase_migration(
-        &self, migration: &Uuid, new_parent: Option<Uuid>,
-    ) -> Response<Migration>;
-    async fn delete_migration(&self, migration: &Uuid) -> Response<NodeDeletion>;
 }
 
 pub trait NetworkProvider {

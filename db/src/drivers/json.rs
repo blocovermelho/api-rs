@@ -414,41 +414,6 @@ impl DataSource for JsonDriver {
         unimplemented!()
     }
 
-    async fn create_migration(
-        &self, old_account: String, new_account: String, parent: Option<Uuid>,
-    ) -> Response<Migration> {
-        unimplemented!();
-    }
-
-    async fn get_migration(&self, migration: &Uuid) -> Response<Migration> {
-        unimplemented!()
-    }
-
-    async fn add_completed_server(&self, migration: &Uuid, server: &Uuid) -> Response<Vec<Uuid>> {
-        unimplemented!()
-    }
-
-    async fn set_current_migration(
-        &self, user: &Uuid, migration: Option<Uuid>,
-    ) -> Response<Option<Uuid>> {
-        unimplemented!()
-    }
-
-    async fn update_visibility(&self, migration: &Uuid, visible: bool) -> Response<bool> {
-        unimplemented!()
-    }
-
-    async fn update_completion(&self, migration: &Uuid) -> Response<bool> {
-        unimplemented!()
-    }
-
-    async fn rebase_migration(
-        &self, migration: &Uuid, new_parent: Option<Uuid>,
-    ) -> Response<Migration> {
-        unimplemented!()
-    }
-
-    async fn delete_migration(&self, migration: &Uuid) -> Response<NodeDeletion> {
         unimplemented!()
     }
 }
