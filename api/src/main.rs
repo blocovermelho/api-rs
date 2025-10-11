@@ -28,7 +28,6 @@ use crate::{db::drivers::sqlite::Sqlite, discord::framework};
 
 #[allow(clippy::future_not_send)]
 pub mod bus;
-pub mod cidr;
 pub mod core;
 pub mod db;
 pub mod discord;
