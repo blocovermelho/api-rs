@@ -411,6 +411,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bv-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "uuid",
+]
+
+[[package]]
 name = "bv-discord"
 version = "0.1.0"
 dependencies = [

@@ -2,7 +2,7 @@
 
 members = [
     "api", "oauth", "traits", "db", "discord"
-]
+, "bv-core"]
 
 resolver = "2"
 

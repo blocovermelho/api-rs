@@ -1,0 +1,10 @@
+[package]
+name = "bv-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+uuid = { version = "*" }
+chrono = { version = "*" }
+[lints]
+workspace = true
