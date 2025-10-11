@@ -14,7 +14,7 @@ use serenity::all::{GuildId, RoleId, UserId};
 use uuid::Uuid;
 
 use crate::{
-    cidr::{lowest_common_prefix, MIN_COMMON_PREFIX},
+    core::utils::cidr::{match_prefix, PrefixLenMatch, MIN_COMMON_PREFIX},
     db::{
         data::{
             result::ServerJoin,
@@ -278,48 +278,47 @@ pub async fn get_session(
 ) -> Res<bool> {
     let now = chrono::offset::Utc::now();
 
+    let mut found = false;
+
     let entries = state
         .db
-        .get_allowlists_with_ip(&session.uuid, session.ip)
+        .get_allowlists_with_range(&session.uuid, session.ip, MIN_COMMON_PREFIX)
         .await
         .map_err(|_| ErrKind::NotFound(Err::new("Account not found.")))?;
 
     for entry in entries {
         let diff = now - entry.last_join;
         if diff.num_minutes() <= 10 {
-            // Bump that entry since it was a successful match.
-            let _ = state.db.bump_allowlist(entry).await;
+            let nmask = match_prefix(&entry.get_network(), &session.ip);
+            match nmask {
+                PrefixLenMatch::Contains(_) => {
+                    // If it contains, just bump the allowlist.
+                    state.db.bump_allowlist(entry).await.unwrap();
+                    state.db.update_current_join(&session.uuid).await.unwrap();
 
-            state.db.update_current_join(&session.uuid).await.unwrap();
-            return Ok(Json(true));
+                    found = true;
+                }
+                PrefixLenMatch::Grows { current, .. } => {
+                    state.db.bump_allowlist(entry.clone()).await.unwrap();
+
+                    state
+                        .db
+                        .broaden_allowlist_mask(entry, current)
+                        .await
+                        .unwrap();
+
+                    state.db.update_current_join(&session.uuid).await.unwrap();
+
+                    found = true;
+                }
+                PrefixLenMatch::NonOverlappingWithinBound { .. } => {
+                    continue;
+                }
+            }
         }
     }
 
-    // Automatically broaden netmask on user login
-    let broad = state
-        .db
-        .get_allowlists_with_range(&session.uuid, session.ip, MIN_COMMON_PREFIX)
-        .await
-        .map_err(|_| ErrKind::NotFound(Err::new("Account not found.")))?;
-
-    for entry in broad {
-        let diff = now - entry.last_join;
-        // Calculate new netmask
-        let nmask = lowest_common_prefix(&entry.get_network(), &session.ip).unwrap();
-        // Update the netmask
-        let _ = state.db.broaden_allowlist_mask(entry.clone(), nmask).await;
-
-        if diff.num_minutes() <= 10 {
-            // Bump that entry since it was a successful match.
-            let _ = state.db.bump_allowlist(entry).await;
-
-            state.db.update_current_join(&session.uuid).await.unwrap();
-
-            return Ok(Json(true));
-        }
-    }
-
-    Ok(Json(false))
+    Ok(Json(found))
 }
 
 /// [PATCH] /api/auth/resume?uuid=<ID>&ip=<IP>
@@ -398,15 +397,14 @@ pub async fn logoff(
         .await
         .map_err(|_| ErrKind::NotFound(Err::new("Account not foumd.")))?;
 
-    if let Err(DriverError::DatabaseError(NotFoundError::UserData{ server_uuid: _, player_uuid: _ })) = state
-        .db
-        .get_viewport(&session.uuid, &server.uuid)
-        .await
-       
+    if let Err(DriverError::DatabaseError(NotFoundError::UserData {
+        server_uuid: _,
+        player_uuid: _,
+    })) = state.db.get_viewport(&session.uuid, &server.uuid).await
     {
         let _ = state.db.create_savedata(&session.uuid, &server.uuid).await;
     }
-    
+
     state
         .db
         .update_viewport(&session.uuid, &server.uuid, pos)
@@ -436,7 +434,6 @@ pub async fn logoff(
         .leave_server(&server.uuid, &session.uuid)
         .await
         .unwrap();
-
 
     // Bump allowlists at logoff.
     if let Ok(entries) = state
@@ -563,26 +560,32 @@ pub async fn ban_cidr(
     State(state): State<Arc<AppState>>, Query(params): Query<BanCidrQueryParam>,
     Json(issuer): Json<BanIssuer>,
 ) -> Res<BanResponse> {
-    if let Ok(strict) = state.db.get_blacklists(params.ip).await {
-        if !strict.is_empty() {
-            return Ok(Json(BanResponse::Existing));
-        }
-    }
+    let mut matcher: Option<_> = None;
 
     if let Ok(broad) = state
         .db
         .get_blacklists_with_range(params.ip, MIN_COMMON_PREFIX)
         .await
     {
-        if !broad.is_empty() {
-            for entry in broad {
-                let nmask = lowest_common_prefix(&entry.get_network(), &params.ip).unwrap();
-                let _ = state.db.broaden_blacklist_mask(entry.clone(), nmask).await;
-                let _ = state.db.bump_blacklist(entry).await;
-            }
+        for entry in broad {
+            let nmask = match_prefix(&entry.get_network(), &params.ip);
+            match nmask {
+                PrefixLenMatch::Contains(_) => {
+                    let _ = state.db.bump_blacklist(entry).await;
+                    matcher = Some(BanResponse::Existing);
+                }
+                PrefixLenMatch::Grows { current, .. } => {
+                    let _ = state.db.bump_blacklist(entry.clone()).await;
+                    let _ = state.db.broaden_blacklist_mask(entry, current).await;
+                    matcher = Some(BanResponse::Merged);
+                }
+                PrefixLenMatch::NonOverlappingWithinBound { .. } => {}
+            };
         }
+    }
 
-        return Ok(Json(BanResponse::Merged));
+    if let Some(matcher) = matcher {
+        return Ok(Json(matcher));
     }
 
     let actor = match issuer {
@@ -609,34 +612,40 @@ pub async fn ban_cidr(
 pub async fn allow_cidr(
     State(state): State<Arc<AppState>>, Query(params): Query<CheckCidrQueryParam>,
 ) -> Res<bool> {
-    if let Ok(strict) = state
-        .db
-        .get_allowlists_with_ip(&params.uuid, params.ip)
-        .await
-    {
-        if !strict.is_empty() {
-            return Ok(Json(true));
-        }
-    }
+    // We don't bump the allowlist here, since that would lead to counting connections twice.
+    // Allowlists are only bumped at `resume` (after (re)logging in) and `get_session` (on the case of a valid existing session).
+    let mut found = false;
 
-    // We always do automatic widening when possible, since the next call will be amortized and returned early.
     if let Ok(broad) = state
         .db
         .get_allowlists_with_range(&params.uuid, params.ip, MIN_COMMON_PREFIX)
         .await
     {
-        if !broad.is_empty() {
-            for entry in broad {
-                let nmask = lowest_common_prefix(&entry.get_network(), &params.ip).unwrap();
-                let _ = state.db.broaden_allowlist_mask(entry, nmask).await;
-                // We don't bump the allowlist here, since that would lead to counting connections twice.
-                // Allowlists are only bumped at `resume` (after (re)logging in) and `get_session` (on the case of a valid existing session).
+        for entry in broad {
+            let nmask = match_prefix(&entry.get_network(), &params.ip);
+            match nmask {
+                PrefixLenMatch::Contains(_) => {
+                    found = true;
+                }
+                PrefixLenMatch::Grows { current, .. } => {
+                    state
+                        .db
+                        .broaden_allowlist_mask(entry, current)
+                        .await
+                        .unwrap();
+                    found = true;
+                }
+                PrefixLenMatch::NonOverlappingWithinBound { .. } => {
+                    continue;
+                }
             }
-            return Ok(Json(true));
         }
     }
 
-    let _ = state.db.create_allowlist(&params.uuid, params.ip).await;
+    if !found {
+        let _ = state.db.create_allowlist(&params.uuid, params.ip).await;
+    }
+
     Ok(Json(true))
 }
 
@@ -651,6 +660,9 @@ pub async fn cidr_check(
     // Honestly this should be the place to put all broadening logic, and everything else should just strict-check.
     // Since this everything *should* be CIDR-checked at the Pre-Login phase.
 
+    let mut known = false;
+    let mut banned = false;
+
     if let Ok(strict) = state
         .db
         .get_allowlists_with_ip(&params.uuid, params.ip)
@@ -666,20 +678,28 @@ pub async fn cidr_check(
         .get_allowlists_with_range(&params.uuid, params.ip, MIN_COMMON_PREFIX)
         .await
     {
-        if !broad.is_empty() {
-            for entry in broad {
-                let nmask = lowest_common_prefix(&entry.get_network(), &params.ip).unwrap();
-                let _ = state.db.broaden_allowlist_mask(entry, nmask).await;
-                // We don't bump the allowlist here, since that would lead to counting connections twice.
-                // Allowlists are only bumped at `resume` (after (re)logging in) and `get_session` (on the case of a valid existing session).
+        for entry in broad {
+            let nmask = match_prefix(&entry.get_network(), &params.ip);
+            match nmask {
+                PrefixLenMatch::Contains(_) => {
+                    known = true;
+                }
+                PrefixLenMatch::Grows { current, .. } => {
+                    state
+                        .db
+                        .broaden_allowlist_mask(entry, current)
+                        .await
+                        .unwrap();
+                    known = true;
+                }
+                PrefixLenMatch::NonOverlappingWithinBound { .. } => {
+                    continue;
+                }
             }
-            return Ok(Json(CidrResponse::Allowed));
         }
-    }
 
-    if let Ok(strict) = state.db.get_blacklists(params.ip).await {
-        if !strict.is_empty() {
-            return Ok(Json(CidrResponse::Banned));
+        if known {
+            return Ok(Json(CidrResponse::Allowed));
         }
     }
 
@@ -688,13 +708,30 @@ pub async fn cidr_check(
         .get_blacklists_with_range(params.ip, MIN_COMMON_PREFIX)
         .await
     {
-        if !broad.is_empty() {
-            for entry in broad {
-                let nmask = lowest_common_prefix(&entry.get_network(), &params.ip).unwrap();
-                let _ = state.db.broaden_blacklist_mask(entry.clone(), nmask).await;
-                let _ = state.db.bump_blacklist(entry).await;
-            }
+        for entry in broad {
+            let nmask = match_prefix(&entry.get_network(), &params.ip);
+            match nmask {
+                PrefixLenMatch::Contains(_) => {
+                    banned = true;
+                }
+                PrefixLenMatch::Grows { current, .. } => {
+                    state.db.bump_blacklist(entry.clone()).await.unwrap();
 
+                    state
+                        .db
+                        .broaden_blacklist_mask(entry, current)
+                        .await
+                        .unwrap();
+
+                    banned = true;
+                }
+                PrefixLenMatch::NonOverlappingWithinBound { .. } => {
+                    continue;
+                }
+            }
+        }
+
+        if banned {
             return Ok(Json(CidrResponse::Banned));
         }
     }
