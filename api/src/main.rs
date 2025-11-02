@@ -6,9 +6,8 @@ use axum::{
 };
 use bimap::BiHashMap;
 use bus::OneshotBus;
-use bv_discord::framework;
-use db::drivers::sqlite::Sqlite;
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use json::JsonSync;
 use migrate::migrate;
 use oauth::models::Config;
 use reqwest::{header, Client};
@@ -20,17 +19,23 @@ use tower_http::{
     timeout::TimeoutLayer, trace::TraceLayer, validate_request::ValidateRequestHeaderLayer,
     ServiceBuilderExt,
 };
-use traits::json::JsonSync;
 use uuid::Uuid;
 use websocket::MessageOut;
+
+use crate::{db::drivers::sqlite::Sqlite, discord::framework};
 
 // use crate::store::Store;
 
 #[allow(clippy::future_not_send)]
 pub mod bus;
 pub mod cidr;
+pub mod core;
+pub mod db;
+pub mod discord;
+pub mod json;
 pub mod migrate;
 pub mod models;
+pub mod oauth;
 pub mod routes;
 // pub mod store;
 pub mod websocket;
@@ -80,7 +85,7 @@ pub struct Ephemeral {
     /// A map containing all this session's pending discord links.
     /// Mapping: Minecraft UUID <-> Discord Nonce (State Parameter).
     pub links: BiHashMap<Uuid, String>,
-    /// A map containing every logged users' username.  
+    /// A map containing every logged users' username.
     /// Mapping: Minecraft UUID <-> Minecraft Username
     pub names: BiHashMap<Uuid, String>,
     /// A map containing bad password attempts

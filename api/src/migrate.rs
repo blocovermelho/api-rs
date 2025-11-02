@@ -3,7 +3,9 @@
 
 use std::{collections::HashMap, fs::File, io::BufReader, path::PathBuf};
 
-use db::{
+use uuid::Uuid;
+
+use crate::db::{
     data::stub::{AccountStub, ServerStub, UserStub},
     drivers::{
         err::{base::NotFoundError, DriverError, Response},
@@ -12,7 +14,6 @@ use db::{
     },
     interface::DataSource,
 };
-use uuid::Uuid;
 
 pub async fn migrate(database_path: &PathBuf, json_path: &PathBuf) -> Response<Sqlite> {
     // Temporary server id mappings table

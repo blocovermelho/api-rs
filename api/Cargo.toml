@@ -9,7 +9,7 @@ edition = "2021"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-uuid = { version = "1.5.0", features = ["v4", "fast-rng", "macro-diagnostics", "serde"]} 
+uuid = { version = "1.5.0", features = ["v4", "fast-rng", "macro-diagnostics", "serde"]}
 chrono = { version = "^0.4", features = [ "serde"]}
 axum = {version = "0.6.20", default-features = true , features = ["headers"]}
 axum-macros = "0.3.8"
@@ -19,26 +19,26 @@ tower-http = { version = "0.4.4", features = ["full"]}
 tower = { version = "0.4", features = ["full"] }
 bcrypt = "0.15.0"
 tokio = { version = "1.33.0", features = ["full"] }
-iprange = { version = "0.6.7", features = ["serde"] } 
-ipnet = { version = "2.9.0", features = ["serde"] } 
+iprange = { version = "0.6.7", features = ["serde"] }
+ipnet = { version = "2.9.0", features = ["serde"] }
 textnonce = {version = "1.0.0" }
 futures = { version = "0.3.30" }
-
+test-log = { version = "0.2.16", features = ["trace"] }
 bimap = { version = "0.6.3" }
+md5 = { version = "0.7.0" }
 
-oauth = { path = "../oauth" }
-traits = { path = "../traits" }
-db = { path = "../db", features = ["sqlite", "legacy"] }
-bv-discord = { path = "../discord" }
-uuid-mc = { version = "0.3.0" } 
+oauth2 = { version = "4.4.2" }
+uuid-mc = { version = "0.3.0" }
 
-oauth2 = "4.4.2"
+chbs = { version = "0.1.1" }
 reqwest = { version = "0.11", default-features = false , features = ["json", "rustls-tls"]}
-
+async-trait = { version = "*" }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
+sqlx = { version = "0.7", features = [ "runtime-tokio", "sqlite", "macros", "json", "uuid", "ipnetwork", "chrono", "migrate" ] }
 
-serenity =  { version = "0.12", default-features = false, features = ["http", "client", "rustls_backend", "builder", "gateway"] } 
+serenity =  { version = "0.12", default-features = false, features = ["http", "client", "rustls_backend", "builder", "gateway"] }
+poise = {version = "0.6.1"}
 flate2 = "^1.0.28"
 
 [lints]

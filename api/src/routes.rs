@@ -1,4 +1,4 @@
-use std::{collections::HashSet, net::Ipv4Addr, sync::Arc, time::Duration};
+use std::{net::Ipv4Addr, sync::Arc};
 
 use axum::{
     extract::{Path, Query, State},
@@ -6,30 +6,27 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use bv_discord::utils::notify;
 use chrono::{DateTime, Utc};
-use db::{
-    data::{
-        result::{NodeDeletion, ServerJoin},
-        stub::{AccountStub, ServerStub, UserStub},
-        BanActor, Server, User, Viewport,
-    },
-    drivers::err::{
-        base::{InvalidError, NotFoundError},
-        DriverError,
-    },
-    interface::{DataSource, NetworkProvider},
-};
 use futures::SinkExt;
 use oauth2::{reqwest::async_http_client, AuthorizationCode};
 use serde::{Deserialize, Serialize};
 use serenity::all::{GuildId, RoleId, UserId};
 use uuid::Uuid;
-use uuid_mc::PlayerUuid;
 
 use crate::{
     cidr::{lowest_common_prefix, MIN_COMMON_PREFIX},
+    db::{
+        data::{
+            result::ServerJoin,
+            stub::{AccountStub, ServerStub, UserStub},
+            BanActor, Server, User, Viewport,
+        },
+        drivers::err::{base::NotFoundError, DriverError},
+        interface::{DataSource, NetworkProvider},
+    },
+    discord::utils::notify,
     models::{BanIssuer, BanResponse, CidrResponse},
+    oauth::{self as oauth},
     websocket::MessageOut,
     AppState,
 };

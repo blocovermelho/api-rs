@@ -2,12 +2,11 @@ use std::sync::Arc;
 
 use axum::{extract::State, response::IntoResponse};
 use axum_typed_websockets::{Message, WebSocket, WebSocketUpgrade};
-use db::data::User;
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{routes::LinkResult, AppState};
+use crate::{db::data::User, routes::LinkResult, AppState};
 
 pub async fn handle_socket(
     ws: WebSocketUpgrade<MessageOut, MessageIn>, State(state): State<Arc<AppState>>,

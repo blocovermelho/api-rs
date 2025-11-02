@@ -1,8 +1,6 @@
 [workspace]
 
-members = [
-    "api", "oauth", "traits", "db", "discord"
-, "bv-core"]
+members = ["api"]
 
 resolver = "2"
 
