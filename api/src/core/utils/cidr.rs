@@ -11,8 +11,12 @@ pub enum PrefixLenMatch {
 
 pub enum NetworkMerge {
     Merged { network: Ipv4Net, bound: u8 },
-    Simplified { nets: Vec<Ipv4Net>, bound: u8 },
     NonOverlapping,
+}
+
+pub enum NetworkSimplification {
+    Simplified { nets: Vec<Ipv4Net>, bound: u8 },
+    Identity,
 }
 
 pub const MIN_COMMON_PREFIX: u8 = 16;
@@ -48,5 +52,35 @@ pub fn merge_nets(lhs: &Ipv4Net, rhs: &Ipv4Net) -> NetworkMerge {
             bound: MIN_COMMON_PREFIX,
         },
         PrefixLenMatch::NonOverlappingWithinBound { .. } => NetworkMerge::NonOverlapping,
+    }
+}
+
+// TODO: Add simplification logic, [Ipv4Net] -> [Ipv4Net]
+pub fn simplify_nets(nets: &[Ipv4Net]) -> NetworkSimplification {
+    // Sort the networks based on adjacency
+    let mut input = nets.to_owned();
+    input.sort_by_key(|lhs| lhs.addr().to_bits());
+
+    let mut stack: Vec<Ipv4Net> = vec![];
+
+    for net in input {
+        if let Some(top) = stack.last_mut() {
+            match merge_nets(top, &net) {
+                NetworkMerge::Merged { network, bound } => {
+                    *top = network;
+                }
+                NetworkMerge::NonOverlapping => {
+                    stack.push(net);
+                }
+            }
+        } else {
+            stack.push(net);
+        }
+    }
+
+    if stack.len() == nets.len() {
+        NetworkSimplification::Identity
+    } else {
+        NetworkSimplification::Simplified { nets: stack, bound: MIN_COMMON_PREFIX }
     }
 }
