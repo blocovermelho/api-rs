@@ -10,7 +10,6 @@ use super::structs::*;
 pub enum PlayerState {
     Visitor, /* Previously known as "unregistered" */
     LoggedIn,
-    ServerTransfered,
     ResumedSession,
     Banned,
 }
