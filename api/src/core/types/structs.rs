@@ -23,6 +23,14 @@ pub struct Profile {
     pub last_seen: DateTime<Utc>,
 }
 
+impl PartialEq<stub::ProfileStub> for Profile {
+    fn eq(&self, other: &stub::ProfileStub) -> bool {
+        self.username == other.username &&
+            self.hash_password == other.password &&
+            self.discord_id == other.discord_id
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Player {
     pub profile: Option<Profile>,
