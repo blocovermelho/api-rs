@@ -9,7 +9,7 @@ edition = "2021"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-uuid = { version = "1.5.0", features = ["v4", "fast-rng", "macro-diagnostics", "serde"]}
+uuid = { version = "1.5.0", features = ["v4", "v7", "fast-rng", "macro-diagnostics", "serde"]}
 chrono = { version = "^0.4", features = [ "serde"]}
 axum = {version = "0.6.20", default-features = true , features = ["headers"]}
 axum-macros = "0.3.8"
@@ -26,6 +26,9 @@ futures = { version = "0.3.30" }
 test-log = { version = "0.2.16", features = ["trace"] }
 bimap = { version = "0.6.3" }
 md5 = { version = "0.7.0" }
+
+thiserror = { version = "2.0.17" }
+anyhow = { version = "1.0" }
 
 oauth2 = { version = "4.4.2" }
 uuid-mc = { version = "0.3.0" }
