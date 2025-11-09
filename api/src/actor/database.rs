@@ -132,7 +132,8 @@ impl DatabaseA {
         let db = self.0.clone();
         if let Ok(dbd) = db.get_profile(username).await {
             if bcrypt::verify(old, &dbd.password).unwrap_or(false) {
-                db.update_password(&dbd.uuid, new).await.unwrap_or(());
+                let hash = bcrypt::hash(new, 12).unwrap();
+                db.update_password(&dbd.uuid, hash).await.unwrap_or(());
                 ChangePasswordAttempt::Changed
             } else {
                 ChangePasswordAttempt::InvalidPassword
