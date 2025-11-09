@@ -1,6 +1,6 @@
 [package]
 name = "bv-api"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,13 +11,15 @@ serde_json = "1.0"
 
 uuid = { version = "1.5.0", features = ["v4", "v7", "fast-rng", "macro-diagnostics", "serde"]}
 chrono = { version = "^0.4", features = [ "serde"]}
-axum = {version = "0.6.20", default-features = true , features = ["headers", "macros"]}
-axum-macros = "0.3.8"
-axum-typed-websockets = "0.5.0"
+axum = {version = "^0.7", default-features = true , features = ["macros", "ws"]}
+axum-macros = "0.5.0"
+axum-typed-websockets = "0.6.0"
+http = "1.4.0"
+headers = "0.4.1"
 
-tower-http = { version = "0.4.4", features = ["full"]}
-tower = { version = "0.4", features = ["full"] }
-bcrypt = "0.15.0"
+tower-http = { version = "0.6.8", features = ["full"]}
+tower = { version = "0.5", features = ["full"] }
+bcrypt = "0.17.1"
 tokio = { version = "1.33.0", features = ["full"] }
 tokio-stream = { version = "0.1.17" }
 iprange = { version = "0.6.7", features = ["serde"] }
@@ -26,23 +28,24 @@ textnonce = {version = "1.0.0" }
 futures = { version = "0.3.30" }
 test-log = { version = "0.2.16", features = ["trace"] }
 bimap = { version = "0.6.3" }
-md5 = { version = "0.7.0" }
+md5 = "0.8.0"
 base64 = { version = "0.22.1" }
 rand = { version = "0.9.2" }
-http = { version = "*" }
+
+
 
 thiserror = { version = "2.0.17" }
 anyhow = { version = "1.0" }
 
-oauth2 = { version = "4.4.2" }
+oauth2 = "5.0.0"
 uuid-mc = { version = "0.3.0" }
 
 chbs = { version = "0.1.1" }
-reqwest = { version = "0.11", default-features = false , features = ["json", "rustls-tls"]}
+reqwest = { version = "0.12", default-features = false , features = ["json", "rustls-tls"]}
 async-trait = { version = "*" }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
-sqlx = { version = "0.7", features = [ "runtime-tokio", "sqlite", "macros", "json", "uuid", "ipnetwork", "chrono", "migrate" ] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "macros", "json", "uuid", "ipnetwork", "chrono", "migrate"] }
 
 serenity =  { version = "0.12", default-features = false, features = ["http", "client", "rustls_backend", "builder", "gateway"] }
 poise = {version = "0.6.1"}
