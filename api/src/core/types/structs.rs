@@ -116,7 +116,7 @@ pub mod stub {
         pub name: String,
         pub game: String,
         pub versions: Vec<String>,
-        pub max_players: usize,
+        pub max_players: i32,
         pub staff: Vec<Uuid>,
     }
 }
