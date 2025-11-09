@@ -27,6 +27,7 @@ struct IpNotifA {
     database_hnd: DatabaseActorHandle,
     message_hnd: LiveMessageActorHandle,
     parent_hnd: WeakUnboundedSender<NewConnectionCommand>,
+    mailbox_hnd: WeakMailboxSender,
 }
 
 impl IpNotifA {
@@ -66,6 +67,12 @@ impl IpNotifA {
                     .await;
             }
 
+            if let Some(mailbox) = self.mailbox_hnd.upgrade() {
+                mailbox
+                    .send(MailboxCommand::RevokeVerificationRole(self.username.clone()))
+                    .unwrap_or(());
+            }
+
             info!(
                 "[a:IpNotification({},{})] Event:HandleAllow | Created Allowlist",
                 self.ip, self.username
@@ -103,6 +110,12 @@ impl IpNotifA {
                     )),
                 )
                 .await;
+
+            if let Some(mailbox) = self.mailbox_hnd.upgrade() {
+                mailbox
+                    .send(MailboxCommand::RevokeVerificationRole(self.username.clone()))
+                    .unwrap_or(());
+            }
 
             warn!(
                 "[a:IpNotification({},{})] Event:HandleDisallow | Created Blacklist",
@@ -277,6 +290,7 @@ impl IpNotifActor {
     pub fn spawn(
         ip: Ipv4Addr, username: String, server: String, database_hnd: DatabaseActorHandle,
         message_hnd: LiveMessageActorHandle, parent_hnd: WeakUnboundedSender<NewConnectionCommand>,
+        mailbox_hnd: WeakMailboxSender,
     ) -> IpNotifActorHandle {
         let (tx, rx) = mpsc::unbounded_channel();
 
@@ -291,6 +305,7 @@ impl IpNotifActor {
                 database_hnd,
                 message_hnd,
                 parent_hnd,
+                mailbox_hnd,
             },
             queue: rx,
         };

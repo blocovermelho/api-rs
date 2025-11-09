@@ -12,10 +12,7 @@ use super::{
     single_use_token::SingleUseTokenActorHandle,
     RespCell,
 };
-use crate::core::{
-    trans::to_monotonic,
-    types::{consts::session::LEASE_TIME, structs::Profile},
-};
+use crate::core::types::{consts::session::LEASE_TIME, structs::Profile};
 
 /*
  * Session Actor
@@ -40,7 +37,7 @@ pub struct SessionA {
     // Sessions track when they begun
     created_at: DateTime<Utc>,
     // And also the last time the user was seen
-    last_seen: DateTime<Utc>,
+    last_seen: Instant,
     // And also the bad login attempts.
     bad_login_attempts: i32,
     mailbox_hnd: WeakUnboundedSender<MailboxCommand>,
@@ -54,13 +51,12 @@ impl SessionA {
     }
 
     pub fn deadline(&self) -> Instant {
-        let target = self.last_seen + LEASE_TIME;
-        to_monotonic(target)
+        self.last_seen + LEASE_TIME.to_std().unwrap_or_default()
     }
 
     pub fn ping(&mut self) {
         debug!("[a:Session({})] Event:Ping RECV", self.username);
-        self.last_seen = Utc::now();
+        self.last_seen = Instant::now();
     }
 
     pub async fn authenticate(&mut self, server_id: Uuid, password: String) -> LoginAttempt {
@@ -220,6 +216,11 @@ impl SessionActor {
         let playtime = PlaytimeActor::spawn(profile.as_ref().map(|it| it.id), database);
         debug!("[a:Session({})] Spawn:Self SPAWN PlaytimeActor({:?}) ", username, profile);
 
+        if let Some(hnd) = mailbox.upgrade() {
+            hnd.send(MailboxCommand::GrantPlayingRole(username.clone()))
+                .unwrap_or(())
+        }
+
         let actor = Self {
             state: SessionA {
                 username,
@@ -228,7 +229,7 @@ impl SessionActor {
                     None => SessionState::Visitor,
                 },
                 created_at: now,
-                last_seen: now,
+                last_seen: Instant::now(),
                 bad_login_attempts: 0,
                 playtime_hnd: playtime,
                 mailbox_hnd: mailbox,
@@ -274,6 +275,7 @@ impl SessionActor {
         }
 
         if let Some(hnd) = self.state.mailbox_hnd.upgrade() {
+            let _ = hnd.send(MailboxCommand::RevokePlayingRole(self.state.username.clone()));
             let _ = hnd.send(MailboxCommand::CleanupSession(self.state.username));
         }
     }

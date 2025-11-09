@@ -147,6 +147,7 @@ async fn main() {
         config.verification_channel_id.parse().unwrap(),
         config.verification_role_id.parse().unwrap(),
         config.playing_role_id.parse().unwrap(),
+        config.guild_id.parse().unwrap(),
     );
 
     let auth_server =

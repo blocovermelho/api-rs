@@ -2,7 +2,8 @@ use std::{collections::HashMap, net::Ipv4Addr, time::Duration};
 
 use bimap::BiHashMap;
 use serenity::all::{
-    ChannelId, CreateInteractionResponseFollowup, CreateMessage, InteractionId, MessageId, UserId,
+    ChannelId, CreateInteractionResponseFollowup, CreateMessage, GuildId, InteractionId, MessageId,
+    RoleId, UserId,
 };
 
 use super::{
@@ -45,11 +46,21 @@ impl NewConnectionA {
         if let Some(hnd) = self.handles.get(&profile.username) {
             hnd.increase();
         } else {
+            let user_id = profile.discord_id.parse().unwrap();
+
             let channel_id = self
                 .discord_hnd
-                .get_dm_channel(profile.discord_id.parse().unwrap())
+                .get_dm_channel(user_id)
                 .await
                 .unwrap_or(self.fallback_channel);
+
+            if channel_id == self.fallback_channel {
+                if let Some(mailbox) = self.parent_hnd.upgrade() {
+                    mailbox
+                        .send(MailboxCommand::GrantVerificationRole(profile.username.clone()))
+                        .unwrap_or(());
+                }
+            }
 
             let message = self
                 .discord_hnd
@@ -83,6 +94,7 @@ impl NewConnectionA {
                 self.database_hnd.clone(),
                 msg_hnd,
                 self.self_hnd.clone(),
+                self.parent_hnd.clone(),
             );
 
             debug!(
@@ -202,8 +214,8 @@ pub struct NewConnectionActor {
 
 impl NewConnectionActor {
     pub fn spawn(
-        ip: Ipv4Addr, fallback_channel: ChannelId, discord: DiscordActorHandle,
-        database: DatabaseActorHandle, mailbox: WeakMailboxSender,
+        ip: Ipv4Addr, fallback_channel: ChannelId, fallback_role: RoleId, fallback_guild: GuildId,
+        discord: DiscordActorHandle, database: DatabaseActorHandle, mailbox: WeakMailboxSender,
     ) -> NewConnectionActorHandle {
         let (tx, rx) = mpsc::unbounded_channel();
 

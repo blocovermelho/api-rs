@@ -6,7 +6,7 @@ use std::{collections::HashMap, net::Ipv4Addr, sync::Arc};
 
 use axum::extract::ws::CloseFrame;
 use axum_typed_websockets::WebSocket;
-use serenity::all::{ChannelId, MessageId, RoleId, UserId};
+use serenity::all::{ChannelId, GuildId, MessageId, RoleId, UserId};
 use uuid::Uuid;
 
 use super::{
@@ -47,6 +47,7 @@ pub struct Mailbox {
     new_ip_fallback_channel_id: ChannelId,
     playing_role_id: RoleId,
     verification_role_id: RoleId,
+    guild_id: GuildId,
     self_hnd: WeakUnboundedSender<MailboxCommand>,
 }
 
@@ -220,6 +221,8 @@ impl Mailbox {
                 let hnd = NewConnectionActor::spawn(
                     ip,
                     self.new_ip_fallback_channel_id,
+                    self.verification_role_id,
+                    self.guild_id,
                     self.discord.clone(),
                     self.database.clone(),
                     self.self_hnd.clone(),
@@ -305,6 +308,46 @@ impl Mailbox {
         }
     }
 
+    async fn grant_playing_role(&self, username: String) {
+        if let Some(profile) = self.database.get_profile(username).await {
+            self.discord.grant_role(
+                profile.username.parse().unwrap(),
+                self.guild_id,
+                self.playing_role_id,
+            );
+        }
+    }
+
+    async fn revoke_playing_role(&self, username: String) {
+        if let Some(profile) = self.database.get_profile(username).await {
+            self.discord.revoke_role(
+                profile.username.parse().unwrap(),
+                self.guild_id,
+                self.playing_role_id,
+            );
+        }
+    }
+
+    async fn grant_verification_role(&self, username: String) {
+        if let Some(profile) = self.database.get_profile(username).await {
+            self.discord.grant_role(
+                profile.username.parse().unwrap(),
+                self.guild_id,
+                self.verification_role_id,
+            );
+        }
+    }
+
+    async fn revoke_verification_role(&self, username: String) {
+        if let Some(profile) = self.database.get_profile(username).await {
+            self.discord.revoke_role(
+                profile.username.parse().unwrap(),
+                self.guild_id,
+                self.verification_role_id,
+            );
+        }
+    }
+
     async fn process_playerlist(
         &mut self, players: Vec<String>,
     ) -> (Vec<SessionState>, Vec<String>) {
@@ -366,6 +409,13 @@ pub enum MailboxCommand {
         new: String,
         tx: RespCell<ChangePasswordAttempt>,
     },
+
+    /* Discord Role-related interactions */
+    GrantPlayingRole(String),
+    RevokePlayingRole(String),
+    GrantVerificationRole(String),
+    RevokeVerificationRole(String),
+
     /* Websockets */
     WsInitiate(Uuid, WebSocket<OutgoingMessage, IncomingMessage>),
     WsSendDiscordLink(DiscordLink),
@@ -416,7 +466,7 @@ impl MailboxActor {
     pub fn spawn(
         db: Arc<Sqlite>, discord: Arc<serenity::Client>, server_liveliness_channel_id: ChannelId,
         new_ip_fallback_channel_id: ChannelId, verification_role_id: RoleId,
-        playing_role_id: RoleId,
+        playing_role_id: RoleId, guild_id: GuildId,
     ) -> MailboxActorHandle {
         debug!("[a:Mailbox] SPAWN");
 
@@ -442,6 +492,7 @@ impl MailboxActor {
                 self_hnd: tx.downgrade(),
                 playing_role_id,
                 verification_role_id,
+                guild_id,
             },
             queue: rx,
         };
@@ -534,6 +585,14 @@ impl MailboxActor {
                 }
                 MailboxCommand::WsSendDiscordLink(discord_link) => {
                     self.state.ws_send_discord_link(&discord_link);
+                }
+                MailboxCommand::GrantPlayingRole(u) => self.state.grant_playing_role(u).await,
+                MailboxCommand::RevokePlayingRole(u) => self.state.revoke_playing_role(u).await,
+                MailboxCommand::GrantVerificationRole(u) => {
+                    self.state.grant_verification_role(u).await
+                }
+                MailboxCommand::RevokeVerificationRole(u) => {
+                    self.state.revoke_verification_role(u).await
                 }
             }
         }
@@ -651,6 +710,22 @@ impl MailboxActorHandle {
 
     pub fn token_revoke(&self, token: String) {
         notify_actor!(self.queue, MailboxCommand::TokenRevoke(token));
+    }
+
+    pub fn grant_playing_role(&self, username: String) {
+        notify_actor!(self.queue, MailboxCommand::GrantPlayingRole(username));
+    }
+
+    pub fn revoke_playing_role(&self, username: String) {
+        notify_actor!(self.queue, MailboxCommand::RevokePlayingRole(username));
+    }
+
+    pub fn grant_verification_role(&self, username: String) {
+        notify_actor!(self.queue, MailboxCommand::GrantVerificationRole(username));
+    }
+
+    pub fn revoke_verification_role(&self, username: String) {
+        notify_actor!(self.queue, MailboxCommand::RevokeVerificationRole(username));
     }
 
     pub fn ws_initiate(&self, server: Uuid, ws: WebSocket<OutgoingMessage, IncomingMessage>) {
