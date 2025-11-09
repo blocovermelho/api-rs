@@ -21,12 +21,20 @@ mod colors {
     pub const INPUT: Rgb = (209, 230, 57);
     pub const ERROR: Rgb = (232, 26, 26);
     pub const NO_PERM: Rgb = (232, 94, 26);
+    pub const ADMIN: Rgb = (156, 22, 204);
 }
 
 pub const BV_GITHUB_ICON: &str = "https://avatars.githubusercontent.com/u/120765338?s=200&v=4";
 
 fn base() -> CreateEmbed {
     CreateEmbed::new().footer(CreateEmbedFooter::new("Bloco Vermelho").icon_url(BV_GITHUB_ICON))
+}
+
+pub fn admin(brief: impl Display, data: impl Display) -> CreateEmbed {
+    base()
+        .title(format!("Admin - {}", brief))
+        .description(data.to_string())
+        .color(colors::ADMIN)
 }
 
 pub fn info(brief: impl Display, data: impl Display) -> CreateEmbed {
