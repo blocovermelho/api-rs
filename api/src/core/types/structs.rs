@@ -103,6 +103,26 @@ pub mod packet {
     }
 }
 
+pub mod connection_types {
+    use std::{collections::HashMap, time::Duration};
+
+    use serde::{Deserialize, Serialize};
+    use uuid::Uuid;
+
+    #[derive(Deserialize, Serialize)]
+    pub struct BedrockLink {
+        pub name: String,
+        pub xuid: Option<u64>,
+    }
+
+    #[derive(Deserialize, Serialize)]
+    pub struct MojangLink {
+        pub name: String,
+        pub id: Uuid,
+    }
+
+    #[derive(Deserialize, Serialize)]
+    pub struct PlaytimeMap(HashMap<uuid::Uuid, Duration>);
 }
 
 pub mod stub {
