@@ -156,13 +156,11 @@ impl<D: DataSource> TryIngest<dbd::Connection, D> for Connection {
     {
         let extra = ConnectionData::try_from((value.kind, value.data))?;
         let user = source
-            .get_user_by_uuid(&value.profile)
+            .get_profile_by_id(&value.profile)
             .await
             .map_err(|_| ConnectionConversionError::UnknownProfile)?;
 
-        let profile = Profile::try_ingest(user, source)
-            .await
-            .map_err(|_| ConnectionConversionError::UnknownProfile)?;
+        let profile = user.into();
 
         Ok(Self { issuer: value.issuer, profile, extra })
     }
