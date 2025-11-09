@@ -99,6 +99,30 @@ pub fn one_time_passphrase(profile: &Profile, pass: &String) -> CreateEmbed {
     ))
 }
 
+pub fn new_server(server: &ServerV2, token: &String) -> CreateEmbed {
+    info(
+        "API Bloco Vermelho - Criação de servidor",
+        format!(
+            "
+          O servidor `{}` para o jogo `{}` foi criado com sucesso!
+          ",
+            server.name, server.game,
+        ),
+    )
+    .field("Versões suportadas", server.versions.join(", "), true)
+    .field(
+        "Perfis na Staff",
+        format!(
+            "{:?} - Todos os perfis associados a sua conta do discord foram adicionados.",
+            server.staff.len()
+        ),
+        true,
+    )
+    .field("ID", server.uuid, true)
+    .field("Token da API", token, true)
+    .footer(CreateEmbedFooter::new(":warning: Não compartilhe esse token com ninguém. Ele é a sua senha para atualizar informações do servidor e verificar senhas de jogadoes."))
+}
+
 pub fn duration_format(duration: &chrono::Duration) -> String {
     let days = duration.num_days();
     let hours = duration.num_hours();
