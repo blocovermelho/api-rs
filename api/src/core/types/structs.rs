@@ -78,6 +78,15 @@ pub(crate) struct Session {
 }
 
 impl Session {
+    pub fn new(profile: Uuid, network: Ipv4Net) -> Self {
+        Self {
+            profile,
+            started_at: Utc::now(),
+            last_seen: Utc::now(),
+            network,
+        }
+    }
+
     pub fn get_expiry(&self) -> DateTime<Utc> {
         self.last_seen + LEASE_TIME
     }
