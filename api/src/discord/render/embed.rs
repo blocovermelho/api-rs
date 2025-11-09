@@ -140,6 +140,24 @@ pub fn server_token(server: &ServerV2, token: &String) -> CreateEmbed {
     )
 }
 
+pub fn admin_token(server: &ServerV2, scopes: &[String]) -> CreateEmbed {
+    admin(
+        "API Bloco Vermelho - Invalidação de token do servidor",
+        format!(
+            "
+          O token para o servidor {} foi invalidado devido à alterações nas suas permissões.
+
+          Por favor gere um novo token utilizando o comando **/server token reset**.
+
+          🔴 Você deverá trocar o token nas configurações do seu servidor. 🔴
+          🔴 Até que esta troca seja feita o servidor não conseguirá conectar a API. 🔴
+          ",
+            server.name
+        ),
+    )
+    .field("Permissões Atuais", scopes.join(", "), false)
+}
+
 pub fn duration_format(duration: &chrono::Duration) -> String {
     let days = duration.num_days();
     let hours = duration.num_hours();
