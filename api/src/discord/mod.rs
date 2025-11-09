@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use handler::event_handler;
 use poise::serenity_prelude::GuildId;
+use tokio::sync::Mutex;
 
-use crate::db::drivers::sqlite::Sqlite;
+use crate::{db::drivers::sqlite::Sqlite, Ephemeral};
 
 pub mod autocomplete;
 pub mod commands;
@@ -15,19 +16,30 @@ pub mod utils;
 
 pub struct Data {
     db: Arc<Sqlite>,
+    state: Arc<Mutex<Ephemeral>>,
 }
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Context<'a> = poise::Context<'a, Data, Error>;
 pub type AppContext<'a> = poise::ApplicationContext<'a, Data, Error>;
 
-pub async fn framework(db: Arc<Sqlite>) -> poise::Framework<Data, Error> {
+pub async fn framework(
+    db: Arc<Sqlite>, state: Arc<Mutex<Ephemeral>>,
+) -> poise::Framework<Data, Error> {
     let options = poise::FrameworkOptions {
         commands: vec![
             commands::change_password::changepw(),
-            commands::stats::stats(),
+            // commands::stats::stats(),
             commands::rank::rank(),
+            commands::otp::otp(),
+            commands::server::server(),
+            commands::server::token(),
+            commands::server::reset(),
             render::embed::embed_test(),
+            // Admin commands
+            commands::admin::apictl(),
+            commands::admin::grant(),
+            // commands::admin::delete(),
         ],
         event_handler: |ctx, event, fw, _data| Box::pin(event_handler(ctx, fw, event)),
         on_error: |e| {
@@ -48,7 +60,7 @@ pub async fn framework(db: Arc<Sqlite>) -> poise::Framework<Data, Error> {
                 )
                 .await?;
 
-                Ok(Data { db })
+                Ok(Data { db, state })
             })
         })
         .options(options)
