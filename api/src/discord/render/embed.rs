@@ -123,6 +123,23 @@ pub fn new_server(server: &ServerV2, token: &String) -> CreateEmbed {
     .footer(CreateEmbedFooter::new(":warning: Não compartilhe esse token com ninguém. Ele é a sua senha para atualizar informações do servidor e verificar senhas de jogadoes."))
 }
 
+pub fn server_token(server: &ServerV2, token: &String) -> CreateEmbed {
+    info(
+        "API Bloco Vermelho - Reset de token do servidor",
+        format!(
+            "
+          O seguinte token foi gerado para o servidor {}. Copie-o e mantenha em segurança.
+          ```
+          {}```
+
+          :warning: **Não compartilhe este token com ninguém.** :warning:
+          :warning: **Feche esta mensagem após o seu servidor estar configurado.** :warning:
+          ",
+            server.name, token,
+        ),
+    )
+}
+
 pub fn duration_format(duration: &chrono::Duration) -> String {
     let days = duration.num_days();
     let hours = duration.num_hours();
