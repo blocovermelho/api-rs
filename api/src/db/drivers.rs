@@ -38,6 +38,10 @@ pub mod err {
             BlacklistEntry, // Equivalent to: PardonAttempt::NotBanned
             #[error("The connection: `{1}` does not exist for `{0}`")]
             Connection(Uuid, String),
+            #[error("No token was issued for server `{0}`")]
+            TokenServer(Uuid),
+            #[error("Invalid Token.")]
+            Token,
         }
 
         /// When user input is invalid.
