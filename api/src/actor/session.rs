@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 
 use chrono::{DateTime, Utc};
 use tokio::time::Instant;
@@ -51,7 +51,7 @@ impl SessionA {
     }
 
     pub fn deadline(&self) -> Instant {
-        self.last_seen + LEASE_TIME.to_std().unwrap_or_default()
+        self.last_seen + Duration::from_mins(15)
     }
 
     pub fn ping(&mut self) {
@@ -75,6 +75,7 @@ impl SessionA {
                 match result {
                     LoginAttempt::LoggedIn => {
                         let clone = profile.clone();
+                        self.last_seen = Instant::now();
                         self.playtime_hnd.start(server_id);
                         self.active_servers.insert(server_id);
                         self.state = SessionState::LoggedIn { profile: clone };
@@ -113,6 +114,7 @@ impl SessionA {
     pub fn profile_update(&mut self, new: Profile) {
         debug!("[a:Session({})] Event:ProfileUpdate RECV", self.username);
         self.playtime_hnd.promote(new.id);
+        self.last_seen = Instant::now();
         match &self.state {
             SessionState::Visitor => {
                 self.state = SessionState::PendingLogin { profile: new };
@@ -139,6 +141,7 @@ impl SessionA {
     pub fn join_server(&mut self, server_id: Uuid) {
         debug!("[a:Session({})] Event:JoinServer RECV | server_id:{}", self.username, server_id);
         if matches!(self.state, SessionState::LoggedIn { .. }) {
+            self.last_seen = Instant::now();
             self.active_servers.insert(server_id);
             self.playtime_hnd.start(server_id);
         }
@@ -151,6 +154,7 @@ impl SessionA {
         );
 
         if matches!(self.state, SessionState::LoggedIn { .. }) {
+            self.last_seen = Instant::now();
             self.active_servers.remove(&server_id);
             self.playtime_hnd.end(server_id);
         }
@@ -269,6 +273,7 @@ impl SessionActor {
                     },
                 },
                 _ = tokio::time::sleep_until(self.state.deadline()) => {
+                    trace!("[a:Session({})] CLOSING Self | Start={} Last={:?} Time={:?}", self.state.username, self.state.created_at, self.state.last_seen, Instant::now() - self.state.last_seen);
                     break;
                 }
             }
