@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 // Transformations and ingress for databse datatypes
 use chrono::TimeDelta;
+use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
@@ -24,10 +25,13 @@ impl From<dbd::Allowlist> for Session {
         }
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ProfileConversionError {
+    #[error("No account found.")]
     NoAccountError,
+    #[error("User hasn't yet linked a discord account.")]
     UnlinkedUserError,
+    #[error("Couldn't find user from the given uuid.")]
     UnknownUUIDError,
 }
 
@@ -100,11 +104,15 @@ impl<D: DataSource> TryIngest<dbd::Account, D> for Profile {
         })
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ConnectionConversionError {
+    #[error("The type of the connection is not known.")]
     UnknownTypeError,
+    #[error("The profile for this connection does not exist.")]
     UnknownProfile,
+    #[error("The issuer for this connection does not exit.")]
     UnknownIssuer,
+    #[error("The Mojang UUID for this account is invalid.")]
     InvalidMojangUUIDError,
 }
 
