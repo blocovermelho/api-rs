@@ -13,7 +13,7 @@ use uuid_mc::PlayerUuid;
 
 use crate::{
     db::{
-        data::User,
+        data::{Profile, User},
         drivers::err::DriverError,
         helper::{check_cidr, CidrAction},
         interface::DataSource,
@@ -42,7 +42,7 @@ fn misclick_prevention(interaction: &ComponentInteraction, target: Option<String
 }
 
 async fn send_missclick_response(
-    ctx: &Context, interaction: &ComponentInteraction, user: &User,
+    ctx: &Context, interaction: &ComponentInteraction, user: &Profile,
 ) -> Result<(), Error> {
     interaction
         .create_response(
@@ -50,9 +50,9 @@ async fn send_missclick_response(
             CreateInteractionResponse::Message(
                 CreateInteractionResponseMessage::new()
                     .embed(embed::error(
-                        "Conta não pertencente",
+                        "Perfil não pertencente",
                         format!(
-                            "A conta: `{}` não pertence ao usuário {}.",
+                            "O Perfil: `{}` não pertence ao usuário {}.",
                             user.username,
                             interaction.user.mention()
                         ),
@@ -66,9 +66,9 @@ async fn send_missclick_response(
     Ok(())
 }
 
-async fn get_user_from_message(
+async fn get_profile_from_message(
     fw: &FrameworkContext<'_, Data, Error>, interaction: &ComponentInteraction,
-) -> Result<User, Error> {
+) -> Result<Profile, Error> {
     let db = fw.user_data().await.db.clone();
 
     let embed = interaction
@@ -87,12 +87,9 @@ async fn get_user_from_message(
         .last()
         .ok_or_else(|| DriverError::Generic("Unable to get username from embed".to_string()))?;
 
-    let player_uuid = PlayerUuid::new_with_offline_username(username);
-    let uuid = player_uuid.as_uuid();
+    let profile = db.get_profile(username.to_string()).await?;
 
-    let user = db.get_user_by_uuid(uuid).await?;
-
-    Ok(user)
+    Ok(profile)
 }
 
 // Handler for New IPs
@@ -103,7 +100,7 @@ pub async fn ip_accept(
     println!("[Ip Accept] Handling interaction.");
     let db = fw.user_data().await.db.clone();
 
-    let user = get_user_from_message(fw, interaction).await?;
+    let user = get_profile_from_message(fw, interaction).await?;
 
     if matches!(misclick_prevention(interaction, target), ActionResult::Return) {
         send_missclick_response(ctx, interaction, &user).await?;
@@ -162,7 +159,7 @@ pub async fn ip_deny(
     ip: Ipv4Addr, target: Option<String>,
 ) -> Result<(), Error> {
     if matches!(misclick_prevention(interaction, target.clone()), ActionResult::Return) {
-        let user = get_user_from_message(fw, interaction).await?;
+        let user = get_profile_from_message(fw, interaction).await?;
         send_missclick_response(ctx, interaction, &user).await?;
         return Ok(());
     }
@@ -217,7 +214,7 @@ pub async fn ip_prompt(
     ip: Ipv4Addr, target: Option<String>,
 ) -> Result<(), Error> {
     if matches!(misclick_prevention(interaction, target.clone()), ActionResult::Return) {
-        let user = get_user_from_message(fw, interaction).await?;
+        let user = get_profile_from_message(fw, interaction).await?;
         send_missclick_response(ctx, interaction, &user).await?;
         return Ok(());
     }
@@ -282,7 +279,7 @@ pub async fn ip_back(
     ip: Ipv4Addr, target: Option<String>,
 ) -> Result<(), Error> {
     if matches!(misclick_prevention(interaction, target.clone()), ActionResult::Return) {
-        let user = get_user_from_message(fw, interaction).await?;
+        let user = get_profile_from_message(fw, interaction).await?;
         send_missclick_response(ctx, interaction, &user).await?;
         return Ok(());
     }

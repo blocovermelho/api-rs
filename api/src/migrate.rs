@@ -1,18 +1,24 @@
 // The migration process from the old JSON-based data store to a SQLite database
 // Should be relatively simple to do, since we're only migrating User/Account/Server data.
 
-use std::{collections::HashMap, fs::File, io::BufReader, path::PathBuf};
+use std::{collections::HashMap, fs::File, io::BufReader, path::PathBuf, time::Duration};
 
 use uuid::Uuid;
 
-use crate::db::{
-    data::stub::{AccountStub, ServerStub, UserStub},
-    drivers::{
-        err::{base::NotFoundError, DriverError, Response},
-        json::{data::Datum, JsonDriver},
-        sqlite::Sqlite,
+use crate::{
+    core::types::{
+        enums::ConnectionData,
+        structs::stub::{GameServerStub, ProfileStub},
     },
-    interface::DataSource,
+    db::{
+        data::Connection,
+        drivers::{
+            err::{base::NotFoundError, DriverError, Response},
+            json::{data::Datum, JsonDriver},
+            sqlite::Sqlite,
+        },
+        interface::DataSource,
+    },
 };
 
 pub async fn migrate(database_path: &PathBuf, json_path: &PathBuf) -> Response<Sqlite> {
@@ -31,7 +37,6 @@ pub async fn migrate(database_path: &PathBuf, json_path: &PathBuf) -> Response<S
 
     migrate_server_data(&db, &old_store, &mut mappings).await?;
     migrate_user_data(&db, &old_store, &mappings).await?;
-    migrate_account_data(&db, &old_store).await?;
 
     Ok(db)
 }
@@ -40,15 +45,17 @@ pub async fn migrate(database_path: &PathBuf, json_path: &PathBuf) -> Response<S
 pub async fn migrate_server_data(
     sqlite: &Sqlite, old: &JsonDriver, mappings: &mut HashMap<Uuid, Uuid>,
 ) -> Response<()> {
-    let servers = old.get_all_servers().await?;
+    let servers = old.get_all_servers_v1().await?;
     println!("[Server Data] Migration Started. Count: {}", servers.len());
     for id in servers {
         let server = old.get_server(&id).await?;
         let new_server = sqlite
-            .create_server(ServerStub {
+            .create_server(GameServerStub {
                 name: server.name,
-                supported_versions: server.supported_versions.0,
-                current_modpack: server.current_modpack.0,
+                game: "Minecraft".into(),
+                versions: server.versions.0,
+                max_players: 0,
+                staff: vec![],
             })
             .await?;
 
@@ -65,7 +72,8 @@ pub async fn migrate_user_data(
     sqlite: &Sqlite, old: &JsonDriver, server_id_mappings: &HashMap<Uuid, Uuid>,
 ) -> Response<()> {
     let users = old.get_all_users().await?;
-    let servers = old.get_all_servers().await?;
+    let servers = old.get_all_servers_v1().await?;
+    let mut user_id_mappings: HashMap<Uuid, Uuid> = HashMap::new();
     println!("[User Data] Migration Started. Count: {}", users.len());
     println!("[User Data] Server Id Mappings: {}", server_id_mappings.len());
     println!("[Mappings] {:?}", server_id_mappings);
@@ -74,13 +82,28 @@ pub async fn migrate_user_data(
         println!("[User Data] Migration for {id} started.");
         // From the user, we need to gather a bunch of things
         let user = old.get_user_by_uuid(&id).await?;
-        sqlite
-            .create_user(UserStub {
-                uuid: user.uuid,
-                username: user.username,
-                discord_id: user.discord_id,
-            })
-            .await?;
+        if let Ok(account) = old.get_account(&id).await {
+            let profile = sqlite
+                .create_profile(
+                    ProfileStub {
+                        username: user.username,
+                        discord_id: user.discord_id,
+                        password: account.password,
+                    },
+                    Some(user.created_at),
+                )
+                .await?;
+
+            user_id_mappings.insert(user.uuid, profile.uuid);
+
+            let entries = old.get_allowlists(&id).await?;
+            for entry in &entries {
+                let temp = sqlite
+                    .create_allowlist(&profile.uuid, entry.base_ip.into())
+                    .await?;
+                sqlite.broaden_allowlist_mask(temp, entry.mask).await?;
+            }
+        }
 
         // We do not have a way to set last_server yet. :(
         // But we can restore at least their playtime.
@@ -91,58 +114,31 @@ pub async fn migrate_user_data(
                 .get(&server_id)
                 .ok_or(DriverError::DatabaseError(NotFoundError::Server))?;
 
+            let mut playtimes: HashMap<Uuid, Duration> = HashMap::new();
+
             println!("[User Data] Mapped Server: {id} -> {mapped_id}");
 
-            let mut created = false;
-
-            if let Ok(viewport) = old.get_viewport(&id, &server_id).await {
-                println!("[User Data] Got Viewport for: {}", server_id);
-                sqlite.create_savedata(&id, &mapped_id).await?;
-                println!("[SaveData] Created for user: {} @ server: {}", id, &mapped_id);
-                created = true;
-
-                _ = sqlite.update_viewport(&id, &mapped_id, viewport).await;
-                println!("[SaveData] Updated viewport.");
+            if let Ok(playtime) = old.get_playtime_v1(&id, &server_id).await {
+                println!("[User Data] Got playtime for {}: {}s", server_id, playtime.as_secs());
+                playtimes.insert(mapped_id, playtime);
             }
 
-            if let Ok(playtime) = old.get_playtime(&id, &server_id).await {
-                println!("[User Data] Got playtime for {}: {}s", server_id, playtime.as_secs());
+            if let Some(profile_id) = user_id_mappings.get(&id) {
+                let (kind, data) = ConnectionData::Playtime(playtimes).into();
+                let conn = sqlite
+                    .create_connection(Connection {
+                        profile: *profile_id,
+                        issuer: None,
+                        kind,
+                        data,
+                    })
+                    .await?;
 
-                if !created {
-                    sqlite.create_savedata(&id, &mapped_id).await?;
-                    println!("[SaveData] Created for user: {} @ server: {}", id, &mapped_id);
-                }
-
-                sqlite.update_playtime(&id, &mapped_id, playtime).await?;
-                println!("[SaveData] Updated playime.");
+                println!("[Connection] Created kind={}: {}", conn.kind, conn.data);
             }
         }
 
         println!("[User Data] Migration for {id} finished.");
-    }
-    Ok(())
-}
-
-// Now finally we can migrate account data.
-// This should also include all previous ip addresses that that player connected.
-pub async fn migrate_account_data(sqlite: &Sqlite, old: &JsonDriver) -> Response<()> {
-    let accounts = old.get_all_accounts().await?;
-    println!("[Account Data] Migration Started. Count: {}", accounts.len());
-
-    for id in &accounts {
-        let account = old.get_account(id).await?;
-        let entries = old.get_allowlists(id).await?;
-
-        sqlite
-            .create_account(AccountStub { uuid: account.uuid, password: account.password })
-            .await?;
-
-        for entry in &entries {
-            let temp = sqlite.create_allowlist(id, entry.base_ip.into()).await?;
-            sqlite.broaden_allowlist_mask(temp, entry.mask).await?;
-        }
-
-        println!("[Account Data] Migration for {id} finished.");
     }
     Ok(())
 }

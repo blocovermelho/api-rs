@@ -25,7 +25,7 @@ pub async fn changepw(
     let target_id = ctx.author().id.to_string();
     let db = &ctx.data().db;
     let users: Vec<_> = db
-        .get_users_by_discord_id(target_id.clone())
+        .get_profiles_by_discord_id(target_id.clone())
         .await
         .unwrap_or_default();
 

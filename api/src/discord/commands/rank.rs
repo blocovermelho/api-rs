@@ -1,7 +1,14 @@
+use std::{collections::BTreeMap, time::Duration};
+
 use poise::{serenity_prelude::CreateEmbedFooter, CreateReply};
+use tracing::{event, span, Level};
 
 use crate::{
-    db::{data::result::PlaytimeEntry, interface::DataSource},
+    core::{
+        trans::db::TryIngest,
+        types::{enums::ConnectionData, structs::Connection},
+    },
+    db::interface::DataSource,
     discord::{
         render::embed::{self, duration_format},
         Context, Error,
@@ -28,12 +35,30 @@ pub async fn rank(
 
     let embed = match server_ {
         Ok(s) => {
-            let mut playtimes = db.get_playtimes(&s.uuid).await.unwrap();
-            playtimes.sort_by(|a, b| b.playtime.0.cmp(&a.playtime.0));
+            let mut total_time = Duration::ZERO;
+            let db_playtimes = db.get_connections_by_kind("bv:playtime").await.unwrap();
+            let mut ranking: BTreeMap<Duration, Vec<String>> = BTreeMap::new();
+            for dbd in db_playtimes {
+                if let Ok(c) = Connection::try_ingest(dbd, db.clone()).await {
+                    if let ConnectionData::Playtime(times) = c.extra {
+                        if let Some(time) = times.get(&s.uuid) {
+                            total_time += *time;
+                            if let Some(old) = ranking.get(time) {
+                                let mut tie = old.clone();
+                                tie.push(c.profile.username);
+                                ranking.insert(*time, tie);
+                            } else {
+                                ranking.insert(*time, vec![c.profile.username]);
+                            }
+                        }
+                    }
+                }
+            }
 
             let mut strs = vec![];
-            for (idx, entry) in playtimes.iter().enumerate() {
-                strs.push(format_entry(entry, idx));
+
+            for (idx, (k, v)) in ranking.iter().rev().enumerate() {
+                strs.push(format_entry(k, v, idx));
             }
 
             if end > strs.len() {
@@ -41,12 +66,13 @@ pub async fn rank(
             }
 
             if let Some(strs) = strs.get(start..=end) {
-                embed::info(format!("Ranking: {}", s.name), strs.join("\n")).footer(
+                embed::info(format!("Ranking: {}", s.name), strs.concat().join("\n")).footer(
                     CreateEmbedFooter::new(format!(
-                        "Página {}/10 - #{:02} à #{:02}",
+                        "Página {}/10 - #{:02} à #{:02} | Tempo total: {}",
                         page,
                         start + 1,
-                        end + 1
+                        end + 1,
+                        duration_format(&chrono::Duration::from_std(total_time).unwrap())
                     )),
                 )
             } else {
@@ -66,12 +92,17 @@ pub async fn rank(
     Ok(())
 }
 
-fn format_entry(entry: &PlaytimeEntry, position: usize) -> String {
-    let duration = chrono::Duration::from_std(entry.playtime.0).unwrap();
-    format!(
-        "`#{:02}` - **{}** | {}",
-        position + 1,
-        entry.username,
-        duration_format(&duration)
-    )
+fn format_entry(duration: &Duration, players: &Vec<String>, position: usize) -> Vec<String> {
+    let duration = chrono::Duration::from_std(*duration).unwrap();
+    let mut strs = vec![];
+
+    for player in players {
+        strs.push(format!(
+            "`#{:02}` - **{}** | {}",
+            position + 1,
+            player,
+            duration_format(&duration)
+        ));
+    }
+    strs
 }

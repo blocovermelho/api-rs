@@ -3,9 +3,9 @@ use std::{net::Ipv4Addr, time::Duration};
 use ipnet::Ipv4Net;
 use uuid::Uuid;
 
-use super::data::Profile;
+use super::data::{Profile, ServerV2, Token};
 use crate::{
-    core::types::structs::stub::ProfileStub,
+    core::types::structs::stub::{GameServerStub, ProfileStub},
     db::{
         data::{
             result::{self, PlaytimeEntry},
@@ -21,26 +21,8 @@ pub trait DataSource: Send + Sync {
     #[deprecated(since = "2.0.0", note = "The User object got replaced by Profile")]
     async fn get_user_by_uuid(&self, uuid: &Uuid) -> Response<User>;
     #[deprecated(since = "2.0.0", note = "The User object got replaced by Profile")]
-    async fn get_user_by_name(&self, name: String) -> Response<User>;
-    #[deprecated(since = "2.0.0", note = "The User object got replaced by Profile")]
-    async fn get_users_by_discord_id(&self, discord_id: String) -> Response<Vec<User>>;
-    #[deprecated(since = "2.0.0", note = "The User object got replaced by Profile")]
     async fn get_all_users(&self) -> Response<Vec<Uuid>>;
-    #[deprecated(since = "2.0.0", note = "The User object got replaced by Profile")]
-    async fn create_user(&self, stub: stub::UserStub) -> Response<User>;
-    #[deprecated(since = "2.0.0", note = "The User object got replaced by Profile")]
-    async fn delete_user(&self, uuid: &Uuid) -> Response<User>;
-    #[deprecated(
-        since = "2.0.0",
-        note = "Migration system is unimplemented and complicated. Replace the username of the profile instead."
-    )]
-    async fn migrate_user(&self, from: &Uuid, into: &Uuid) -> Response<User>;
 
-    #[deprecated(
-        since = "2.0.0",
-        note = "Accounts, which only held the password of the user were merged into Profiles."
-    )]
-    async fn create_account(&self, stub: stub::AccountStub) -> Response<()>;
     #[deprecated(
         since = "2.0.0",
         note = "Accounts, which only held the password of the user were merged into Profiles."
@@ -52,23 +34,21 @@ pub trait DataSource: Send + Sync {
     )]
     async fn get_all_accounts(&self) -> Response<Vec<Uuid>>;
 
+    async fn upcast_profile(&self, user: User, account: Account) -> Response<Profile>;
+
     async fn create_profile(
         &self, stub: ProfileStub, when: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Response<Profile>;
 
     async fn get_profile(&self, username: String) -> Response<Profile>;
     async fn get_profile_by_id(&self, profile_uuid: &Uuid) -> Response<Profile>;
+    async fn get_profiles_by_discord_id(&self, discord_id: String) -> Response<Vec<Profile>>;
 
     async fn delete_profile(&self, profile_uuid: &Uuid) -> Response<Profile>;
 
     async fn update_password(&self, player_uuid: &Uuid, new_password: String) -> Response<()>;
+    async fn update_username(&self, player_uuid: &Uuid, new_username: String) -> Response<()>;
 
-    async fn update_current_join(&self, player_uuid: &Uuid) -> Response<()>;
-    #[deprecated(
-        since = "2.0.0",
-        note = "Migration system is unimplemented and complicated. Replace the username of the profile instead."
-    )]
-    async fn migrate_account(&self, from: &Uuid, to: &Uuid) -> Response<()>;
     #[deprecated(
         since = "2.0.0",
         note = "Accounts, which only held the password of the user were merged into Profiles."
@@ -94,53 +74,31 @@ pub trait DataSource: Send + Sync {
     async fn broaden_blacklist_mask(&self, entry: Blacklist, new_mask: u8) -> Response<()>;
     async fn delete_blacklist(&self, entry: Blacklist) -> Response<()>;
 
-    async fn create_server(&self, stub: stub::ServerStub) -> Response<Server>;
-    async fn delete_server(&self, server_uuid: &Uuid) -> Response<Server>;
+    async fn create_server(&self, stub: GameServerStub) -> Response<ServerV2>;
+    async fn delete_server(&self, server_uuid: &Uuid) -> Response<ServerV2>;
+    async fn upcast_server_v1(&self, v1: Server) -> Response<ServerV2>;
 
-    async fn get_server(&self, server_uuid: &Uuid) -> Response<Server>;
-    async fn get_server_by_name(&self, name: String) -> Response<Server>;
-    async fn get_all_servers(&self) -> Response<Vec<Uuid>>;
+    async fn get_server(&self, server_uuid: &Uuid) -> Response<ServerV2>;
+    async fn get_server_v1(&self, server_uuid: &Uuid) -> Response<Server>;
+    async fn get_server_by_name(&self, name: String) -> Response<ServerV2>;
+    async fn get_all_servers_v1(&self) -> Response<Vec<Uuid>>;
+    async fn get_all_servers_v2(&self) -> Response<Vec<Uuid>>;
 
-    #[deprecated(
-        since = "2.0.0",
-        note = "Can be derived from keepalive packet. Not persisted."
-    )]
-    async fn join_server(
-        &self, server_uuid: &Uuid, player_uuid: &Uuid,
-    ) -> Response<result::ServerJoin>;
-    #[deprecated(
-        since = "2.0.0",
-        note = "Can be derived from keepalive packet. Not persisted."
-    )]
-    async fn leave_server(
-        &self, server_uuid: &Uuid, player_uuid: &Uuid,
-    ) -> Response<result::ServerLeave>;
-    #[deprecated(
-        since = "2.0.0",
-        note = "Can be derived from keepalive packet. Not persisted."
-    )]
-    async fn update_server_status(&self, server_uuid: &Uuid, online: bool) -> Response<bool>;
+    async fn create_token(&self, server_uuid: &Uuid, scopes: Vec<String>) -> Response<String>;
+    async fn reset_token(&self, server_uuid: &Uuid) -> Response<String>;
+    async fn get_token(&self, token: String) -> Response<Token>;
+    async fn revoke_token(&self, server_uuid: &Uuid) -> Response<()>;
 
-    #[deprecated(
-        since = "2.0.0",
-        note = "This data should be handled by the game server."
-    )]
-    async fn update_viewport(
-        &self, player_uuid: &Uuid, server_uuid: &Uuid, viewport: Viewport,
-    ) -> Response<Viewport>;
-    #[deprecated(
-        since = "2.0.0",
-        note = "This data should be handled by the game server."
-    )]
-    async fn get_viewport(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Viewport>;
     #[deprecated(since = "2.0.0", note = "Playtime is now an Connection.")]
     async fn update_playtime(
         &self, player_uuid: &Uuid, server_uuid: &Uuid, new_playtime: Duration,
     ) -> Response<()>;
     #[deprecated(since = "2.0.0", note = "Playtime is now an Connection.")]
-    async fn get_playtime(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Duration>;
+    async fn get_playtime_v1(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Duration>;
     #[deprecated(since = "2.0.0", note = "Playtime is now an Connection.")]
-    async fn get_playtimes(&self, server_uuid: &Uuid) -> Response<Vec<PlaytimeEntry>>;
+    async fn get_playtimes_v1(&self, server_uuid: &Uuid) -> Response<Vec<PlaytimeEntry>>;
+
+    async fn upcast_savedata(&self, data: SaveData) -> Response<Connection>;
 
     async fn add_pronoun(&self, player_uuid: &Uuid, pronoun: Pronoun) -> Response<Vec<Pronoun>>;
     async fn remove_pronoun(&self, player_uuid: &Uuid, pronoun: Pronoun) -> Response<Vec<Pronoun>>;
@@ -149,8 +107,6 @@ pub trait DataSource: Send + Sync {
     ) -> Response<Vec<Pronoun>>;
 
     #[deprecated(since = "2.0.0", note = "SaveData has been superceded by Connection")]
-    async fn create_savedata(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<SaveData>;
-    #[deprecated(since = "2.0.0", note = "SaveData has been superceded by Connection")]
     async fn get_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>>;
     #[deprecated(since = "2.0.0", note = "SaveData has been superceded by Connection")]
     async fn delete_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>>;
@@ -158,6 +114,7 @@ pub trait DataSource: Send + Sync {
     async fn create_connection(&self, connection: Connection) -> Response<Connection>;
     async fn get_connection(&self, profile: &Uuid, kind: &str) -> Response<Connection>;
     async fn get_connections_by_profile(&self, profile: &Uuid) -> Response<Vec<Connection>>;
+    async fn get_connections_by_kind(&self, kind: &str) -> Response<Vec<Connection>>;
     async fn delete_connection(&self, profile: &Uuid, kind: &str) -> Response<Connection>;
     async fn update_connection(&self, connection: Connection) -> Response<Connection>;
 }

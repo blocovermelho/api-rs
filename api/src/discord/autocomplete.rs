@@ -9,7 +9,7 @@ pub async fn username<'a>(ctx: Context<'_>, partial: &'a str) -> impl Stream<Ite
     let target_id = ctx.author().id.to_string();
     let db = &ctx.data().db;
     let users: Vec<_> = db
-        .get_users_by_discord_id(target_id.clone())
+        .get_profiles_by_discord_id(target_id.clone())
         .await
         .unwrap_or_default()
         .iter()
@@ -40,7 +40,7 @@ pub async fn players<'a>(ctx: Context<'_>, partial: &'a str) -> impl Stream<Item
 /// Autocompletion for server names
 pub async fn servers<'a>(ctx: Context<'_>, partial: &'a str) -> impl Stream<Item = String> + 'a {
     let db = &ctx.data().db;
-    let server_ids = db.get_all_servers().await.unwrap_or_default();
+    let server_ids = db.get_all_servers_v2().await.unwrap_or_default();
 
     let mut servers: Vec<_> = vec![];
 

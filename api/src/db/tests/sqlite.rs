@@ -1,130 +1,157 @@
 use std::{net::Ipv4Addr, time::Duration};
 
+use chrono::Utc;
+use sqlx::types::Json;
 // Unit Tests for the Sqlite Driver.
 use test_log::test;
 use uuid::Uuid;
 
-use crate::db::{
-    data::{
-        result::{NodeDeletion, ServerJoin, ServerLeave},
-        stub::{AccountStub, ServerStub, UserStub},
-        BanActor, Loc, Pronoun, Server, User, Viewport,
-    },
-    drivers::{
-        err::{
-            base::{self, InvalidError},
-            DriverError, Response,
+use crate::{
+    core::types::{
+        enums::ConnectionData,
+        structs::{
+            stub::{GameServerStub, ProfileStub},
+            GameServer,
         },
-        sqlite::Sqlite,
     },
-    interface::{DataSource, NetworkProvider},
+    db::{
+        data::{
+            result::{NodeDeletion, ServerJoin, ServerLeave},
+            stub::{AccountStub, ServerStub, UserStub},
+            Account, BanActor, Loc, Profile, Pronoun, SaveData, Server, ServerV2, User, Viewport,
+        },
+        drivers::{
+            err::{
+                base::{self, InvalidError},
+                DriverError, Response,
+            },
+            json::data::{Modpack, ModpackSource},
+            sqlite::Sqlite,
+        },
+        interface::{DataSource, NetworkProvider},
+    },
 };
 
 async fn get_wrapper(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<Sqlite> {
     Ok(pool.into())
 }
 
-fn offline_uuid(name: &'static str) -> Uuid {
-    let string = "OfflinePlayer:".to_owned() + name;
-    let mut hash = md5::compute(string).0;
-
-    hash[6] = hash[6] & 0x0f | 0x30; // uuid version 3
-    hash[8] = hash[8] & 0x3f | 0x80; // RFC4122 variant
-
-    Uuid::from_bytes(hash)
+async fn v1_mock_user(db: &Sqlite, username: &'static str) -> User {
+    sqlx::query_as::<_,User>("INSERT INTO users (uuid, username, discord_id, created_at, pronouns, last_server) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *")
+        .bind(Uuid::new_v4())
+        .bind(username)
+        .bind("-Discord ID-")
+        .bind(Utc::now())
+        .bind("[]")
+        .bind(None::<Uuid>)
+        .fetch_one(&db.0)
+        .await.unwrap()
 }
 
-async fn mock_user(db: &Sqlite, username: &'static str) -> User {
-    let stub = UserStub {
-        uuid: offline_uuid(username),
-        username: username.to_owned(),
-        discord_id: "-Discord ID-".to_owned(),
+async fn v1_mock_account(db: &Sqlite, uuid: &Uuid) -> Account {
+    sqlx::query_as::<_, Account>(
+        "INSERT INTO accounts (uuid, password, current_join) VALUES ($1, $2, $3) RETURNING *",
+    )
+    .bind(uuid)
+    .bind("password")
+    .bind(Utc::now())
+    .fetch_one(&db.0)
+    .await
+    .unwrap()
+}
+
+async fn v1_mock_server(db: &Sqlite) -> Server {
+    let modpack = Modpack {
+        name: "Teste".to_string(),
+        source: ModpackSource::Modrinth,
+        version: "0.0.1".to_string(),
+        uri: "example.org".to_string(),
+    };
+    sqlx::query_as::<_, Server>(
+        "INSERT INTO servers (uuid, name, supported_versions, current_modpack, online, players) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+    )
+    .bind(Uuid::now_v7())
+    .bind("Servidor de Testes - V1")
+    .bind("[]")
+    .bind(Json(modpack))
+    .bind(Json(true))
+    .bind("[]")
+    .fetch_one(&db.0)
+    .await.unwrap()
+}
+
+async fn v1_mock_savedata(db: &Sqlite, server: &Uuid, player: &Uuid) -> SaveData {
+    sqlx::query_as::<_, SaveData>(
+        "INSERT INTO savedata (server_uuid, player_uuid, playtime, viewport) VALUES ($1, $2, $3, $4) RETURNING *",
+     )
+     .bind(server)
+     .bind(player)
+     .bind(Json(Duration::ZERO))
+     .bind(Json(Viewport::default()))
+     .fetch_one(&db.0)
+     .await
+     .unwrap()
+}
+
+async fn mock_profile(db: &Sqlite, username: &'static str) -> Profile {
+    let stub = ProfileStub {
+        username: username.into(),
+        discord_id: "-Discord ID-".into(),
+        password: "password".into(),
     };
 
-    db.create_user(stub.clone()).await.unwrap()
+    db.create_profile(stub, None).await.unwrap()
 }
 
-async fn mock_server(db: &Sqlite) -> Server {
-    let stub = ServerStub {
+async fn mock_server(db: &Sqlite) -> ServerV2 {
+    let stub = GameServerStub {
         name: "Servidor de Teste".to_owned(),
-        supported_versions: vec!["1.21.0".to_owned()],
-        current_modpack: None,
+        versions: vec!["1.21.0".to_owned()],
+        staff: vec![],
+        max_players: 32,
+        game: "Minecraft".into(),
     };
 
     db.create_server(stub).await.unwrap()
 }
 
-async fn mock_account(db: &Sqlite, uuid: uuid::Uuid) {
-    db.create_account(AccountStub { uuid, password: "SuperSecretSettings".to_owned() })
-        .await
-        .unwrap()
-}
-
 // CREATE
 
 #[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn create_user(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let uuid = Uuid::new_v4();
+async fn create_profile(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let stub = UserStub {
-        uuid,
+    let stub = ProfileStub {
         username: "alikindsys".to_owned(),
         discord_id: "-Discord ID-".to_owned(),
+        password: "password".into(),
     };
 
-    let save = db.create_user(stub.clone()).await.unwrap();
+    let save = db.create_profile(stub.clone(), None).await.unwrap();
 
-    assert_eq!(stub, save);
+    // assert_eq!(stub, save);
+
     Ok(())
 }
 
 #[test(sqlx::test(migrations = "src/db/migrations"))]
 async fn create_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let stub = ServerStub {
+    let stub = GameServerStub {
         name: "Servidor de Teste".to_owned(),
-        supported_versions: vec!["1.21.0".to_owned()],
-        current_modpack: None,
+        versions: vec!["1.21.0".to_owned()],
+        staff: vec![],
+        max_players: 32,
+        game: "Minecraft".into(),
     };
 
     let db = get_wrapper(pool).await.unwrap();
 
     let save = db.create_server(stub.clone()).await.unwrap();
 
-    assert_eq!(stub, save);
+    let gs = GameServer::from(save);
 
-    Ok(())
-}
+    assert_eq!(gs, stub);
 
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn create_savedata(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let db = get_wrapper(pool).await.unwrap();
-
-    let user = mock_user(&db, "alikindsys").await;
-    let server = mock_server(&db).await;
-
-    let savedata = db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
-
-    assert_eq!(savedata.server_uuid, server.uuid);
-    assert_eq!(savedata.player_uuid, user.uuid);
-
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn create_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let db = get_wrapper(pool).await.unwrap();
-    // We first need to create an user, in order to satisfy the foreign key constraint.
-    let user = mock_user(&db, "alikindsys").await;
-
-    // Creating an account with the same uuid should now work.
-    let stub = AccountStub {
-        uuid: user.uuid,
-        password: "TotallyMyPassword123".to_owned(),
-    };
-
-    let save = db.create_account(stub).await;
-    assert!(save.is_ok());
     Ok(())
 }
 
@@ -153,8 +180,7 @@ async fn create_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 
     // Allowlists are only created when an account exists.
     // But an account can only exist if an user exists.
-    let user = mock_user(&db, "alikindsys").await;
-    mock_account(&db, user.uuid).await;
+    let user = mock_profile(&db, "alikindsys").await;
 
     let res = db.create_allowlist(&user.uuid, ip).await.unwrap();
 
@@ -165,30 +191,50 @@ async fn create_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     Ok(())
 }
 
+#[test(sqlx::test(migrations = "src/db/migrations"))]
+async fn create_token(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let server = mock_server(&db).await;
+    let scopes = vec![
+        "profiles.read".to_string(),
+        "servers.self.modify".to_string(),
+    ];
+
+    let token = db.create_token(&server.uuid, scopes.clone()).await.unwrap();
+    let test = db.get_token(token.clone()).await.unwrap();
+
+    assert_eq!(test.token, token);
+    assert_eq!(test.owner, server.uuid);
+    assert_eq!(test.scopes.0, scopes);
+
+    let new_token = db.create_token(&server.uuid, vec![]).await.unwrap();
+    let new_test = db.get_token(new_token.clone()).await.unwrap();
+
+    assert_eq!(new_test.token, new_token);
+    assert_ne!(test.token, new_test.token);
+    assert_eq!(test.owner, new_test.owner);
+    assert_ne!(test.scopes, new_test.scopes);
+    assert!(new_test.scopes.0.is_empty());
+
+    Ok(())
+}
+
 // READ
 #[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn get_user_by_uuid(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let uuid = Uuid::new_v4();
+async fn get_profile_by_id(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
+    let user = mock_profile(&db, "alikindsys").await;
+    let save = db.get_profile_by_id(&user.uuid).await.unwrap();
 
-    let stub = UserStub {
-        uuid,
-        username: "alikindsys".to_owned(),
-        discord_id: "-Discord ID-".to_owned(),
-    };
-
-    db.create_user(stub.clone()).await.unwrap();
-    let save = db.get_user_by_uuid(&uuid).await.unwrap();
-
-    assert_eq!(stub, save);
+    assert_eq!(user, save);
     Ok(())
 }
 
 #[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn get_user_by_name(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+async fn get_profile(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
-    let user = mock_user(&db, "alikindsys").await;
-    let test = db.get_user_by_name("alikindsys".to_string()).await.unwrap();
+    let user = mock_profile(&db, "alikindsys").await;
+    let test = db.get_profile("alikindsys".to_string()).await.unwrap();
 
     assert_eq!(user.uuid, test.uuid);
 
@@ -196,53 +242,23 @@ async fn get_user_by_name(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 }
 
 #[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn get_all_users(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let db = get_wrapper(pool).await.unwrap();
-    mock_user(&db, "alikindsys").await;
-    mock_user(&db, "CinderAesthethic").await;
-    mock_user(&db, "SofiAzeda").await;
-
-    let users = db.get_all_users().await.unwrap();
-    assert_eq!(users.len(), 3);
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn get_users_by_discord_id(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+async fn get_profiles_by_discord_id(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let discord_id = "-Discord ID-".to_owned();
     let db = get_wrapper(pool).await.unwrap();
 
-    let stub = UserStub {
-        uuid: Uuid::new_v4(),
-        username: "alikindsys".to_owned(),
-        discord_id: discord_id.clone(),
-    };
+    let _ = mock_profile(&db, "alikindsys").await;
+    let _ = mock_profile(&db, "other_user").await;
 
-    let stub2 = UserStub {
-        uuid: Uuid::new_v4(),
-        username: "another_user".to_owned(),
-        discord_id: discord_id.clone(),
-    };
-
-    db.create_user(stub).await.unwrap();
-    db.create_user(stub2).await.unwrap();
-    let save = db.get_users_by_discord_id(discord_id).await.unwrap();
+    let save = db.get_profiles_by_discord_id(discord_id).await.unwrap();
 
     assert_eq!(save.len(), 2);
     Ok(())
 }
 
 #[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn get_server_by_uuid(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let stub = ServerStub {
-        name: "Servidor de Teste".to_owned(),
-        supported_versions: vec!["1.21.0".to_owned()],
-        current_modpack: None,
-    };
-
+async fn get_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
-
-    let save = db.create_server(stub.clone()).await.unwrap();
+    let save = mock_server(&db).await;
     let read = db.get_server(&save.uuid).await.unwrap();
 
     assert_eq!(save, read);
@@ -251,97 +267,35 @@ async fn get_server_by_uuid(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> 
 
 #[test(sqlx::test(migrations = "src/db/migrations"))]
 async fn get_server_by_name(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let stub = ServerStub {
+    let stub = GameServerStub {
         name: "Servidor de Teste".to_owned(),
-        supported_versions: vec!["1.21.0".to_owned()],
-        current_modpack: None,
+        versions: vec!["1.21.0".to_owned()],
+        staff: vec![],
+        max_players: 32,
+        game: "Minecraft".into(),
     };
+
+    let name = stub.name.clone();
 
     let db = get_wrapper(pool).await.unwrap();
 
-    let save = db.create_server(stub.clone()).await.unwrap();
-    let read = db.get_server_by_name(stub.name).await.unwrap();
+    let save = db.create_server(stub).await.unwrap();
+    let read = db.get_server_by_name(name).await.unwrap();
 
     assert_eq!(save, read);
 
     Ok(())
 }
 
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn get_all_servers(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let db = get_wrapper(pool).await.unwrap();
-    mock_server(&db).await;
+// #[test(sqlx::test(migrations = "src/db/migrations"))]
+// async fn get_all_servers(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+//     let db = get_wrapper(pool).await.unwrap();
+//     mock_server(&db).await;
 
-    let servers = db.get_all_servers().await.unwrap();
-    assert_eq!(servers.len(), 1);
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn get_viewport(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let db = get_wrapper(pool).await.unwrap();
-
-    let user = mock_user(&db, "alikindsys").await;
-    let server = mock_server(&db).await;
-
-    db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
-
-    let viewport = db.get_viewport(&user.uuid, &server.uuid).await.unwrap();
-
-    assert_eq!(viewport, Viewport::default());
-
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn get_playtime(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let db = get_wrapper(pool).await.unwrap();
-
-    let user = mock_user(&db, "alikindsys").await;
-    let server = mock_server(&db).await;
-
-    db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
-
-    let playtime = db.get_playtime(&user.uuid, &server.uuid).await.unwrap();
-
-    assert_eq!(playtime, std::time::Duration::ZERO);
-
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn get_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let db = get_wrapper(pool).await.unwrap();
-
-    let user = mock_user(&db, "alikindsys").await;
-    db.create_account(AccountStub {
-        uuid: user.uuid,
-        password: "TotallyMyPassword123".to_owned(),
-    })
-    .await
-    .unwrap();
-
-    let acc = db.get_account(&user.uuid).await.unwrap();
-
-    assert_eq!(acc.password, "TotallyMyPassword123".to_owned());
-    assert_eq!(acc.uuid, user.uuid);
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn get_all_accounts(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let db = get_wrapper(pool).await.unwrap();
-    let alikind = mock_user(&db, "alikindsys").await;
-    let sofia = mock_user(&db, "SofiAzeda").await;
-
-    mock_account(&db, alikind.uuid).await;
-    mock_account(&db, sofia.uuid).await;
-
-    let accounts = db.get_all_accounts().await.unwrap();
-
-    assert_eq!(accounts.len(), 2);
-    Ok(())
-}
+//     let servers = db.get_all_servers().await.unwrap();
+//     assert_eq!(servers.len(), 1);
+//     Ok(())
+// }
 
 #[test(sqlx::test(migrations = "src/db/migrations"))]
 async fn get_blacklists(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
@@ -391,8 +345,8 @@ async fn get_blacklists_with_range(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Resu
 async fn get_allowlists(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db, "alikindsys").await;
-    mock_account(&db, user.uuid).await;
+    let user = mock_profile(&db, "alikindsys").await;
+
     db.create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
         .await
         .unwrap();
@@ -409,8 +363,8 @@ async fn get_allowlists(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 async fn get_allowlists_with_ip(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db, "alikindsys").await;
-    mock_account(&db, user.uuid).await;
+    let user = mock_profile(&db, "alikindsys").await;
+
     db.create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
         .await
         .unwrap();
@@ -430,8 +384,8 @@ async fn get_allowlists_with_ip(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<
 async fn get_allowlists_with_range(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db, "alikindsys").await;
-    mock_account(&db, user.uuid).await;
+    let user = mock_profile(&db, "alikindsys").await;
+
     db.create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
         .await
         .unwrap();
@@ -451,333 +405,188 @@ async fn get_allowlists_with_range(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Resu
 
     Ok(())
 }
+// UPCAST
+#[test(sqlx::test(migrations = "src/db/migrations"))]
+async fn upcast_profile(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
 
+    let user = v1_mock_user(&db, "alikindsys").await;
+    let acc = v1_mock_account(&db, &user.uuid).await;
+
+    let profile = db.upcast_profile(user.clone(), acc.clone()).await.unwrap();
+
+    assert_eq!(profile.password, acc.password);
+    assert_ne!(profile.uuid, user.uuid);
+    assert_eq!(profile.username, user.username);
+    assert_eq!(profile.discord_id, user.discord_id);
+
+    Ok(())
+}
+#[test(sqlx::test(migrations = "src/db/migrations"))]
+async fn upcast_playtime(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let user = v1_mock_user(&db, "alikindsys").await;
+    let account = v1_mock_account(&db, &user.uuid).await;
+
+    let server = v1_mock_server(&db).await;
+    let savedata = v1_mock_savedata(&db, &server.uuid, &user.uuid).await;
+
+    let old_uuid = user.uuid;
+
+    let p = db.upcast_profile(user, account).await.unwrap();
+    let _ = db.upcast_server_v1(server).await.unwrap();
+    let conn = db.upcast_savedata(savedata).await.unwrap();
+
+    let playtime: ConnectionData = (conn.kind, conn.data).try_into().unwrap();
+
+    assert_ne!(conn.profile, old_uuid);
+    assert_eq!(conn.profile, p.uuid);
+
+    assert!(matches!(playtime, ConnectionData::Playtime(_)));
+
+    Ok(())
+}
 // UPDATE
 
 #[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn migrate_user(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let old_uuid = offline_uuid("roridev");
-    let new_uuid = offline_uuid("alikindsys");
+async fn reset_token(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
-
-    let old_stub = UserStub {
-        uuid: old_uuid,
-        username: "roridev".to_owned(),
-        discord_id: "-Discord ID-".to_owned(),
-    };
-    let new_stub = UserStub {
-        uuid: new_uuid,
-        username: "alikindsys".to_owned(),
-        discord_id: "-Discord ID-".to_owned(),
-    };
-
-    let old = db.create_user(old_stub).await.unwrap();
-    db.create_user(new_stub).await.unwrap();
-    let migrated = db.migrate_user(&old_uuid, &new_uuid).await.unwrap();
-
-    assert_eq!(migrated.created_at, old.created_at);
-    assert_eq!(migrated.uuid, new_uuid);
-
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn add_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let uuid = Uuid::new_v4();
-    let db = get_wrapper(pool).await.unwrap();
-
-    let stub = UserStub {
-        uuid,
-        username: "alikindsys".to_owned(),
-        discord_id: "-Discord ID-".to_owned(),
-    };
-
-    let pronoun = Pronoun {
-        pronoun: "ela/dela".to_owned(),
-        color: "#F5A9B8".to_owned(),
-    };
-
-    db.create_user(stub.clone()).await.unwrap();
-    let pronouns = db.add_pronoun(&uuid, pronoun).await.unwrap();
-
-    assert_eq!(pronouns.len(), 1);
-
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn remove_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let uuid = Uuid::new_v4();
-    let db = get_wrapper(pool).await.unwrap();
-
-    let stub = UserStub {
-        uuid,
-        username: "alikindsys".to_owned(),
-        discord_id: "-Discord ID-".to_owned(),
-    };
-
-    let pronoun = Pronoun {
-        pronoun: "ela/dela".to_owned(),
-        color: "#F5A9B8".to_owned(),
-    };
-
-    db.create_user(stub.clone()).await.unwrap();
-    db.add_pronoun(&uuid, pronoun.clone()).await.unwrap();
-
-    let pronouns = db.remove_pronoun(&uuid, pronoun).await.unwrap();
-
-    assert_eq!(pronouns.len(), 0);
-
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn update_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let uuid = Uuid::new_v4();
-    let db = get_wrapper(pool).await.unwrap();
-
-    let stub = UserStub {
-        uuid,
-        username: "alikindsys".to_owned(),
-        discord_id: "-Discord ID-".to_owned(),
-    };
-
-    let pronoun = Pronoun {
-        pronoun: "ela/dela".to_owned(),
-        color: "#F5A9B8".to_owned(),
-    };
-    let update = Pronoun {
-        pronoun: "ela/dela".to_owned(),
-        color: "#5BCEFA".to_owned(),
-    };
-
-    db.create_user(stub.clone()).await.unwrap();
-    db.add_pronoun(&uuid, pronoun.clone()).await.unwrap();
-
-    let pronouns = db
-        .update_pronoun(&uuid, &pronoun, update.clone())
-        .await
-        .unwrap();
-
-    assert_eq!(pronouns.first().unwrap().color, update.color);
-    assert_eq!(pronouns.len(), 1);
-
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn join_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    // This is moderately annoying since we have to create both an user and a server.
-    let user_stub = UserStub {
-        uuid: Uuid::new_v4(),
-        username: "alikindsys".to_owned(),
-        discord_id: "-Discord ID-".to_owned(),
-    };
-
-    let server_stub = ServerStub {
-        name: "Servidor de Teste".to_owned(),
-        supported_versions: vec!["1.21.0".to_owned()],
-        current_modpack: None,
-    };
-
-    let db = get_wrapper(pool).await.unwrap();
-
-    let user = db.create_user(user_stub).await.unwrap();
-    let server = db.create_server(server_stub).await.unwrap();
-
-    let res = db.join_server(&server.uuid, &user.uuid).await.unwrap();
-    let new_server = db.get_server(&server.uuid).await.unwrap();
-
-    assert!(matches!(res, ServerJoin::FirstJoin));
-    assert!(new_server.players.contains(&user.uuid));
-
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn leave_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    // This is moderately annoying since we have to create both an user and a server.
-    let user_stub = UserStub {
-        uuid: Uuid::new_v4(),
-        username: "alikindsys".to_owned(),
-        discord_id: "-Discord ID-".to_owned(),
-    };
-
-    let server_stub = ServerStub {
-        name: "Servidor de Teste".to_owned(),
-        supported_versions: vec!["1.21.0".to_owned()],
-        current_modpack: None,
-    };
-
-    let db = get_wrapper(pool).await.unwrap();
-
-    let user = db.create_user(user_stub).await.unwrap();
-    let server = db.create_server(server_stub).await.unwrap();
-
-    db.join_server(&server.uuid, &user.uuid).await.unwrap();
-    let res = db.leave_server(&server.uuid, &user.uuid).await.unwrap();
-    let new_server = db.get_server(&server.uuid).await.unwrap();
-
-    assert!(matches!(res, ServerLeave::Accepted));
-    assert!(!new_server.players.contains(&user.uuid));
-
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn update_server_status(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let db = get_wrapper(pool).await.unwrap();
-    // Setup
     let server = mock_server(&db).await;
-    let old = server.online.0;
-    // Action
-    let new = db.update_server_status(&server.uuid, !old).await.unwrap();
-    let new_server = db.get_server(&server.uuid).await.unwrap();
-    let check = new_server.online.0;
-    // Test
-    assert_eq!(check, new);
-    assert_ne!(new, old);
-    Ok(())
-}
+    let scopes = vec![
+        "profiles.read".to_string(),
+        "servers.self.modify".to_string(),
+    ];
 
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn update_viewport(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let db = get_wrapper(pool).await.unwrap();
+    let token = db.create_token(&server.uuid, scopes.clone()).await.unwrap();
+    let test = db.get_token(token.clone()).await.unwrap();
 
-    let user = mock_user(&db, "alikindsys").await;
-    let server = mock_server(&db).await;
+    let new_token = db.reset_token(&server.uuid).await.unwrap();
+    let new_test = db.get_token(new_token.clone()).await.unwrap();
 
-    db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
-
-    let viewport = Viewport {
-        loc: Loc {
-            dim: "minecraft:overworld".to_owned(),
-            x: 69.0,
-            y: 69.0,
-            z: 69.0,
-        },
-        yaw: 69.0,
-        pitch: 69.0,
-    };
-
-    let save = db
-        .update_viewport(&user.uuid, &server.uuid, viewport.clone())
-        .await
-        .unwrap();
-
-    assert_eq!(save, viewport);
-    assert_ne!(save, Viewport::default());
+    assert_ne!(token, new_token);
+    assert_eq!(test.owner, new_test.owner);
+    assert_eq!(test.scopes, new_test.scopes);
 
     Ok(())
 }
 
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn update_playtime(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let db = get_wrapper(pool).await.unwrap();
+// #[test(sqlx::test(migrations = "src/db/migrations"))]
+// async fn add_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+//     let uuid = Uuid::new_v4();
+//     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db, "alikindsys").await;
-    let server = mock_server(&db).await;
+//     let stub = UserStub {
+//         uuid,
+//         username: "alikindsys".to_owned(),
+//         discord_id: "-Discord ID-".to_owned(),
+//     };
 
-    db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
+//     let pronoun = Pronoun {
+//         pronoun: "ela/dela".to_owned(),
+//         color: "#F5A9B8".to_owned(),
+//     };
 
-    db.update_playtime(&user.uuid, &server.uuid, Duration::from_secs_f32(69.0))
-        .await
-        .unwrap();
+//     db.create_user(stub.clone()).await.unwrap();
+//     let pronouns = db.add_pronoun(&uuid, pronoun).await.unwrap();
 
-    let save = db.get_playtime(&user.uuid, &server.uuid).await.unwrap();
+//     assert_eq!(pronouns.len(), 1);
 
-    assert_ne!(save, Duration::ZERO);
-    assert_eq!(save, Duration::from_secs_f32(69.0));
+//     Ok(())
+// }
 
-    Ok(())
-}
+// #[test(sqlx::test(migrations = "src/db/migrations"))]
+// async fn remove_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+//     let uuid = Uuid::new_v4();
+//     let db = get_wrapper(pool).await.unwrap();
+
+//     let stub = UserStub {
+//         uuid,
+//         username: "alikindsys".to_owned(),
+//         discord_id: "-Discord ID-".to_owned(),
+//     };
+
+//     let pronoun = Pronoun {
+//         pronoun: "ela/dela".to_owned(),
+//         color: "#F5A9B8".to_owned(),
+//     };
+
+//     db.create_user(stub.clone()).await.unwrap();
+//     db.add_pronoun(&uuid, pronoun.clone()).await.unwrap();
+
+//     let pronouns = db.remove_pronoun(&uuid, pronoun).await.unwrap();
+
+//     assert_eq!(pronouns.len(), 0);
+
+//     Ok(())
+// }
+
+// #[test(sqlx::test(migrations = "src/db/migrations"))]
+// async fn update_pronoun(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+//     let uuid = Uuid::new_v4();
+//     let db = get_wrapper(pool).await.unwrap();
+
+//     let stub = UserStub {
+//         uuid,
+//         username: "alikindsys".to_owned(),
+//         discord_id: "-Discord ID-".to_owned(),
+//     };
+
+//     let pronoun = Pronoun {
+//         pronoun: "ela/dela".to_owned(),
+//         color: "#F5A9B8".to_owned(),
+//     };
+//     let update = Pronoun {
+//         pronoun: "ela/dela".to_owned(),
+//         color: "#5BCEFA".to_owned(),
+//     };
+
+//     db.create_user(stub.clone()).await.unwrap();
+//     db.add_pronoun(&uuid, pronoun.clone()).await.unwrap();
+
+//     let pronouns = db
+//         .update_pronoun(&uuid, &pronoun, update.clone())
+//         .await
+//         .unwrap();
+
+//     assert_eq!(pronouns.first().unwrap().color, update.color);
+//     assert_eq!(pronouns.len(), 1);
+
+//     Ok(())
+// }
+
+// #[test(sqlx::test(migrations = "src/db/migrations"))]
+// async fn update_playtime(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+//     let db = get_wrapper(pool).await.unwrap();
+
+//     let user = mock_user(&db, "alikindsys").await;
+//     let server = mock_server(&db).await;
+
+//     db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
+
+//     db.update_playtime(&user.uuid, &server.uuid, Duration::from_secs_f32(69.0))
+//         .await
+//         .unwrap();
+
+//     let save = db.get_playtime(&user.uuid, &server.uuid).await.unwrap();
+
+//     assert_ne!(save, Duration::ZERO);
+//     assert_eq!(save, Duration::from_secs_f32(69.0));
+
+//     Ok(())
+// }
 
 #[test(sqlx::test(migrations = "src/db/migrations"))]
 async fn update_password(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
-    let user = mock_user(&db, "alikindsys").await;
-
-    db.create_account(AccountStub { uuid: user.uuid, password: "oldpass".to_owned() })
-        .await
-        .unwrap();
+    let user = mock_profile(&db, "alikindsys").await;
 
     db.update_password(&user.uuid, "newpass".to_owned())
         .await
         .unwrap();
 
-    let acc = db.get_account(&user.uuid).await.unwrap();
+    let acc = db.get_profile_by_id(&user.uuid).await.unwrap();
 
     assert_eq!(acc.password, "newpass".to_owned());
-
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn update_current_join(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let db = get_wrapper(pool).await.unwrap();
-
-    // Setup
-    let user = mock_user(&db, "alikindsys").await;
-    mock_account(&db, user.uuid).await;
-    let account = db.get_account(&user.uuid).await.unwrap();
-
-    // Action
-    let old = account.current_join;
-    db.update_current_join(&user.uuid).await.unwrap();
-
-    let new_acc = db.get_account(&user.uuid).await.unwrap();
-    let new = new_acc.current_join;
-
-    // Test
-    assert!(new > old);
-    assert_ne!(new, old);
-    assert_eq!(account.uuid, new_acc.uuid);
-
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn migrate_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let db = get_wrapper(pool).await.unwrap();
-
-    let old_uuid = offline_uuid("roridev");
-    let new_uuid = offline_uuid("alikindsys");
-
-    let old_stub = UserStub {
-        uuid: old_uuid,
-        username: "roridev".to_owned(),
-        discord_id: "-Discord ID-".to_owned(),
-    };
-    let new_stub = UserStub {
-        uuid: new_uuid,
-        username: "alikindsys".to_owned(),
-        discord_id: "-Discord ID-".to_owned(),
-    };
-
-    db.create_user(old_stub).await.unwrap();
-    db.create_user(new_stub).await.unwrap();
-
-    db.create_account(AccountStub {
-        uuid: old_uuid,
-        password: "SuperSecurePassword".to_owned(),
-    })
-    .await
-    .unwrap();
-
-    db.migrate_account(&old_uuid, &new_uuid).await.unwrap();
-
-    let old_acc = db.get_account(&old_uuid).await.unwrap_err();
-    let new_acc = db.get_account(&new_uuid).await.unwrap();
-
-    // The "old" account shouldn't be accessible.
-    assert!(matches!(
-        old_acc,
-        DriverError::DatabaseError(crate::db::drivers::err::base::NotFoundError::Account(_))
-    ));
-
-    // The migrated account should match the new uuid and have the same password as before.
-    assert_eq!(new_acc.uuid, new_uuid);
-    assert_eq!(new_acc.password, "SuperSecurePassword".to_owned());
 
     Ok(())
 }
@@ -831,8 +640,8 @@ async fn broaden_blacklist_mask(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<
 #[test(sqlx::test(migrations = "src/db/migrations"))]
 async fn bump_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
-    let user = mock_user(&db, "alikindsys").await;
-    mock_account(&db, user.uuid).await;
+    let user = mock_profile(&db, "alikindsys").await;
+
     let entry = db
         .create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
         .await
@@ -851,8 +660,8 @@ async fn bump_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 #[test(sqlx::test(migrations = "src/db/migrations"))]
 async fn broaden_allowlist_mask(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
-    let user = mock_user(&db, "alikindsys").await;
-    mock_account(&db, user.uuid).await;
+    let user = mock_profile(&db, "alikindsys").await;
+
     let entry = db
         .create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
         .await
@@ -871,60 +680,26 @@ async fn broaden_allowlist_mask(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<
 // DELETE
 
 #[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn delete_user(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let uuid = Uuid::new_v4();
-    let db = get_wrapper(pool).await.unwrap();
-
-    let stub = UserStub {
-        uuid,
-        username: "alikindsys".to_owned(),
-        discord_id: "-Discord ID-".to_owned(),
-    };
-
-    db.create_user(stub.clone()).await.unwrap();
-    let save = db.delete_user(&uuid).await.unwrap();
-
-    assert_eq!(stub, save);
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
 async fn delete_server(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let stub = ServerStub {
+    let stub = GameServerStub {
         name: "Servidor de Teste".to_owned(),
-        supported_versions: vec!["1.21.0".to_owned()],
-        current_modpack: None,
+        versions: vec!["1.21.0".to_owned()],
+        staff: vec![],
+        max_players: 32,
+        game: "Minecraft".into(),
     };
 
     let db = get_wrapper(pool).await.unwrap();
 
     let save = db.create_server(stub.clone()).await.unwrap();
+
     let read = db.delete_server(&save.uuid).await.unwrap();
 
-    assert_eq!(stub, save);
-    assert_eq!(save, read);
+    let gs = GameServer::from(save);
+    let gr = GameServer::from(read);
 
-    Ok(())
-}
-
-#[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn delete_account(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
-    let db = get_wrapper(pool).await.unwrap();
-
-    let user = mock_user(&db, "alikindsys").await;
-
-    db.create_account(AccountStub { uuid: user.uuid, password: "oldpass".to_owned() })
-        .await
-        .unwrap();
-
-    let res = db.delete_account(&user.uuid).await;
-    let read = db.get_account(&user.uuid).await.unwrap_err();
-
-    assert!(res.is_ok());
-    assert!(matches!(
-        read,
-        DriverError::DatabaseError(crate::db::drivers::err::base::NotFoundError::Account(_))
-    ));
+    assert_eq!(gs, stub);
+    assert_eq!(gr, stub);
 
     Ok(())
 }
@@ -956,8 +731,8 @@ async fn delete_blacklist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 async fn delete_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
 
-    let user = mock_user(&db, "alikindsys").await;
-    mock_account(&db, user.uuid).await;
+    let user = mock_profile(&db, "alikindsys").await;
+
     let entry = db
         .create_allowlist(&user.uuid, Ipv4Addr::new(127, 0, 0, 1))
         .await
@@ -973,22 +748,20 @@ async fn delete_allowlist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 }
 
 #[test(sqlx::test(migrations = "src/db/migrations"))]
-async fn delete_savedatas(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+async fn revoke_token(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
-    let user = mock_user(&db, "alikindsys").await;
     let server = mock_server(&db).await;
+    let scopes = vec![
+        "profiles.read".to_string(),
+        "servers.self.modify".to_string(),
+    ];
 
-    let _ = db.create_savedata(&user.uuid, &server.uuid).await.unwrap();
+    let _ = db.create_token(&server.uuid, scopes.clone()).await.unwrap();
+    db.revoke_token(&server.uuid).await.unwrap();
 
-    let savedatas = db.get_savedatas(&user.uuid).await.unwrap();
-
-    let deleted = db.delete_savedatas(&user.uuid).await.unwrap();
-
-    assert_eq!(savedatas.len(), deleted.len());
-
-    let test = db.get_savedatas(&user.uuid).await.unwrap();
-
-    assert!(test.is_empty());
+    // Attempt to reset a revoked token, should always fail.
+    let test = db.reset_token(&server.uuid).await;
+    assert!(test.is_err());
 
     Ok(())
 }

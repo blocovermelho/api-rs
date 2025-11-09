@@ -10,7 +10,10 @@ use poise::{
     CreateReply,
 };
 
-use crate::discord::{id::Id, AppContext, Error};
+use crate::{
+    db::data::{Profile, ServerV2},
+    discord::{id::Id, AppContext, Error},
+};
 
 mod colors {
     type Rgb = (u8, u8, u8);

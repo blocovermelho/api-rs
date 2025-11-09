@@ -20,12 +20,11 @@ use uuid::Uuid;
 
 use super::err::Response;
 use crate::{
-    core::types::structs::stub::ProfileStub,
+    core::types::structs::stub::{GameServerStub, ProfileStub},
     db::{
         data::{
-            result::{self, PlaytimeEntry},
-            stub, Account, Allowlist, BanActor, Blacklist, Connection, Loc, Modpack, Profile,
-            Pronoun, SaveData, Server, User, Viewport,
+            result::PlaytimeEntry, Account, Allowlist, BanActor, Blacklist, Connection, Modpack,
+            Profile, Pronoun, SaveData, Server, ServerV2, Token, User,
         },
         drivers::err::{base::NotFoundError, DriverError},
         interface::DataSource,
@@ -138,6 +137,10 @@ impl DataSource for JsonDriver {
         Ok(self.0.accounts.keys().copied().collect())
     }
 
+    async fn upcast_profile(&self, user: User, account: Account) -> Response<Profile> {
+        unimplemented!();
+    }
+
     async fn create_profile(
         &self, stub: ProfileStub, when: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Response<Profile> {
@@ -149,6 +152,10 @@ impl DataSource for JsonDriver {
     }
 
     async fn get_profile_by_id(&self, profile_uuid: &Uuid) -> Response<Profile> {
+        unimplemented!();
+    }
+
+    async fn get_profiles_by_discord_id(&self, discord_id: String) -> Response<Vec<Profile>> {
         unimplemented!();
     }
 
@@ -186,25 +193,11 @@ impl DataSource for JsonDriver {
         }
     }
 
-    async fn get_users_by_discord_id(&self, discord_id: String) -> Response<Vec<User>> {
-        Ok(self
-            .0
-            .clone()
-            .users
-            .iter()
-            .filter(|(_, it)| it.discord_id == discord_id)
-            .map(|(k, v)| User {
-                uuid: *k,
-                username: v.username.clone(),
-                discord_id: v.discord_id.clone(),
-                created_at: Utc::now(),
-                pronouns: Default::default(),
-                last_server: v.last_server,
-            })
-            .collect())
+    async fn get_server(&self, server_uuid: &Uuid) -> Response<ServerV2> {
+        unimplemented!()
     }
 
-    async fn get_server(&self, server_uuid: &Uuid) -> Response<Server> {
+    async fn get_server_v1(&self, server_uuid: &Uuid) -> Response<Server> {
         if let Some(old_server) = self.0.clone().servers.get(server_uuid) {
             Ok(Server {
                 uuid: old_server.uuid,
@@ -224,11 +217,35 @@ impl DataSource for JsonDriver {
         }
     }
 
-    async fn get_all_servers(&self) -> Response<Vec<Uuid>> {
+    async fn upcast_server_v1(&self, v1: Server) -> Response<ServerV2> {
+        unimplemented!()
+    }
+
+    async fn get_all_servers_v1(&self) -> Response<Vec<Uuid>> {
         Ok(self.0.servers.keys().copied().collect())
     }
 
-    async fn get_playtime(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Duration> {
+    async fn get_all_servers_v2(&self) -> Response<Vec<Uuid>> {
+        Ok(vec![])
+    }
+
+    async fn create_token(&self, server_uuid: &Uuid, scopes: Vec<String>) -> Response<String> {
+        unimplemented!();
+    }
+
+    async fn reset_token(&self, server_uuid: &Uuid) -> Response<String> {
+        unimplemented!();
+    }
+
+    async fn get_token(&self, token: String) -> Response<Token> {
+        unimplemented!();
+    }
+
+    async fn revoke_token(&self, server_uuid: &Uuid) -> Response<()> {
+        unimplemented!();
+    }
+
+    async fn get_playtime_v1(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Duration> {
         if let Some(old_user) = self.0.users.get(player_uuid) {
             if let Some(playtime) = old_user.playtime.get(server_uuid) {
                 Ok(*playtime)
@@ -245,7 +262,11 @@ impl DataSource for JsonDriver {
 
     // Uninmplemented
 
-    async fn get_playtimes(&self, server_uuid: &Uuid) -> Response<Vec<PlaytimeEntry>> {
+    async fn get_playtimes_v1(&self, server_uuid: &Uuid) -> Response<Vec<PlaytimeEntry>> {
+        unimplemented!();
+    }
+
+    async fn upcast_savedata(&self, data: SaveData) -> Response<Connection> {
         unimplemented!();
     }
 
@@ -259,55 +280,11 @@ impl DataSource for JsonDriver {
         unimplemented!();
     }
 
-    #[allow(clippy::cast_precision_loss, clippy::as_conversions)]
-    /// This information wasn't saved.
-    async fn get_viewport(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Viewport> {
-        if let Some(user) = self.0.users.get(player_uuid) {
-            if let Some(pos) = user.last_pos.get(server_uuid) {
-                return Ok(Viewport {
-                    loc: Loc {
-                        dim: pos.dim.clone(),
-                        x: pos.x as f64,
-                        y: pos.y as f64,
-                        z: pos.z as f64,
-                    },
-                    yaw: 0.0, // This is what we actually didn't save.
-                    pitch: 0.0,
-                });
-            }
-        }
-
-        return Err(DriverError::DatabaseError(NotFoundError::UserData {
-            server_uuid: *server_uuid,
-            player_uuid: *player_uuid,
-        }));
-    }
-
-    async fn create_user(&self, stub: stub::UserStub) -> Response<User> {
-        unimplemented!();
-    }
-
-    async fn delete_user(&self, uuid: &Uuid) -> Response<User> {
-        unimplemented!();
-    }
-
-    async fn migrate_user(&self, from: &Uuid, into: &Uuid) -> Response<User> {
-        unimplemented!();
-    }
-
-    async fn create_account(&self, stub: stub::AccountStub) -> Response<()> {
-        unimplemented!();
-    }
-
     async fn update_password(&self, player_uuid: &Uuid, new_password: String) -> Response<()> {
         unimplemented!();
     }
 
-    async fn update_current_join(&self, player_uuid: &Uuid) -> Response<()> {
-        unimplemented!();
-    }
-
-    async fn migrate_account(&self, from: &Uuid, to: &Uuid) -> Response<()> {
+    async fn update_username(&self, player_uuid: &Uuid, new_username: String) -> Response<()> {
         unimplemented!();
     }
 
@@ -319,7 +296,7 @@ impl DataSource for JsonDriver {
         unimplemented!();
     }
 
-    async fn get_server_by_name(&self, name: String) -> Response<Server> {
+    async fn get_server_by_name(&self, name: String) -> Response<ServerV2> {
         unimplemented!();
     }
 
@@ -367,33 +344,11 @@ impl DataSource for JsonDriver {
         unimplemented!();
     }
 
-    async fn create_server(&self, stub: stub::ServerStub) -> Response<Server> {
+    async fn create_server(&self, stub: GameServerStub) -> Response<ServerV2> {
         unimplemented!();
     }
 
-    async fn delete_server(&self, server_uuid: &Uuid) -> Response<Server> {
-        unimplemented!();
-    }
-
-    async fn join_server(
-        &self, server_uuid: &Uuid, player_uuid: &Uuid,
-    ) -> Response<result::ServerJoin> {
-        unimplemented!();
-    }
-
-    async fn leave_server(
-        &self, server_uuid: &Uuid, player_uuid: &Uuid,
-    ) -> Response<result::ServerLeave> {
-        unimplemented!();
-    }
-
-    async fn update_server_status(&self, server_uuid: &Uuid, online: bool) -> Response<bool> {
-        unimplemented!();
-    }
-
-    async fn update_viewport(
-        &self, player_uuid: &Uuid, server_uuid: &Uuid, viewport: Viewport,
-    ) -> Response<Viewport> {
+    async fn delete_server(&self, server_uuid: &Uuid) -> Response<ServerV2> {
         unimplemented!();
     }
 
@@ -417,20 +372,12 @@ impl DataSource for JsonDriver {
         unimplemented!();
     }
 
-    async fn create_savedata(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<SaveData> {
-        unimplemented!();
-    }
-
     async fn get_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>> {
         unimplemented!();
     }
 
     async fn delete_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>> {
         unimplemented!();
-    }
-
-    async fn get_user_by_name(&self, name: String) -> Response<User> {
-        unimplemented!()
     }
 
     async fn create_connection(&self, connection: Connection) -> Response<Connection> {
@@ -442,6 +389,10 @@ impl DataSource for JsonDriver {
     }
 
     async fn get_connections_by_profile(&self, profile: &Uuid) -> Response<Vec<Connection>> {
+        unimplemented!()
+    }
+
+    async fn get_connections_by_kind(&self, kind: &str) -> Response<Vec<Connection>> {
         unimplemented!()
     }
 
