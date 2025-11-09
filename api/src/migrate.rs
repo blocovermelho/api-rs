@@ -21,6 +21,70 @@ use crate::{
     },
 };
 
+pub async fn migrate_v2(db_path: &PathBuf) -> Response<Sqlite> {
+    let db = Sqlite::new(db_path).await;
+    db.run_migrations().await;
+
+    // Migrate Server -> ServerV2
+    let servers = db.get_all_servers_v1().await?;
+    for sid in servers {
+        println!("[Migrate V1 -> V2] Migrating Server {}.", sid);
+        let server = db.get_server_v1(&sid).await.unwrap();
+        let v2 = db.upcast_server_v1(server).await.unwrap();
+        println!("[Migrate V1 -> V2] Server {} Migrated.", v2.name);
+    }
+
+    // Migrate (User, Account?) -> Profile
+    let users = db.get_all_users().await?;
+    for uid in users {
+        println!("[Migrate V1 -> V2] Migrating User {}.", uid);
+        let user = db.get_user_by_uuid(&uid).await.unwrap();
+        if let Ok(account) = db.get_account(&uid).await {
+            let p = db.upcast_profile(user, account).await.unwrap();
+            if let Ok(datum) = db.get_savedatas(&uid).await {
+                println!("[Migrate V1 -> V2] Got {} savedatas.", datum.len());
+                for data in datum {
+                    if data.player_uuid != uid {
+                        panic!(
+                            "Mismatched ids. Savedata player_uuid was {}, expected {}",
+                            data.player_uuid, uid
+                        );
+                    }
+                    let conn = db.upcast_savedata(data).await.unwrap();
+                    println!(
+                        "[Migrate V1 -> V2] Connection {} for {} Migrated. Data: {}",
+                        conn.kind, conn.profile, conn.data,
+                    );
+                }
+            }
+            println!("[Migrate V1 -> V2] Profile {} Migrated.", p.username);
+        } else {
+            println!(
+                "[Migrate V1 -> V2] User {} was dangling. No account found. Skipped.",
+                user.username
+            );
+        }
+    }
+
+    sqlx::query("DROP TABLE IF EXISTS savedata")
+        .execute(&db.0)
+        .await?;
+    sqlx::query("DROP TABLE IF EXISTS allowlist")
+        .execute(&db.0)
+        .await?;
+    sqlx::query("DROP TABLE IF EXISTS accounts")
+        .execute(&db.0)
+        .await?;
+    sqlx::query("DROP TABLE IF EXISTS servers")
+        .execute(&db.0)
+        .await?;
+    sqlx::query("DROP TABLE IF EXISTS users")
+        .execute(&db.0)
+        .await?;
+    println!("[Migrate V1 -> V2] Dropped old tables.");
+    Ok(db)
+}
+
 pub async fn migrate(database_path: &PathBuf, json_path: &PathBuf) -> Response<Sqlite> {
     // Temporary server id mappings table
     let mut mappings: HashMap<Uuid, Uuid> = HashMap::new();
