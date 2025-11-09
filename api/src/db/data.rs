@@ -74,6 +74,16 @@ pub struct SaveData {
 }
 
 #[derive(sqlx::FromRow, Debug, PartialEq, Serialize)]
+pub struct ServerV2 {
+    pub uuid: Uuid,
+    pub name: String,
+    pub versions: Json<Vec<String>>,
+    pub game: String,
+    pub max_players: i32,
+    pub staff: Json<Vec<Uuid>>,
+}
+
+#[derive(sqlx::FromRow, Debug, PartialEq, Serialize)]
 pub struct Server {
     pub uuid: Uuid,
     pub name: String,
