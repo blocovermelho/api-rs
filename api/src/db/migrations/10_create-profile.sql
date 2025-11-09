@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS profile (
+CREATE TABLE IF NOT EXISTS profiles (
     uuid TEXT UNIQUE NOT NULL,
     username TEXT UNIQUE NOT NULL,
     discord_id TEXT NOT NULL,
