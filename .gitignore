@@ -1,5 +1,7 @@
 /target
 **/target
-data.json
+*.json
+*.db
+*.bak
 .direnv/
 
