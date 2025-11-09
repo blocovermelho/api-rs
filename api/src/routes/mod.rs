@@ -31,9 +31,7 @@ pub fn check_scopes(token: &Token, scopes: &[&'static str]) -> bool {
         .map(std::string::ToString::to_string)
         .collect();
 
-    let diff = token.intersection(&check);
-
-    diff.eq(scopes.iter())
+    token.is_superset(&check)
 }
 
 pub mod query_params {
