@@ -311,7 +311,7 @@ impl Mailbox {
     async fn grant_playing_role(&self, username: String) {
         if let Some(profile) = self.database.get_profile(username).await {
             self.discord.grant_role(
-                profile.username.parse().unwrap(),
+                profile.discord_id.parse().unwrap(),
                 self.guild_id,
                 self.playing_role_id,
             );
@@ -321,7 +321,7 @@ impl Mailbox {
     async fn revoke_playing_role(&self, username: String) {
         if let Some(profile) = self.database.get_profile(username).await {
             self.discord.revoke_role(
-                profile.username.parse().unwrap(),
+                profile.discord_id.parse().unwrap(),
                 self.guild_id,
                 self.playing_role_id,
             );
@@ -331,7 +331,7 @@ impl Mailbox {
     async fn grant_verification_role(&self, username: String) {
         if let Some(profile) = self.database.get_profile(username).await {
             self.discord.grant_role(
-                profile.username.parse().unwrap(),
+                profile.discord_id.parse().unwrap(),
                 self.guild_id,
                 self.verification_role_id,
             );
@@ -341,7 +341,7 @@ impl Mailbox {
     async fn revoke_verification_role(&self, username: String) {
         if let Some(profile) = self.database.get_profile(username).await {
             self.discord.revoke_role(
-                profile.username.parse().unwrap(),
+                profile.discord_id.parse().unwrap(),
                 self.guild_id,
                 self.verification_role_id,
             );
