@@ -93,8 +93,9 @@ impl Session {
 }
 
 pub mod packet {
+    use serde::Deserialize;
     use uuid::Uuid;
-
+    #[derive(Debug, Clone, Deserialize)]
     pub struct GameServerKeepAlive {
         pub server_id: Uuid,
         pub players: Vec<String>,
