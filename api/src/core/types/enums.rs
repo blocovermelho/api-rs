@@ -1,4 +1,4 @@
-use std::net::Ipv4Addr;
+use std::{collections::HashMap, net::Ipv4Addr, time::Duration};
 
 use chrono::{DateTime, Utc};
 use ipnet::Ipv4Net;
@@ -55,6 +55,7 @@ pub enum Heuristic {
 pub enum ConnectionData {
     BedrockUsername(String),
     MojangUuid(uuid::Uuid),
+    Playtime(HashMap<uuid::Uuid, Duration>),
 }
 
 pub enum AuthorizationProvider {

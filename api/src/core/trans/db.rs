@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 // Transformations and ingress for databse datatypes
 use chrono::TimeDelta;
@@ -155,6 +155,13 @@ impl TryFrom<(String, String)> for ConnectionData {
                     Err(ConnectionConversionError::InvalidMojangUUIDError)
                 }
             }
+            "bv:playtime" => {
+                if let Ok(parse) = serde_json::de::from_str(&value.1) {
+                    Ok(Self::Playtime(parse))
+                } else {
+                    Ok(Self::Playtime(HashMap::new()))
+                }
+            }
             _ => Err(ConnectionConversionError::UnknownTypeError),
         }
     }
@@ -165,6 +172,10 @@ impl From<Connection> for dbd::Connection {
         let (kind, data) = match value.extra {
             ConnectionData::BedrockUsername(username) => ("bv:bedrock_link", username),
             ConnectionData::MojangUuid(uuid) => ("bv:mojang_uuid", uuid.into()),
+            ConnectionData::Playtime(map) => (
+                "bv:playtime",
+                serde_json::ser::to_string(&map).unwrap_or_else(|_| String::from("{}")),
+            ),
         };
 
         Self {
