@@ -85,6 +85,20 @@ pub fn user(
     )
 }
 
+pub fn one_time_passphrase(profile: &Profile, pass: &String) -> CreateEmbed {
+    info("One Time Passphrase - Frase-chave de uso uníco", format!(
+        "
+          Use a seguinte frase para logar no(s) servidor(es):
+          ```
+          {}```
+          Esta senha foi criada para: {}
+          **Importante:** A frase-chave é CasE-SenSitive. Digite cada palavra com a primeira letra sendo maíuscula.
+        ",
+        pass,
+        profile.username,
+    ))
+}
+
 pub fn duration_format(duration: &chrono::Duration) -> String {
     let days = duration.num_days();
     let hours = duration.num_hours();
