@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::db::interface::NetworkProvider;
 
-#[derive(sqlx::FromRow, Debug, Serialize)]
+#[derive(sqlx::FromRow, Debug, Serialize, Clone)]
 pub struct User {
     pub uuid: Uuid,
     pub username: String,
@@ -19,7 +19,7 @@ pub struct User {
     pub last_server: Option<Uuid>,
 }
 
-#[derive(sqlx::FromRow, Debug, Serialize)]
+#[derive(sqlx::FromRow, Debug, Serialize, PartialEq, Eq)]
 pub struct Profile {
     pub uuid: Uuid,
     pub username: String,
@@ -27,7 +27,7 @@ pub struct Profile {
     pub password: String,
 }
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(sqlx::FromRow, Debug, Clone)]
 pub struct Account {
     pub uuid: Uuid,
     pub password: String,
