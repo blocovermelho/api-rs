@@ -1,19 +1,18 @@
 use std::{collections::HashMap, sync::Arc};
 
 // Transformations and ingress for databse datatypes
-use chrono::TimeDelta;
+use chrono::{TimeDelta, Utc};
 use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
-    core::types::{enums::ConnectionData, structs::*},
+    core::types::{consts::connection_ids, enums::ConnectionData, structs::*},
     db::{
         data::{self as dbd},
         interface::{DataSource, NetworkProvider},
     },
 };
 
-const SESSION_LEASE: TimeDelta = TimeDelta::minutes(10);
 impl From<dbd::ServerV2> for GameServer {
     fn from(value: dbd::ServerV2) -> Self {
         Self {
@@ -35,8 +34,8 @@ impl From<dbd::Allowlist> for Session {
         Self {
             profile: val.uuid,
             last_seen: val.last_join,
-            expires_at: val.last_join + SESSION_LEASE,
             network: val.get_network(),
+            started_at: Utc::now(),
         }
     }
 }

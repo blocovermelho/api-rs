@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use ipnet::Ipv4Net;
 use uuid::Uuid;
 
-use super::enums::{ConnectionData, PlayerState};
+use super::{
+    consts::session::{self, LEASE_TIME},
+    enums::{ConnectionData, PlayerState},
+};
 
 #[derive(Debug, Clone)]
 pub struct Profile {
@@ -51,9 +54,15 @@ pub struct GameServer {
 
 pub(crate) struct Session {
     pub(crate) profile: Uuid,
+    pub(crate) started_at: DateTime<Utc>,
     pub(crate) last_seen: DateTime<Utc>,
-    pub(crate) expires_at: DateTime<Utc>,
     pub(crate) network: Ipv4Net,
+}
+
+impl Session {
+    pub fn get_expiry(&self) -> DateTime<Utc> {
+        self.last_seen + LEASE_TIME
+    }
 }
 
 pub mod packet {
