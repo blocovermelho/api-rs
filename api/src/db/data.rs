@@ -19,6 +19,14 @@ pub struct User {
     pub last_server: Option<Uuid>,
 }
 
+#[derive(sqlx::FromRow, Debug, Serialize)]
+pub struct Profile {
+    pub uuid: Uuid,
+    pub username: String,
+    pub discord_id: String,
+    pub password: String,
+}
+
 #[derive(sqlx::FromRow, Debug)]
 pub struct Account {
     pub uuid: Uuid,
