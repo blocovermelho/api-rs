@@ -68,6 +68,8 @@ pub mod err {
         InsufficientPermissions(#[from] base::PermissionError),
         #[error("Generic Error: {0}")]
         Generic(String),
+        #[error(transparent)]
+        SqlxError(#[from] sqlx::Error),
         #[error("UNREACHABLE! This shouldn't happen. UNREACHABLE!")]
         Unreachable,
     }
