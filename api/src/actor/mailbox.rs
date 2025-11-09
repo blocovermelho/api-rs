@@ -364,24 +364,24 @@ impl Mailbox {
                     }
                     _ => members.push(state),
                 }
-            }
-
-            let profile = self.database.get_profile(username.clone()).await;
-            let s_hnd = SessionActor::spawn(
-                username.clone(),
-                profile.clone(),
-                self.database.clone(),
-                self.tokens.clone(),
-                self.self_hnd.clone(),
-            );
-
-            self.sessions.insert(username.clone(), s_hnd.clone());
-            debug!("[a:Mailbox] Event:ServerKeepAlive SPAWN SessionActor({})", username);
-
-            if profile.is_some() {
-                members.push(s_hnd.get_state().await);
             } else {
-                visitors.push(username.clone());
+                let profile = self.database.get_profile(username.clone()).await;
+                let new_actor = SessionActor::spawn(
+                    username.clone(),
+                    profile.clone(),
+                    self.database.clone(),
+                    self.tokens.clone(),
+                    self.self_hnd.clone(),
+                );
+
+                self.sessions.insert(username.clone(), new_actor.clone());
+                debug!("[a:Mailbox] Event:ServerKeepAlive SPAWN SessionActor({})", username);
+
+                if profile.is_some() {
+                    members.push(new_actor.get_state().await);
+                } else {
+                    visitors.push(username.clone());
+                }
             }
         }
         (members, visitors)
