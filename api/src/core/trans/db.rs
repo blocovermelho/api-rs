@@ -57,6 +57,20 @@ pub trait TryIngest<T, D: DataSource>: Sized {
         D: 'async_trait;
 }
 
+impl From<dbd::Profile> for Profile {
+    fn from(value: dbd::Profile) -> Self {
+        Self {
+            id: value.uuid,
+            username: value.username,
+            discord_id: value.discord_id,
+            hash_password: value.password,
+            connections: vec![],
+            created_at: get_timestamp_from_uuid(&value.uuid, Utc::now()),
+            last_seen: Utc::now(),
+        }
+    }
+}
+
 #[async_trait::async_trait]
 impl<D: DataSource> TryIngest<dbd::User, D> for Profile {
     type Error = ProfileConversionError;
