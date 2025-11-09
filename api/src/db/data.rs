@@ -97,7 +97,15 @@ pub struct Server {
     pub name: String,
     pub supported_versions: Json<Vec<String>>,
     pub current_modpack: Json<Option<Modpack>>,
+    #[deprecated(
+        since = "2.0.0",
+        note = "Data should not be persisted. Can be derived from KeepAlive packet."
+    )]
     pub online: Json<bool>,
+    #[deprecated(
+        since = "2.0.0",
+        note = "Data should not be persisted. Can be derived from KeepAlive packet."
+    )]
     pub players: Json<Vec<Uuid>>,
 }
 
