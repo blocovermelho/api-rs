@@ -92,6 +92,7 @@ pub struct ServerV2 {
 }
 
 #[derive(sqlx::FromRow, Debug, PartialEq, Serialize)]
+
 pub struct Server {
     pub uuid: Uuid,
     pub name: String,

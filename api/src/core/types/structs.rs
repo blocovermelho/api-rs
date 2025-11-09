@@ -1,13 +1,9 @@
 use std::collections::HashMap;
 
-use chrono::{DateTime, TimeDelta, Utc};
-use ipnet::Ipv4Net;
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use super::{
-    consts::session::{self, LEASE_TIME},
-    enums::{ConnectionData, PlayerState},
-};
+use super::enums::{ConnectionData, PlayerState};
 
 #[derive(Debug, Clone)]
 pub struct Profile {
@@ -23,6 +19,7 @@ pub struct Profile {
     pub last_seen: DateTime<Utc>,
 }
 
+#[allow(clippy::suspicious_operation_groupings)]
 impl PartialEq<stub::ProfileStub> for Profile {
     fn eq(&self, other: &stub::ProfileStub) -> bool {
         self.username == other.username &&
@@ -70,34 +67,10 @@ impl PartialEq<stub::GameServerStub> for GameServer {
     }
 }
 
-pub(crate) struct Session {
-    pub(crate) profile: Uuid,
-    pub(crate) started_at: DateTime<Utc>,
-    pub(crate) last_seen: DateTime<Utc>,
-    pub(crate) network: Ipv4Net,
-}
-
-impl Session {
-    pub fn new(profile: Uuid, network: Ipv4Net) -> Self {
-        Self {
-            profile,
-            started_at: Utc::now(),
-            last_seen: Utc::now(),
-            network,
-        }
-    }
-
-    pub fn get_expiry(&self) -> DateTime<Utc> {
-        self.last_seen + LEASE_TIME
-    }
-}
-
 pub mod packet {
     use serde::Deserialize;
-    use uuid::Uuid;
     #[derive(Debug, Clone, Deserialize)]
     pub struct GameServerKeepAlive {
-        pub server_id: Uuid,
         pub players: Vec<String>,
         pub motd: Option<String>,
     }

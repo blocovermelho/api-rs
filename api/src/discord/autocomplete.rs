@@ -22,19 +22,17 @@ pub async fn username<'a>(ctx: Context<'_>, partial: &'a str) -> impl Stream<Ite
 /// Autocompletion for minecraft nicknames
 pub async fn players<'a>(ctx: Context<'_>, partial: &'a str) -> impl Stream<Item = String> + 'a {
     let db = &ctx.data().db;
-    let user_ids = db.get_all_users().await.unwrap_or_default();
+    let users = db.get_all_profiles().await.unwrap_or_default();
 
-    let mut users: HashSet<_> = HashSet::new();
+    let mut candidates: HashSet<_> = HashSet::new();
 
-    for id in user_ids {
-        if let Ok(user) = db.get_user_by_uuid(&id).await {
-            if partial.is_empty() || user.username.starts_with(partial) {
-                users.insert(user.username);
-            }
+    for user in users {
+        if partial.is_empty() || user.starts_with(partial) {
+            candidates.insert(user);
         }
     }
 
-    stream::iter(users)
+    stream::iter(candidates)
 }
 
 /// Autocompletion for server names

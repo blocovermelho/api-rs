@@ -8,9 +8,8 @@ use crate::{
     core::types::structs::stub::{GameServerStub, ProfileStub},
     db::{
         data::{
-            result::{self, PlaytimeEntry},
-            stub, Account, Allowlist, BanIssuer, Blacklist, Connection, Pronoun, SaveData, Server,
-            User, Viewport,
+            result::PlaytimeEntry, Account, Allowlist, BanIssuer, Blacklist, Connection, Pronoun,
+            SaveData, Server, User,
         },
         drivers::err::Response,
     },
@@ -43,6 +42,7 @@ pub trait DataSource: Send + Sync {
     async fn get_profile(&self, username: String) -> Response<Profile>;
     async fn get_profile_by_id(&self, profile_uuid: &Uuid) -> Response<Profile>;
     async fn get_profiles_by_discord_id(&self, discord_id: String) -> Response<Vec<Profile>>;
+    async fn get_all_profiles(&self) -> Response<Vec<String>>;
 
     async fn delete_profile(&self, profile_uuid: &Uuid) -> Response<Profile>;
 
@@ -89,10 +89,6 @@ pub trait DataSource: Send + Sync {
     async fn get_token(&self, token: String) -> Response<Token>;
     async fn revoke_token(&self, server_uuid: &Uuid) -> Response<()>;
 
-    #[deprecated(since = "2.0.0", note = "Playtime is now an Connection.")]
-    async fn update_playtime(
-        &self, player_uuid: &Uuid, server_uuid: &Uuid, new_playtime: Duration,
-    ) -> Response<()>;
     #[deprecated(since = "2.0.0", note = "Playtime is now an Connection.")]
     async fn get_playtime_v1(&self, player_uuid: &Uuid, server_uuid: &Uuid) -> Response<Duration>;
     #[deprecated(since = "2.0.0", note = "Playtime is now an Connection.")]

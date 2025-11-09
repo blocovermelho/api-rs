@@ -4,7 +4,6 @@ pub mod sqlite;
 pub const MAX_SESSION_TIME_MINUTE: i64 = 15;
 
 pub mod err {
-    use anyhow::Result;
     use thiserror::Error;
     pub mod base {
         use thiserror::Error;

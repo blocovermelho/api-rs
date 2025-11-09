@@ -16,7 +16,7 @@ pub mod api_scopes {
 pub mod session {
     use chrono::TimeDelta;
 
-    pub const LEASE_TIME: TimeDelta = TimeDelta::minutes(10);
+    pub const LEASE_TIME: TimeDelta = TimeDelta::minutes(15);
 }
 
 pub mod cidr {

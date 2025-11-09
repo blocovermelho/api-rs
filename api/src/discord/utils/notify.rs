@@ -29,17 +29,17 @@ pub async fn unknown_ip(
         .expect("Invalid Backup Notification Channel");
 
     if let Ok(d_user) = client.http.get_user(user.discord_id.parse().unwrap()).await {
-        let mut retry = false;
-
-        if let Ok(ch) = d_user.create_dm_channel(&client.http).await {
+        let retry = if let Ok(ch) = d_user.create_dm_channel(&client.http).await {
             let message = CreateMessage::new()
                 .embed(embed.clone())
                 .components(vec![CreateActionRow::Buttons(btns.clone())])
                 .content(d_user.mention().to_string());
 
             let dm_message = ch.send_message(&client.http, message).await;
-            retry = dm_message.is_err();
-        }
+            dm_message.is_err()
+        } else {
+            true
+        };
 
         if retry {
             if let Channel::Guild(ch) = backup {

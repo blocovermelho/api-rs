@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
-use axum::Json;
-use http::StatusCode;
+use axum::{http::StatusCode, Json};
 
 use crate::db::data::Token;
 
@@ -16,7 +15,7 @@ macro_rules! scopes {
     ($s:expr, [$($x:expr),+]) => {
         if (!crate::routes::check_scopes(&$s, &[$($x),+])) {
             return Err((
-                http::StatusCode::UNAUTHORIZED,
+                axum::http::StatusCode::UNAUTHORIZED,
                 format!("Token without the {} scope(s).", &[$($x),+].join(", ")),
             ));
         }
@@ -46,6 +45,12 @@ pub mod query_params {
     pub struct LinkQuery {
         pub state: String,
         pub code: String,
+    }
+
+    #[derive(Deserialize)]
+    pub struct ManualLink {
+        pub username: String,
+        pub token: String,
     }
 
     #[derive(Deserialize)]
@@ -95,21 +100,21 @@ pub mod body {
         pub name: String,
         pub id: Uuid,
     }
+
+    #[derive(Deserialize)]
+    pub struct NewProfile {
+        pub password: String,
+        pub discord_id: String,
+    }
 }
 
 pub mod results {
-    use chrono::{DateTime, Utc};
+
     use serde::Serialize;
     use uuid::Uuid;
 
     use crate::core::types::enums::ConnectionData;
 
-    #[derive(Serialize)]
-    pub struct DiscordLink {
-        pub game_username: String,
-        pub discord_username: String,
-        pub when: Option<DateTime<Utc>>,
-    }
     #[derive(Serialize)]
     pub struct Profile {
         pub id: Uuid,
@@ -134,6 +139,7 @@ pub mod results {
     }
 
     #[derive(Serialize)]
+    #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
     pub enum MojangAccountStanding {
         KnownProfile {
             profile: Profile,
@@ -149,6 +155,7 @@ pub mod results {
         InvalidName,
     }
     #[derive(Serialize)]
+    #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
     pub enum BedrockAccountStanding {
         KnownProfile { profile: Profile },
         RenamedProfile { profile: Profile, gamertag: String },
@@ -156,16 +163,25 @@ pub mod results {
     }
 
     #[derive(Serialize)]
+    #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
     pub enum Login {
-        ServerOffline,
-        BannedIp,
         NewIp,
-        InvalidPassword { attempts: i32, max_attempts: i32 },
-        LoggedIn,
-        ResumedSession,
+        AllowedIp,
+        BannedIp,
+        BlockedIp,
     }
 
     #[derive(Serialize)]
+    #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+    pub enum Authenticate {
+        ServerOffline,
+        InvalidPassword { attempts: i32, max_attempts: i32 },
+        InvalidProfile,
+        LoggedIn,
+    }
+
+    #[derive(Serialize)]
+    #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
     pub enum Logout {
         ServerOffline,
         ProfileNotInServer,
@@ -173,11 +189,19 @@ pub mod results {
     }
 
     #[derive(Serialize)]
+    #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
     pub enum PasswordUpdate {
         ServerOffline,
         ProfileNotInServer,
         InvalidPlayerState,
-        InvalidPassword { attempts: i32, max_attempts: i32 },
+        InvalidPassword,
         PasswordChanged,
+    }
+
+    #[derive(Serialize)]
+    #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+    pub enum CreateProfile {
+        UsernameExists,
+        Created(Uuid),
     }
 }

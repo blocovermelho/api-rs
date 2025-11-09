@@ -5,27 +5,9 @@ use std::{
 };
 
 use poise::serenity_prelude::{ClientBuilder, GatewayIntents};
-use tokio::sync::Mutex;
 
 use crate::{
+    actor::mailbox::MailboxActor,
     db::{data::stub::UserStub, drivers::sqlite::Sqlite, interface::DataSource},
     discord::framework,
-    Ephemeral,
 };
-
-#[tokio::test]
-pub async fn run_bot() {
-    let db_path = PathBuf::from("migrated.db");
-
-    let db: Arc<Sqlite> = Arc::new(Sqlite::new(&db_path).await);
-    let state: Arc<Mutex<Ephemeral>> = Arc::new(Mutex::new(Ephemeral::new()));
-    db.run_migrations().await;
-
-    let fw = framework(db, state).await;
-    let token = env::var("DISCORD_BOT_TOKEN").unwrap();
-    let intents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
-
-    let client = ClientBuilder::new(token, intents).framework(fw).await;
-
-    client.unwrap().start().await.unwrap();
-}

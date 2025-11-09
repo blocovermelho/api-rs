@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 // Transformations and ingress for databse datatypes
-use chrono::{TimeDelta, Utc};
+use chrono::Utc;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -9,7 +9,7 @@ use crate::{
     core::types::{consts::connection_ids, enums::ConnectionData, structs::*},
     db::{
         data::{self as dbd},
-        interface::{DataSource, NetworkProvider},
+        interface::DataSource,
     },
 };
 
@@ -29,16 +29,6 @@ impl From<dbd::ServerV2> for GameServer {
     }
 }
 
-impl From<dbd::Allowlist> for Session {
-    fn from(val: dbd::Allowlist) -> Self {
-        Self {
-            profile: val.uuid,
-            last_seen: val.last_join,
-            network: val.get_network(),
-            started_at: Utc::now(),
-        }
-    }
-}
 #[derive(Debug, Error)]
 pub enum ProfileConversionError {
     #[error("No account found.")]

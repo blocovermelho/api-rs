@@ -21,8 +21,10 @@ pub struct Config {
     pub client_secret: String,
     pub redirect_url: String,
     pub guild_id: String,
-    pub role_id: String,
+    pub playing_role_id: String,
+    pub verification_role_id: String,
     pub verification_channel_id: String,
+    pub server_status_channel_id: String,
 }
 
 impl JsonSync for Config {
@@ -34,8 +36,10 @@ impl JsonSync for Config {
             client_secret: String::new(),
             redirect_url: String::new(),
             guild_id: String::new(),
-            role_id: String::new(),
+            playing_role_id: String::new(),
             verification_channel_id: String::new(),
+            server_status_channel_id: String::new(),
+            verification_role_id: String::new(),
         }
     }
 

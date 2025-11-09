@@ -15,18 +15,21 @@ use crate::{
     discord::{id::Id, AppContext, Error},
 };
 
-mod colors {
+pub mod colors {
     type Rgb = (u8, u8, u8);
     pub const INFO: Rgb = (0, 121, 216);
     pub const INPUT: Rgb = (209, 230, 57);
-    pub const ERROR: Rgb = (232, 26, 26);
+    pub const ERROR: Rgb = (242, 41, 41);
     pub const NO_PERM: Rgb = (232, 94, 26);
     pub const ADMIN: Rgb = (156, 22, 204);
+
+    pub const SERVER_ONLINE: Rgb = (48, 196, 120);
+    pub const SERVER_WARN: Rgb = (215, 195, 68);
 }
 
 pub const BV_GITHUB_ICON: &str = "https://avatars.githubusercontent.com/u/120765338?s=200&v=4";
 
-fn base() -> CreateEmbed {
+pub fn base() -> CreateEmbed {
     CreateEmbed::new().footer(CreateEmbedFooter::new("Bloco Vermelho").icon_url(BV_GITHUB_ICON))
 }
 
@@ -81,6 +84,21 @@ pub fn user(
             creation_date.timestamp(),
             discord_id,
             last_server.unwrap_or_else(|| "Desconhecido".to_string())
+        ),
+    )
+}
+
+pub fn link(pass: &String) -> CreateEmbed {
+    info(
+        "Link Manual",
+        format!(
+            "Você solicitou um código de uso pessoal para conectar a sua conta do discord.
+            ```
+            {}```
+
+            Utilize o comando `/link {}` em algum servidor para criar seu perfil.
+            ",
+            pass, pass
         ),
     )
 }

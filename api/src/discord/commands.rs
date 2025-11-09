@@ -3,6 +3,7 @@
 
 pub mod admin;
 pub mod change_password;
+pub mod link;
 pub mod otp;
 pub mod rank;
 pub mod server;

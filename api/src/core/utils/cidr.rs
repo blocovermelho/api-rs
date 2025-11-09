@@ -66,7 +66,7 @@ pub fn simplify_nets(nets: &[Ipv4Net]) -> NetworkSimplification {
     for net in input {
         if let Some(top) = stack.last_mut() {
             match merge_nets(top, &net) {
-                NetworkMerge::Merged { network, bound } => {
+                NetworkMerge::Merged { network, bound: _ } => {
                     *top = network;
                 }
                 NetworkMerge::NonOverlapping => {

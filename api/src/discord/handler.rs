@@ -5,7 +5,10 @@ use poise::{
     FrameworkContext,
 };
 
-use crate::discord::{id::Id, Data, Error};
+use crate::{
+    actor::new_connection::InteractionHolder,
+    discord::{Data, Error},
+};
 
 pub mod new_ip;
 
@@ -15,31 +18,35 @@ pub async fn event_handler(
     match event {
         FullEvent::InteractionCreate { interaction: Interaction::Component(component) } => {
             if matches!(component.data.kind, ComponentInteractionDataKind::Button) {
-                if let Some(id) = Id::decode(&component.data.custom_id) {
-                    match id.action {
-                        crate::discord::id::Action::AcceptIp => {
-                            // Parse Nonce
-                            let ip = Ipv4Addr::from_bits(id.nonce.parse()?);
-                            new_ip::ip_accept(ctx, &fw, component, ip, id.target).await?;
-                        }
-                        crate::discord::id::Action::DenyIp => {
-                            // Parse Nonce
-                            let ip = Ipv4Addr::from_bits(id.nonce.parse()?);
-                            new_ip::ip_deny(ctx, &fw, component, ip, id.target).await?;
-                        }
-                        crate::discord::id::Action::PromptBanIp => {
-                            // Parse Nonce
-                            let ip = Ipv4Addr::from_bits(id.nonce.parse()?);
-                            new_ip::ip_prompt(ctx, &fw, component, ip, id.target).await?;
-                        }
-                        crate::discord::id::Action::ReturnIp => {
-                            let ip = Ipv4Addr::from_bits(id.nonce.parse()?);
-                            new_ip::ip_back(ctx, &fw, component, ip, id.target).await?;
-                        }
-                        crate::discord::id::Action::PasswordInput => {}
-                    }
-                } else {
-                    panic!("Unparsed button id: {}", &component.data.custom_id)
+                let custom_id = &component.data.custom_id;
+                if custom_id.starts_with("ip_allow") {
+                    let thing: Vec<_> = custom_id.split(":").collect();
+                    let ip: Ipv4Addr = thing[1].parse().unwrap();
+
+                    let _ = component.defer(ctx).await;
+
+                    fw.user_data.mailbox.btn_ip_clicked_allow(
+                        ip,
+                        component.channel_id,
+                        component.message.id,
+                        component.user.id,
+                        InteractionHolder(component.id, component.token.clone()),
+                    );
+                }
+
+                if custom_id.starts_with("ip_deny") {
+                    let thing: Vec<_> = custom_id.split(":").collect();
+                    let ip: Ipv4Addr = thing[1].parse().unwrap();
+
+                    let _ = component.defer(ctx).await;
+
+                    fw.user_data.mailbox.btn_ip_clicked_deny(
+                        ip,
+                        component.channel_id,
+                        component.message.id,
+                        component.user.id,
+                        InteractionHolder(component.id, component.token.clone()),
+                    );
                 }
             }
         }

@@ -9,11 +9,10 @@ use poise::{
     FrameworkContext,
 };
 use tokio::time::sleep;
-use uuid_mc::PlayerUuid;
 
 use crate::{
     db::{
-        data::{Profile, User},
+        data::Profile,
         drivers::err::DriverError,
         helper::{check_cidr, CidrAction},
         interface::DataSource,

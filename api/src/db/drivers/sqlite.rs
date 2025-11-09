@@ -1,5 +1,5 @@
 use core::time;
-use std::{collections::HashMap, fmt::Display, net::Ipv4Addr, path::PathBuf, time::Duration};
+use std::{collections::HashMap, fmt::Display, net::Ipv4Addr, path::PathBuf};
 
 use chrono::{Timelike, Utc};
 use sqlx::{query_as, sqlite::SqliteConnectOptions, types::Json, Pool, SqlitePool};
@@ -18,7 +18,7 @@ use crate::{
     db::{
         data::{
             self, result::PlaytimeEntry, Account, Allowlist, BanIssuer, Blacklist, Connection,
-            Profile, SaveData, Server, ServerV2, Token, User, Viewport,
+            Profile, SaveData, Server, ServerV2, Token, User,
         },
         interface::DataSource,
     },
@@ -212,6 +212,14 @@ impl DataSource for Sqlite {
     async fn get_profiles_by_discord_id(&self, discord_id: String) -> Response<Vec<Profile>> {
         let query = sqlx::query_as::<_, Profile>("SELECT * FROM profiles WHERE discord_id = ?")
             .bind(discord_id)
+            .fetch_all(&self.0)
+            .await
+            .unwrap_or_default();
+        Ok(query)
+    }
+
+    async fn get_all_profiles(&self) -> Response<Vec<String>> {
+        let query = sqlx::query_scalar("SELECT username FROM profiles")
             .fetch_all(&self.0)
             .await
             .unwrap_or_default();
@@ -708,42 +716,13 @@ impl DataSource for Sqlite {
         }
     }
 
-    /// Updates an [`User`]'s playtime for a given [`Server`].
-    ///
-    /// Returns:
-    /// - [`base::NotFoundError`] if either [`User`] or [`Server`] don't exist.
-    /// - [`base::NotFoundError::UserData`] if the [`UserData`] for the following User/Server pair didn't exist.
-    #[tracing::instrument]
-    async fn update_playtime(
-        &self, player_uuid: &uuid::Uuid, server_uuid: &uuid::Uuid, new_duration: Duration,
-    ) -> Response<()> {
-        let _ = self.get_user_by_uuid(player_uuid).await?;
-        let _ = self.get_server(server_uuid).await?;
-
-        let query = sqlx::query_as::<_, SaveData>(
-            "UPDATE savedata SET playtime = $1 WHERE player_uuid = $2 AND server_uuid = $3 RETURNING *"
-        )
-        .bind(Json(new_duration))
-        .bind(player_uuid)
-        .bind(server_uuid)
-        .fetch_one(&self.0)
-        .await;
-
-        map_or_log(
-            query.map(|_| ()),
-            DriverError::DatabaseError(base::NotFoundError::UserData {
-                server_uuid: *server_uuid,
-                player_uuid: *player_uuid,
-            }),
-        )
-    }
-
     /// Gets an [`User`]'s playtime for a given [`Server`]. Returns a [`std::time::Duration`] representing the current playtime.
     ///
     /// Returns:
     /// - [`base::NotFoundError`] if either [`User`] or [`Server`] don't exist.
     /// - [`base::NotFoundError::UserData`] if the [`UserData`] for the following User/Server pair didn't exist.
     #[tracing::instrument]
+    #[allow(deprecated)]
     async fn get_playtime_v1(
         &self, player_uuid: &uuid::Uuid, server_uuid: &uuid::Uuid,
     ) -> Response<time::Duration> {
@@ -782,6 +761,7 @@ impl DataSource for Sqlite {
         map_or_log(query, DriverError::DatabaseError(base::NotFoundError::Server))
     }
 
+    #[allow(deprecated)]
     async fn upcast_savedata(&self, data: SaveData) -> Response<Connection> {
         println!("[upcast_savedata] Got data.player : {}", &data.player_uuid);
         let u = self.get_user_by_uuid(&data.player_uuid).await?;
@@ -825,6 +805,7 @@ impl DataSource for Sqlite {
     /// - [`base::NotFoundError`] if the [`User`] don't exist.
     /// - [`DriverError::Unreachable`] if something *bad* happened.
     #[tracing::instrument]
+    #[allow(deprecated)]
     async fn add_pronoun(
         &self, player_uuid: &uuid::Uuid, pronoun: data::Pronoun,
     ) -> Response<Vec<data::Pronoun>> {
@@ -847,6 +828,7 @@ impl DataSource for Sqlite {
     /// - [`base::NotFoundError`] if the [`User`] don't exist.
     /// - [`DriverError::Unreachable`] if something *bad* happened.
     #[tracing::instrument]
+    #[allow(deprecated)]
     async fn remove_pronoun(
         &self, player_uuid: &uuid::Uuid, pronoun: data::Pronoun,
     ) -> Response<Vec<data::Pronoun>> {
@@ -869,6 +851,7 @@ impl DataSource for Sqlite {
     /// - [`base::NotFoundError`] if the [`User`] don't exist.
     /// - [`DriverError::Unreachable`] if something *bad* happened.
     #[tracing::instrument]
+    #[allow(deprecated)]
     async fn update_pronoun(
         &self, player_uuid: &uuid::Uuid, old: &data::Pronoun, new: data::Pronoun,
     ) -> Response<Vec<data::Pronoun>> {
@@ -890,9 +873,10 @@ impl DataSource for Sqlite {
     ///
     /// Returns:
     /// - [`DriverError::DuplicateKeyInsertion`] if that user/server pair already existed.
-
+    ///
     /// Gets all [`SaveData`]s for an [`User`].
     /// Useful for gathering all servers an user has joined.
+    #[allow(deprecated)]
     async fn get_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>> {
         let _ = self.get_user_by_uuid(player_uuid).await?;
 
@@ -904,6 +888,7 @@ impl DataSource for Sqlite {
         map_or_log(query, DriverError::DatabaseError(base::NotFoundError::User(*player_uuid)))
     }
 
+    #[allow(deprecated)]
     async fn delete_savedatas(&self, player_uuid: &Uuid) -> Response<Vec<SaveData>> {
         let _ = self.get_user_by_uuid(player_uuid).await?;
 
@@ -989,6 +974,7 @@ impl DataSource for Sqlite {
     /// Returns:
     /// - [`base::NotFoundError`] if the [`User`] don't exist.
     /// - [`base::NotFoundError`] if the [`User`] don't have an [`Connection`] with that kind associated with it.
+    #[allow(deprecated)]
     async fn delete_connection(
         &self, profile: &Uuid, connection_type: &str,
     ) -> Response<Connection> {

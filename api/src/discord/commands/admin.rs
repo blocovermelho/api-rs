@@ -22,7 +22,7 @@ use crate::{
 
 /// Controle geral da API
 #[poise::command(slash_command, subcommands("grant"))]
-pub async fn apictl(ctx: AppContext<'_>) -> Result<(), Error> {
+pub async fn apictl(_ctx: AppContext<'_>) -> Result<(), Error> {
     Ok(())
 }
 

@@ -159,6 +159,10 @@ impl DataSource for JsonDriver {
         unimplemented!();
     }
 
+    async fn get_all_profiles(&self) -> Response<Vec<String>> {
+        unimplemented!();
+    }
+
     async fn delete_profile(&self, profile_uuid: &Uuid) -> Response<Profile> {
         unimplemented!();
     }
@@ -197,6 +201,7 @@ impl DataSource for JsonDriver {
         unimplemented!()
     }
 
+    #[allow(deprecated)]
     async fn get_server_v1(&self, server_uuid: &Uuid) -> Response<Server> {
         if let Some(old_server) = self.0.clone().servers.get(server_uuid) {
             Ok(Server {
@@ -349,12 +354,6 @@ impl DataSource for JsonDriver {
     }
 
     async fn delete_server(&self, server_uuid: &Uuid) -> Response<ServerV2> {
-        unimplemented!();
-    }
-
-    async fn update_playtime(
-        &self, player_uuid: &Uuid, server_uuid: &Uuid, new_playtime: Duration,
-    ) -> Response<()> {
         unimplemented!();
     }
 

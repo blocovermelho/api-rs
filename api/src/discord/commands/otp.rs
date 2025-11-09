@@ -1,7 +1,6 @@
-use poise::{serenity_prelude::Mentionable, CreateReply, Modal};
+use poise::CreateReply;
 
 use crate::{
-    core::utils::generation::ptbr_wordlist,
     db::interface::DataSource,
     discord::{render::embed, AppContext, Error},
 };
@@ -20,10 +19,9 @@ pub async fn otp(
 ) -> Result<(), Error> {
     let db = ctx.data.db.clone();
     let profile = db.get_profile(username).await?;
-    let mut state = ctx.data.state.lock().await;
-    let pass = ptbr_wordlist().generate();
+
+    let pass = ctx.data.mailbox.get_profile_otp(profile.uuid).await;
     let embed = embed::one_time_passphrase(&profile, &pass);
-    state.tokens.insert(profile.uuid, pass);
 
     let reply = CreateReply::default().embed(embed).ephemeral(true);
 

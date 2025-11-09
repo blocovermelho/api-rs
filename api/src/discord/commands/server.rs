@@ -20,7 +20,7 @@ use crate::{
 /// Esses comandos estão disponíveis para quaisquer membres que queiram
 /// criar/editar/atualizar os seus respectivos servidores.
 #[poise::command(slash_command, subcommands("token", "create"))]
-pub async fn server(ctx: AppContext<'_>) -> Result<(), Error> {
+pub async fn server(_ctx: AppContext<'_>) -> Result<(), Error> {
     Ok(())
 }
 
@@ -38,6 +38,9 @@ pub async fn create(ctx: AppContext<'_>) -> Result<(), Error> {
         ctx.send(CreateReply::default().embed(info("Perfil não reconhecido", "A sua conta do discord é nova por aqui. Seja bem-vinde! Este comando só pode ser utilizado por membros que possuem perfis."))).await?;
         return Ok(());
     }
+
+    // Removes the ugly "This interaction failed"
+    let _ = ctx.defer().await;
 
     match NewServer::execute(ctx).await? {
         Some(server) => {
@@ -89,7 +92,7 @@ pub async fn create(ctx: AppContext<'_>) -> Result<(), Error> {
 /// O token é necessário para que um servidor se atualize, autentique um perfil
 /// e atualize os perfis dos jogadores (acesso restrito).
 #[poise::command(slash_command, subcommands("reset"))]
-pub async fn token(ctx: AppContext<'_>) -> Result<(), Error> {
+pub async fn token(_ctx: AppContext<'_>) -> Result<(), Error> {
     Ok(())
 }
 

@@ -1,7 +1,6 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use poise::{serenity_prelude::CreateEmbedFooter, CreateReply};
-use tracing::{event, span, Level};
 
 use crate::{
     core::{

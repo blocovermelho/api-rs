@@ -1,49 +1,28 @@
-use core::{
-    trans::db::TryIngest,
-    types::{
-        enums::PlayerState,
-        structs::{packet::GameServerKeepAlive, GameServer, Player, Profile, Session},
-    },
-};
-use std::{
-    collections::{HashMap, HashSet},
-    fs,
-    net::SocketAddr,
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+#![feature(duration_constructors)]
 
+use std::{fs, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+
+use actor::mailbox::{MailboxActor, MailboxActorHandle};
 use axum::{
-    routing::{delete, get, patch, post},
+    routing::{get, post},
     Router,
 };
-use bimap::BiHashMap;
 use chrono::{DateTime, Utc};
-use db::interface::DataSource;
-use futures::{
-    channel::mpsc::{self, channel, Receiver, Sender},
-    SinkExt,
-};
+use futures::channel::mpsc::{channel, Receiver, Sender};
+use http::StatusCode;
 use json::JsonSync;
 use migrate::{migrate, migrate_v2};
 use oauth::models::Config;
 use reqwest::{header, Client};
-// use routes::LinkResult;
 use serenity::all::GatewayIntents;
-use tokio::sync::Mutex;
 use tower::ServiceBuilder;
-use tower_http::{
-    timeout::TimeoutLayer, trace::TraceLayer, validate_request::ValidateRequestHeaderLayer,
-    ServiceBuilderExt,
-};
+use tower_http::{timeout::TimeoutLayer, ServiceBuilderExt};
+use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
-// use websocket::MessageOut;
-use crate::{db::drivers::sqlite::Sqlite, discord::framework};
+use crate::{db::drivers::sqlite::Sqlite, discord::framework, oauth::routes::OAuthClient};
 
-// use crate::store::Store;
-
+pub mod actor;
 #[allow(clippy::future_not_send)]
 pub mod bus;
 pub mod core;
@@ -51,7 +30,7 @@ pub mod db;
 pub mod discord;
 pub mod json;
 pub mod middleware;
-pub mod migrate;
+#[allow(deprecated)] pub mod migrate;
 pub mod models;
 pub mod oauth;
 pub mod routes;
@@ -60,17 +39,20 @@ pub struct AuthServer {
     pub db: Arc<Sqlite>,
     pub clients: Arc<Clients>,
     pub config: Arc<Config>,
-    pub state: Arc<Mutex<Ephemeral>>,
+    pub mailbox: MailboxActorHandle,
     pub event_bus: MpscChannel<Event>,
 }
 
 impl AuthServer {
-    fn new(db: Arc<Sqlite>, config: Arc<Config>, serenity: serenity::Client) -> Self {
+    fn new(
+        db: Arc<Sqlite>, config: Arc<Config>, serenity: Arc<serenity::Client>,
+        mailbox: MailboxActorHandle,
+    ) -> Self {
         Self {
             db,
-            clients: Arc::new(Clients::new(serenity)),
+            clients: Arc::new(Clients::new(serenity, &config)),
             config,
-            state: Arc::new(Mutex::new(Ephemeral::new())),
+            mailbox,
             event_bus: channel(128),
         }
     }
@@ -91,40 +73,28 @@ pub enum Event {
 
 type MpscChannel<T> = (Sender<T>, Receiver<T>);
 
-// Ephemeral Data
-pub struct Ephemeral {
-    pub servers: HashMap<Uuid, GameServer>,
-    pub(crate) sessions: HashMap<Uuid, Session>,
-    pub(crate) tokens: BiHashMap<Uuid, String>,
-    pub(crate) nonces: BiHashMap<String, String>,
-    pub(crate) bad_password_count: HashMap<Uuid, i32>,
-}
-
-impl Ephemeral {
-    fn new() -> Self {
-        Self {
-            servers: HashMap::new(),
-            sessions: HashMap::new(),
-            tokens: BiHashMap::new(),
-            nonces: BiHashMap::new(),
-            bad_password_count: HashMap::new(),
-        }
-    }
-}
-
 pub struct Clients {
     pub reqwest: reqwest::Client,
-    pub serenity: serenity::Client,
+    pub serenity: Arc<serenity::Client>,
+    pub oauth: OAuthClient,
 }
 
 impl Clients {
-    fn new(serenity: serenity::Client) -> Self {
-        Self { reqwest: Client::new(), serenity }
+    fn new(serenity: Arc<serenity::Client>, cfg: &Config) -> Self {
+        Self {
+            reqwest: Client::new(),
+            serenity,
+            oauth: oauth::routes::get_client(cfg).unwrap(),
+        }
     }
 }
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
+
     let db_path = PathBuf::from("data.db");
     let old_data = PathBuf::from("data.json");
     let config_path = PathBuf::from("config.json");
@@ -168,52 +138,69 @@ async fn main() {
         .await
         .expect("Error while building client");
 
-    let auth_server = Arc::new(AuthServer::new(db.clone(), Arc::new(config), http_client));
+    let shared = Arc::new(http_client);
 
-    let bot_fw = framework(db.clone(), auth_server.state.clone()).await;
+    let mailbox = MailboxActor::spawn(
+        db.clone(),
+        shared.clone(),
+        config.server_status_channel_id.parse().unwrap(),
+        config.verification_channel_id.parse().unwrap(),
+        config.verification_role_id.parse().unwrap(),
+        config.playing_role_id.parse().unwrap(),
+    );
+
+    let auth_server =
+        Arc::new(AuthServer::new(db.clone(), Arc::new(config), shared, mailbox.clone()));
+
+    let bot_fw = framework(db.clone(), mailbox.clone()).await;
 
     let mut gateway_client = serenity::Client::builder(&token, GatewayIntents::GUILD_MODERATION)
         .framework(bot_fw)
         .await
         .expect("Error while building client");
 
-    tracing_subscriber::fmt::init();
-
     let sensitive_headers: Arc<[_]> = vec![header::AUTHORIZATION, header::COOKIE].into();
 
     let stack = ServiceBuilder::new()
         .sensitive_request_headers(sensitive_headers)
-        .layer(TimeoutLayer::new(Duration::from_secs(20)))
+        .layer(TimeoutLayer::with_status_code(StatusCode::OK, Duration::from_secs(20)))
         .compression();
 
     let server = Router::new()
         .route("/@me", get(routes::game_server::get_self))
+        .route("/@me/ws", get(routes::game_server::websocket))
         .route("/@me/heartbeat", post(routes::game_server::keepalive));
 
     let profile = Router::new()
         .route("/", get(routes::profile::get_profile))
         .route("/resolve_mojang", get(routes::profile::resolve_mojang))
         .route("/resolve_bedrock", get(routes::profile::resolve_bedrock))
+        .route("/:username", post(routes::profile::create_profile))
         .route("/:username/mojang", post(routes::profile::connect_mojang))
         .route("/:username/bedrock", post(routes::profile::connect_bedrock))
-        .route("/:username/login", post(routes::profile::login))
+        .route("/:username/authenticate", post(routes::profile::authenticate))
+        .route("/:username/session", get(routes::profile::session))
+        .route("/:username/login", post(routes::profile::logout))
         .route("/:username/logout", post(routes::profile::logout))
         .route("/:username/password_change", post(routes::profile::password_change));
 
     let link = Router::new()
         .route("/new", get(routes::discord::get_link))
+        .route("/manual", get(routes::discord::manual))
         .route("/", get(routes::discord::link));
 
     let router = Router::new()
         .nest("/profile", profile)
         .nest("/link", link)
         .nest("/server", server)
-        .with_state(auth_server);
+        .with_state(auth_server)
+        .layer(stack);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
 
+    let api_listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     // Threads
-    let api = axum::Server::bind(&addr).serve(router.into_make_service());
+    let api = axum::serve(api_listener, router);
     let bot = gateway_client.start();
 
     // Spawn the threads

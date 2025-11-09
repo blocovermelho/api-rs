@@ -1,14 +1,15 @@
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
-use axum::{extract::State, Json};
-use http::StatusCode;
+use axum::{extract::State, response::IntoResponse, Json};
+use axum_typed_websockets::WebSocketUpgrade;
+use tracing::debug;
 
 use super::{profile::hydrate_profile_id, results, JsonResult, StringResult};
 use crate::{
+    actor::websocket::{IncomingMessage, OutgoingMessage},
     core::types::{
         consts::api_scopes::{SERVER_READ, SERVER_SELF_MODIFY},
-        enums::PlayerState,
-        structs::{packet::GameServerKeepAlive, Player},
+        structs::packet::GameServerKeepAlive,
     },
     db::interface::DataSource,
     middleware::server_auth::AuthorizedServer,
@@ -16,53 +17,44 @@ use crate::{
     AuthServer,
 };
 
-/// [GET] /api/servers/<id>
+/// [GET] /api/servers/@me/ws
+pub async fn websocket(
+    State(state): State<Arc<AuthServer>>, AuthorizedServer(_token, server): AuthorizedServer,
+    ws: WebSocketUpgrade<OutgoingMessage, IncomingMessage>,
+) -> impl IntoResponse {
+    ws.on_upgrade(async move |upgrade| {
+        state.mailbox.ws_initiate(server.uuid, upgrade);
+    })
+}
+
 /// [PATCH] /api/servers/@me/heartbeat
+#[axum::debug_handler]
 pub async fn keepalive(
     State(state): State<Arc<AuthServer>>, AuthorizedServer(token, server): AuthorizedServer,
     packet: Option<Json<GameServerKeepAlive>>,
 ) -> StringResult<String> {
     scopes!(token, [SERVER_SELF_MODIFY]);
 
-    let mut eph = state.state.lock().await;
-    let db = &state.db;
-
-    let mut server = if let Some(s) = eph.servers.remove(&token.owner) {
-        s
-    } else {
-        server.into()
-    };
-
-    if let Some(Json(packet)) = packet {
-        let packet_players: HashSet<_> = packet.players.iter().cloned().collect();
-        let server_players: HashSet<_> = server.players.keys().cloned().collect();
-
-        let added = &packet_players - &server_players;
-        let removed = &server_players - &packet_players;
-
-        for item in added {
-            // Check if the player has a profile and if not just set it as a visitor
-            let profile = db.get_profile(item.clone()).await.ok();
-
-            let player = match profile {
-                Some(profile) => Player {
-                    profile: Some(profile.into()),
-                    status: PlayerState::PreLogin,
-                },
-                None => Player { profile: None, status: PlayerState::Visitor },
-            };
-
-            server.players.insert(item.clone(), player);
+    match packet {
+        Some(packet) => {
+            debug!(
+                "[r:Heartbeat] Attempting to send to Mailbox: KeepAlive | server={}",
+                server.uuid
+            );
+            state
+                .mailbox
+                .server_keepalive(server.uuid, packet.0.players, packet.0.motd);
         }
-        for player in &removed {
-            server.players.remove(player);
+        None => {
+            debug!("[r:Heartbeat] Attempting to send to Mailbox: Ping | server={}", server.uuid);
+            state.mailbox.server_ping(server.uuid);
         }
     }
 
-    eph.servers.insert(token.owner, server);
-
     Ok(String::new())
 }
+
+#[axum::debug_handler]
 /// [GET] /api/servers/@me
 pub async fn get_self(
     State(state): State<Arc<AuthServer>>, AuthorizedServer(token, server): AuthorizedServer,

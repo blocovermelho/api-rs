@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
-use ::http::StatusCode;
 use axum::{
     extract::{Path, Query, State},
+    http::StatusCode,
     Json,
 };
-use chrono::Utc;
-use serenity::http;
 use uuid_mc::PlayerUuid;
 
 use super::{
@@ -17,15 +15,19 @@ use super::{
 use crate::{
     core::types::{
         consts::{
-            api_scopes::{PROFILE_OTHERS_MODIFY, PROFILE_READ, SERVER_READ, SERVER_SELF_MODIFY},
+            api_scopes::{
+                PROFILE_CREATE, PROFILE_OTHERS_MODIFY, PROFILE_READ, SERVER_READ,
+                SERVER_SELF_MODIFY,
+            },
             connection_ids::{BEDROCK_ACCOUNT, MOJANG_UUID},
         },
-        enums::{ConnectionData, PlayerState},
-        structs::{Connection, Player},
+        enums::ConnectionData,
+        structs::{stub::ProfileStub, Connection},
     },
     db::{data::Profile, drivers::sqlite::Sqlite, interface::DataSource},
     middleware::server_auth::AuthorizedServer,
     routes::{
+        query_params::IpQuery,
         results::{BedrockAccountStanding, MojangAccountStanding},
         scopes,
     },
@@ -226,7 +228,7 @@ pub async fn connect_mojang(
         format!("https://api.mojang.com/user/profile/{}", query.id.to_string().replace("-", ""));
 
     if let Ok(response) = state.clients.reqwest.get(mojang_api_url).send().await {
-        if response.status() == http::StatusCode::OK {
+        if response.status() == reqwest::StatusCode::OK {
             let mojang: body::MojangApiId = response
                 .json()
                 .await
@@ -276,7 +278,7 @@ pub async fn connect_mojang(
                 issuer: conn.issuer,
                 extra: (conn.kind, conn.data).try_into().unwrap(),
             }));
-        } else if response.status() == http::StatusCode::NO_CONTENT {
+        } else if response.status() == reqwest::StatusCode::NO_CONTENT {
             return Err((
                 StatusCode::NOT_FOUND,
                 "The provided uuid was not found in Mojang's server".to_string(),
@@ -290,99 +292,50 @@ pub async fn connect_mojang(
     ))
 }
 
-/// [POST] /api/profile/<username>/login?ip=<ip_addr>&pass=<password>
-pub async fn login(
+/// [POST] /api/profile/<username>/authenticate?ip=<ip_addr>&pass=<password>
+pub async fn authenticate(
     State(state): State<Arc<AuthServer>>, AuthorizedServer(token, server): AuthorizedServer,
     Path(username): Path<String>, Query(query): Query<query_params::LoginQuery>,
+) -> JsonResult<results::Authenticate, String> {
+    scopes!(token, [PROFILE_READ, SERVER_SELF_MODIFY]);
+
+    match state
+        .mailbox
+        .session_authenticate(username, query.password, server.uuid)
+        .await
+    {
+        crate::actor::session::LoginAttempt::InvalidProfile => {
+            Ok(Json(results::Authenticate::InvalidProfile))
+        }
+        crate::actor::session::LoginAttempt::InvalidPassword { error_count, max_errors } => {
+            Ok(Json(results::Authenticate::InvalidPassword {
+                attempts: error_count,
+                max_attempts: max_errors,
+            }))
+        }
+        crate::actor::session::LoginAttempt::LoggedIn => Ok(Json(results::Authenticate::LoggedIn)),
+    }
+}
+
+/// [POST] /api/profile/<username>/login?ip=<ip>
+pub async fn login(
+    State(state): State<Arc<AuthServer>>, AuthorizedServer(token, server): AuthorizedServer,
+    Path(username): Path<String>, Query(query): Query<IpQuery>,
 ) -> JsonResult<results::Login, String> {
     scopes!(token, [PROFILE_READ, SERVER_SELF_MODIFY]);
 
-    let now = Utc::now();
-
-    let profile = state.db.get_profile(username).await.map_err(|_| {
-        (
-            StatusCode::NOT_FOUND,
-            "An profile with the given username could not be found".to_string(),
-        )
-    })?;
-
-    let mut eph = state.state.lock().await;
-
-    if !eph.servers.contains_key(&server.uuid) {
-        return Ok(Json(results::Login::ServerOffline));
-    }
-
-    if !state
-        .db
-        .get_blacklists_with_range(query.ip, 16)
+    match state
+        .mailbox
+        .check_ip(query.ip, username.clone(), server.uuid)
         .await
-        .unwrap_or_default()
-        .is_empty()
     {
-        return Ok(Json(results::Login::BannedIp));
-    }
-
-    let allowlists = state
-        .db
-        .get_allowlists_with_range(&profile.uuid, query.ip, 16)
-        .await
-        .unwrap_or_default();
-
-    if allowlists.is_empty() {
-        return Ok(Json(results::Login::NewIp));
-    }
-
-    let trimmed = query.password.trim().to_string();
-
-    let otp_check = if let Some(owner) = eph.tokens.get_by_right(&trimmed) {
-        *owner == profile.uuid
-    } else {
-        false
-    };
-
-    let pass_check = bcrypt::verify(trimmed, &profile.password).map_err(|_| {
-        (StatusCode::INTERNAL_SERVER_ERROR, "Couldn't verify password.".to_string())
-    })?;
-
-    let current = eph.bad_password_count.remove(&profile.uuid).unwrap_or(0);
-
-    if !(pass_check || otp_check) {
-        eph.bad_password_count.insert(profile.uuid, current + 1);
-
-        return Ok(Json(results::Login::InvalidPassword {
-            attempts: current + 1,
-            max_attempts: 5,
-        }));
-    }
-
-    if otp_check {
-        // They are One-Time-Passphrases
-        eph.tokens.remove_by_left(&profile.uuid);
-    }
-
-    let state = if let Some(mut session) = eph.sessions.remove(&profile.uuid) {
-        if session.get_expiry() > now {
-            session.last_seen = now;
-
-            eph.sessions.insert(profile.uuid, session);
-            (results::Login::ResumedSession, PlayerState::ResumedSession)
-        } else {
-            (results::Login::LoggedIn, PlayerState::LoggedIn)
+        crate::actor::cidr::CidrResolution::AllowedIp(_) => Ok(Json(results::Login::AllowedIp)),
+        crate::actor::cidr::CidrResolution::UnknownIp => Ok(Json(results::Login::NewIp)),
+        crate::actor::cidr::CidrResolution::BannedIp(_) => Ok(Json(results::Login::BannedIp)),
+        crate::actor::cidr::CidrResolution::BlockedWithHeuristic(_) => {
+            Ok(Json(results::Login::BlockedIp))
         }
-    } else {
-        (results::Login::LoggedIn, PlayerState::LoggedIn)
-    };
-
-    let mut gameserver = eph.servers.remove(&server.uuid).unwrap();
-
-    gameserver.players.insert(profile.username.clone(), Player {
-        profile: Some(profile.into()),
-        status: state.1,
-    });
-
-    eph.servers.insert(gameserver.id, gameserver);
-
-    Ok(Json(state.0))
+    }
 }
 
 /// [POST] /api/profile/<username>/logout
@@ -392,88 +345,80 @@ pub async fn logout(
 ) -> JsonResult<results::Logout, String> {
     scopes!(token, [PROFILE_READ, SERVER_SELF_MODIFY]);
 
-    let now = Utc::now();
-
-    let profile = state.db.get_profile(username).await.map_err(|_| {
-        (
-            StatusCode::NOT_FOUND,
-            "An profile with the given username could not be found".to_string(),
-        )
-    })?;
-
-    let mut eph = state.state.lock().await;
-
-    if let Some(mut gs) = eph.servers.remove(&server.uuid) {
-        match gs.players.remove(&profile.username) {
-            Some(_) => {
-                if let Some(mut session) = eph.sessions.remove(&profile.uuid) {
-                    session.last_seen = now;
-                    eph.sessions.insert(profile.uuid, session);
-                }
-                Ok(Json(results::Logout::LoggedOut))
-            }
-            None => Ok(Json(results::Logout::ProfileNotInServer)),
-        }
-    } else {
-        Ok(Json(results::Logout::ServerOffline))
+    if !state
+        .mailbox
+        .profile_check_activity(username.clone(), server.uuid)
+        .await
+    {
+        return Ok(Json(results::Logout::ProfileNotInServer));
     }
+
+    state.mailbox.profile_logout(username, server.uuid);
+    Ok(Json(results::Logout::LoggedOut))
+}
+
+/// [GET] /api/profile/<username>/session_restore
+pub async fn session(
+    State(state): State<Arc<AuthServer>>, AuthorizedServer(token, _server): AuthorizedServer,
+    Path(username): Path<String>,
+) -> JsonResult<bool, String> {
+    scopes!(token, [PROFILE_READ]);
+
+    Ok(Json(state.mailbox.session_restore(username).await))
 }
 
 /// [POST] /api/profile/<username>/password_change?old=<pass>&new=<pass>
 pub async fn password_change(
-    State(state): State<Arc<AuthServer>>, AuthorizedServer(token, server): AuthorizedServer,
+    State(state): State<Arc<AuthServer>>, AuthorizedServer(token, _server): AuthorizedServer,
     Path(username): Path<String>, Query(query): Query<query_params::PasswordChange>,
 ) -> JsonResult<results::PasswordUpdate, String> {
     scopes!(token, [PROFILE_READ, SERVER_READ, PROFILE_OTHERS_MODIFY]);
 
-    let profile = state.db.get_profile(username).await.map_err(|_| {
-        (
+    match state
+        .mailbox
+        .profile_change_password(username, query.old, query.new)
+        .await
+    {
+        crate::actor::database::ChangePasswordAttempt::InvalidProfile => Err((
             StatusCode::NOT_FOUND,
             "An profile with the given username could not be found".to_string(),
-        )
-    })?;
-
-    let mut eph = state.state.lock().await;
-
-    match eph.servers.get(&server.uuid) {
-        Some(s) => match s.players.get(&profile.username) {
-            Some(p) => match p.status {
-                PlayerState::LoggedIn | PlayerState::ResumedSession => {}
-                _ => {
-                    return Ok(Json(results::PasswordUpdate::InvalidPlayerState));
-                }
-            },
-            None => {
-                return Ok(Json(results::PasswordUpdate::ProfileNotInServer));
-            }
-        },
-        None => return Ok(Json(results::PasswordUpdate::ServerOffline)),
+        )),
+        crate::actor::database::ChangePasswordAttempt::InvalidPassword => {
+            Ok(Json(results::PasswordUpdate::InvalidPassword))
+        }
+        crate::actor::database::ChangePasswordAttempt::Changed => {
+            Ok(Json(results::PasswordUpdate::PasswordChanged))
+        }
     }
+}
 
-    let pass_check = bcrypt::verify(query.old.trim(), &profile.password).map_err(|_| {
-        (StatusCode::INTERNAL_SERVER_ERROR, "Couldn't verify password.".to_string())
-    })?;
+/// [POST] /api/profile/<username>
+pub async fn create_profile(
+    State(state): State<Arc<AuthServer>>, AuthorizedServer(token, _server): AuthorizedServer,
+    Path(username): Path<String>, Json(query): Json<body::NewProfile>,
+) -> JsonResult<results::CreateProfile, String> {
+    scopes!(token, [PROFILE_CREATE]);
 
-    if !pass_check {
-        let current = eph.bad_password_count.remove(&profile.uuid).unwrap_or(0);
-        eph.bad_password_count.insert(profile.uuid, current + 1);
-
-        return Ok(Json(results::PasswordUpdate::InvalidPassword {
-            attempts: current + 1,
-            max_attempts: 5,
-        }));
-    }
-
-    state
+    let hash = bcrypt::hash(query.password, 12).unwrap();
+    if let Ok(profile) = state
         .db
-        .update_password(&profile.uuid, query.new.trim().to_string())
+        .create_profile(
+            ProfileStub {
+                username: username.clone(),
+                discord_id: query.discord_id,
+                password: hash,
+            },
+            None,
+        )
         .await
-        .map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "An error occured while updating your password.".to_string(),
-            )
-        })?;
+    {
+        let res = results::CreateProfile::Created(profile.uuid);
+        state
+            .mailbox
+            .session_profile_update(username, profile.into());
 
-    Ok(Json(results::PasswordUpdate::PasswordChanged))
+        Ok(Json(res))
+    } else {
+        Ok(Json(results::CreateProfile::UsernameExists))
+    }
 }
