@@ -51,6 +51,14 @@ pub struct Connection {
     pub data: String,
 }
 
+#[derive(sqlx::FromRow, Serialize, Debug, Clone)]
+pub struct Token {
+    pub owner: Uuid,
+    pub token: String,
+    pub scopes: Json<Vec<String>>,
+    pub created_at: DateTime<Utc>,
+}
+
 impl NetworkProvider for Allowlist {
     fn get_addr(&self) -> std::net::Ipv4Addr {
         Ipv4Addr::from_bits(self.base_ip)
