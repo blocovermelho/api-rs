@@ -42,7 +42,7 @@ pub struct GameServer {
     pub name: String,
     pub game: String,
     pub versions: Vec<String>,
-    pub max_players: usize,
+    pub max_players: i32,
     // Derived from keep-alive packets
     pub players: HashMap<String, Player>,
     // Derived from UUID v7 Datetime.
