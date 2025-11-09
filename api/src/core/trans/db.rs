@@ -5,7 +5,7 @@ use chrono::TimeDelta;
 use uuid::Uuid;
 
 use crate::{
-    core::types::{enums::ConnectionType, structs::*},
+    core::types::{enums::ConnectionData, structs::*},
     db::{
         data::{self as dbd},
         interface::{DataSource, NetworkProvider},
@@ -116,7 +116,7 @@ impl<D: DataSource> TryIngest<dbd::Connection, D> for Connection {
     where
         D: 'async_trait,
     {
-        let extra = ConnectionType::try_from((value.kind, value.data))?;
+        let extra = ConnectionData::try_from((value.kind, value.data))?;
         let user = source
             .get_user_by_uuid(&value.profile)
             .await
@@ -134,7 +134,7 @@ pub enum ConnectionTypeConversionError {
     UnknownConnectionType,
 }
 
-impl TryFrom<(String, String)> for ConnectionType {
+impl TryFrom<(String, String)> for ConnectionData {
     type Error = ConnectionConversionError;
 
     fn try_from(value: (String, String)) -> Result<Self, Self::Error> {
@@ -155,8 +155,8 @@ impl TryFrom<(String, String)> for ConnectionType {
 impl From<Connection> for dbd::Connection {
     fn from(value: Connection) -> Self {
         let (kind, data) = match value.extra {
-            ConnectionType::BedrockUsername(username) => ("bv:bedrock_link", username),
-            ConnectionType::MojangUuid(uuid) => ("bv:mojang_uuid", uuid.into()),
+            ConnectionData::BedrockUsername(username) => ("bv:bedrock_link", username),
+            ConnectionData::MojangUuid(uuid) => ("bv:mojang_uuid", uuid.into()),
         };
 
         Self {

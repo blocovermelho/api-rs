@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use ipnet::Ipv4Net;
 use uuid::Uuid;
 
-use super::enums::{ConnectionType, PlayerState};
+use super::enums::{ConnectionData, PlayerState};
 
 #[derive(Debug, Clone)]
 pub struct Profile {
@@ -30,7 +30,7 @@ pub struct Player {
 pub struct Connection {
     pub issuer: Option<Uuid>,
     pub profile: Profile,
-    pub extra: ConnectionType,
+    pub extra: ConnectionData,
 }
 
 #[derive(Debug, Clone)]

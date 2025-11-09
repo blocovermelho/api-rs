@@ -52,7 +52,7 @@ pub enum Heuristic {
 }
 
 #[derive(Debug, Clone)]
-pub enum ConnectionType {
+pub enum ConnectionData {
     BedrockUsername(String),
     MojangUuid(uuid::Uuid),
 }
