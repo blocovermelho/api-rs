@@ -96,10 +96,12 @@ pub mod packet {
     use uuid::Uuid;
 
     pub struct GameServerKeepAlive {
-        server_id: Uuid,
-        players: Vec<String>,
-        motd: Option<String>,
+        pub server_id: Uuid,
+        pub players: Vec<String>,
+        pub motd: Option<String>,
     }
+}
+
 }
 
 pub mod stub {
