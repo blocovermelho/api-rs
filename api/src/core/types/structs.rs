@@ -60,6 +60,16 @@ pub struct GameServer {
     pub staff: Vec<Uuid>,
 }
 
+impl PartialEq<stub::GameServerStub> for GameServer {
+    fn eq(&self, other: &stub::GameServerStub) -> bool {
+        self.game == other.game &&
+            self.name == other.name &&
+            self.versions == other.versions &&
+            self.max_players == other.max_players &&
+            self.staff == other.staff
+    }
+}
+
 pub(crate) struct Session {
     pub(crate) profile: Uuid,
     pub(crate) started_at: DateTime<Utc>,
