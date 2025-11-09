@@ -9,7 +9,7 @@ use crate::{
     db::{
         data::{
             result::{self, PlaytimeEntry},
-            stub, Account, Allowlist, BanActor, Blacklist, Connection, Pronoun, SaveData, Server,
+            stub, Account, Allowlist, BanIssuer, Blacklist, Connection, Pronoun, SaveData, Server,
             User, Viewport,
         },
         drivers::err::Response,
@@ -67,7 +67,7 @@ pub trait DataSource: Send + Sync {
     async fn broaden_allowlist_mask(&self, entry: Allowlist, new_mask: u8) -> Response<()>;
     async fn delete_allowlist(&self, entry: Allowlist) -> Response<()>;
 
-    async fn create_blacklist(&self, ip: Ipv4Addr, actor: BanActor) -> Response<Blacklist>;
+    async fn create_blacklist(&self, ip: Ipv4Addr, actor: BanIssuer) -> Response<Blacklist>;
     async fn get_blacklists(&self, ip: Ipv4Addr) -> Response<Vec<Blacklist>>;
     async fn get_blacklists_with_range(&self, ip: Ipv4Addr, mask: u8) -> Response<Vec<Blacklist>>;
     async fn bump_blacklist(&self, entry: Blacklist) -> Response<()>;

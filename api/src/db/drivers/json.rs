@@ -23,7 +23,7 @@ use crate::{
     core::types::structs::stub::{GameServerStub, ProfileStub},
     db::{
         data::{
-            result::PlaytimeEntry, Account, Allowlist, BanActor, Blacklist, Connection, Modpack,
+            result::PlaytimeEntry, Account, Allowlist, BanIssuer, Blacklist, Connection, Modpack,
             Profile, Pronoun, SaveData, Server, ServerV2, Token, User,
         },
         drivers::err::{base::NotFoundError, DriverError},
@@ -324,7 +324,7 @@ impl DataSource for JsonDriver {
         unimplemented!();
     }
 
-    async fn create_blacklist(&self, ip: Ipv4Addr, actor: BanActor) -> Response<Blacklist> {
+    async fn create_blacklist(&self, ip: Ipv4Addr, actor: BanIssuer) -> Response<Blacklist> {
         unimplemented!();
     }
 

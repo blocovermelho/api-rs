@@ -177,7 +177,7 @@ pub async fn ip_deny(
         CidrAction::Unmatched(_) => {
             db.create_blacklist(
                 ip,
-                crate::db::data::BanActor::AutomatedSystem(format!(
+                crate::db::data::BanIssuer::AutomatedSystem(format!(
                     "[{}] IP was denied via discord manually.",
                     interaction.user.id
                 )),

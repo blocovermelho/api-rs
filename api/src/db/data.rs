@@ -127,7 +127,7 @@ pub enum ModpackSource {
 #[derive(sqlx::FromRow, Debug, Clone)]
 pub struct Blacklist {
     pub created_at: DateTime<Utc>,
-    pub actor: Json<BanActor>,
+    pub actor: Json<BanIssuer>,
     pub hits: i64,
     pub(crate) base_ip: u32,
     pub(crate) mask: u8,
@@ -164,7 +164,7 @@ impl Blacklist {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum BanActor {
+pub enum BanIssuer {
     AutomatedSystem(String),
     Staff(Uuid),
 }

@@ -18,7 +18,7 @@ use crate::{
         data::{
             result::{NodeDeletion, ServerJoin, ServerLeave},
             stub::{AccountStub, ServerStub, UserStub},
-            Account, BanActor, Loc, Profile, Pronoun, SaveData, Server, ServerV2, User, Viewport,
+            Account, BanIssuer, Loc, Profile, Pronoun, SaveData, Server, ServerV2, User, Viewport,
         },
         drivers::{
             err::{
@@ -162,7 +162,7 @@ async fn create_blacklist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let res = db
         .create_blacklist(
             ip,
-            crate::db::data::BanActor::AutomatedSystem("Database Testing".to_owned()),
+            crate::db::data::BanIssuer::AutomatedSystem("Database Testing".to_owned()),
         )
         .await
         .unwrap();
@@ -300,7 +300,7 @@ async fn get_server_by_name(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> 
 #[test(sqlx::test(migrations = "src/db/migrations"))]
 async fn get_blacklists(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
-    let actor = BanActor::AutomatedSystem("Database Testing".to_owned());
+    let actor = BanIssuer::AutomatedSystem("Database Testing".to_owned());
     db.create_blacklist(Ipv4Addr::new(127, 0, 0, 1), actor)
         .await
         .unwrap();
@@ -319,7 +319,7 @@ async fn get_blacklists(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
 #[test(sqlx::test(migrations = "src/db/migrations"))]
 async fn get_blacklists_with_range(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
-    let actor = BanActor::AutomatedSystem("Database Testing".to_owned());
+    let actor = BanIssuer::AutomatedSystem("Database Testing".to_owned());
 
     db.create_blacklist(Ipv4Addr::new(127, 0, 0, 1), actor.clone())
         .await
@@ -597,7 +597,7 @@ async fn bump_blacklist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let entry = db
         .create_blacklist(
             Ipv4Addr::new(127, 0, 0, 1),
-            BanActor::AutomatedSystem("Database Testing".to_owned()),
+            BanIssuer::AutomatedSystem("Database Testing".to_owned()),
         )
         .await
         .unwrap();
@@ -620,7 +620,7 @@ async fn broaden_blacklist_mask(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<
     let entry = db
         .create_blacklist(
             Ipv4Addr::new(127, 0, 0, 1),
-            BanActor::AutomatedSystem("Database Testing".to_owned()),
+            BanIssuer::AutomatedSystem("Database Testing".to_owned()),
         )
         .await
         .unwrap();
@@ -711,7 +711,7 @@ async fn delete_blacklist(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let entry = db
         .create_blacklist(
             Ipv4Addr::new(127, 0, 0, 1),
-            BanActor::AutomatedSystem("Database Testing".to_owned()),
+            BanIssuer::AutomatedSystem("Database Testing".to_owned()),
         )
         .await
         .unwrap();

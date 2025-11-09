@@ -17,7 +17,7 @@ use crate::{
     },
     db::{
         data::{
-            self, result::PlaytimeEntry, Account, Allowlist, BanActor, Blacklist, Connection,
+            self, result::PlaytimeEntry, Account, Allowlist, BanIssuer, Blacklist, Connection,
             Profile, SaveData, Server, ServerV2, Token, User, Viewport,
         },
         interface::DataSource,
@@ -441,7 +441,7 @@ impl DataSource for Sqlite {
     /// ### Note: This function doesn't check for matches when inserting the new entry. Please check if a match already exists with [`DataSource::get_blacklists`] or [`DataSource::get_blacklists_with_range`] before creating a new entry.
     /// Returns an [`DriverError::DuplicateKeyInsertion`] if an entry with that IP address already exists.
     #[tracing::instrument(skip(ip))]
-    async fn create_blacklist(&self, ip: Ipv4Addr, actor: BanActor) -> Response<Blacklist> {
+    async fn create_blacklist(&self, ip: Ipv4Addr, actor: BanIssuer) -> Response<Blacklist> {
         let query = sqlx::query_as::<_, Blacklist>(
             "INSERT INTO blacklist (base_ip, mask, created_at, actor, hits) VALUES ($1, $2, $3, $4, $5) RETURNING *"
         )
