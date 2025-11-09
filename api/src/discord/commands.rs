@@ -3,4 +3,5 @@
 
 pub mod admin;
 pub mod change_password;
+pub mod otp;
 pub mod rank;
