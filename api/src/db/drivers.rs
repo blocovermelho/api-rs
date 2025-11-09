@@ -21,6 +21,8 @@ pub mod err {
             DiscordAccount, // Didn't exist.
             #[error("Account with UUID: `{0}` not found")]
             Account(Uuid), // Equivalent to: Password{Check,Modify}::Unregistered
+            #[error("Profile with username: `{0}` not found")]
+            Profile(String),
             #[error(
                 "No data associated on the server `{server_uuid}` for the user `{player_uuid}`"
             )]
