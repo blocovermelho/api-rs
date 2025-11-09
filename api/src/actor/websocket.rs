@@ -100,11 +100,11 @@ impl WebsocketActorHandle {
 // If other things require interaction from the server sending requests
 // they will be added here.
 #[derive(Deserialize)]
-#[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum IncomingMessage {}
 
 #[derive(Serialize)]
-#[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OutgoingMessage {
     DiscordLink(DiscordLink),
 }

@@ -90,14 +90,14 @@ async fn handle_unknown(state: &AppState) {
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "event", content = "data", rename_all = "snake_case")]
+#[serde(tag = "event", rename_all = "snake_case")]
 pub enum MessageIn {
     LinkRequest(Uuid),
     CidrAwk(String),
 }
 
 #[derive(Serialize)]
-#[serde(tag = "event", content = "data", rename_all = "snake_case")]
+#[serde(tag = "event", rename_all = "snake_case")]
 pub enum MessageOut {
     LinkResponse(LinkResult),
     CidrSyn(Uuid),

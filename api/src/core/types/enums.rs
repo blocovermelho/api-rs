@@ -54,6 +54,7 @@ pub enum Heuristic {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ConnectionData {
     BedrockUsername { name: String, xuid: Option<u64> },
     MojangUuid { name: String, id: uuid::Uuid },

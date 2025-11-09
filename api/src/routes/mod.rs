@@ -137,7 +137,7 @@ pub mod results {
     }
 
     #[derive(Serialize)]
-    #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+    #[serde(tag = "kind", rename_all = "snake_case")]
     pub enum MojangAccountStanding {
         KnownProfile {
             profile: Profile,
@@ -153,7 +153,7 @@ pub mod results {
         InvalidName,
     }
     #[derive(Serialize)]
-    #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+    #[serde(tag = "kind", rename_all = "snake_case")]
     pub enum BedrockAccountStanding {
         KnownProfile { profile: Profile },
         RenamedProfile { profile: Profile, gamertag: String },
@@ -161,7 +161,7 @@ pub mod results {
     }
 
     #[derive(Serialize)]
-    #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+    #[serde(tag = "kind", rename_all = "snake_case")]
     pub enum Login {
         NewIp,
         AllowedIp,
@@ -170,7 +170,7 @@ pub mod results {
     }
 
     #[derive(Serialize)]
-    #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+    #[serde(tag = "kind", rename_all = "snake_case")]
     pub enum Authenticate {
         ServerOffline,
         InvalidPassword { attempts: i32, max_attempts: i32 },
@@ -179,7 +179,7 @@ pub mod results {
     }
 
     #[derive(Serialize)]
-    #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+    #[serde(tag = "kind", rename_all = "snake_case")]
     pub enum Logout {
         ServerOffline,
         ProfileNotInServer,
@@ -187,7 +187,7 @@ pub mod results {
     }
 
     #[derive(Serialize)]
-    #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+    #[serde(tag = "kind", rename_all = "snake_case")]
     pub enum PasswordUpdate {
         ServerOffline,
         ProfileNotInServer,
@@ -197,7 +197,7 @@ pub mod results {
     }
 
     #[derive(Serialize)]
-    #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+    #[serde(tag = "kind", rename_all = "snake_case")]
     pub enum CreateProfile {
         UsernameExists,
         Created(Uuid),
