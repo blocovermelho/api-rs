@@ -181,7 +181,7 @@ async fn main() {
         .route("/:username/bedrock", post(routes::profile::connect_bedrock))
         .route("/:username/authenticate", post(routes::profile::authenticate))
         .route("/:username/session", get(routes::profile::session))
-        .route("/:username/login", post(routes::profile::logout))
+        .route("/:username/login", post(routes::profile::login))
         .route("/:username/logout", post(routes::profile::logout))
         .route("/:username/password_change", post(routes::profile::password_change));
 
