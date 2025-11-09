@@ -106,13 +106,16 @@ pub mod packet {
 }
 
 pub mod stub {
+    use serde::Deserialize;
     use uuid::Uuid;
+    #[derive(Debug, Clone, Deserialize)]
     pub struct ProfileStub {
         pub username: String,
         pub discord_id: String,
         pub password: String,
     }
 
+    #[derive(Debug, Clone, Deserialize)]
     pub struct GameServerStub {
         pub name: String,
         pub game: String,
