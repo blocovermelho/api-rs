@@ -166,6 +166,31 @@ impl<D: DataSource> TryIngest<dbd::Connection, D> for Connection {
     }
 }
 
+#[allow(clippy::fallible_impl_from)]
+impl From<ConnectionData> for (String, String) {
+    fn from(val: ConnectionData) -> Self {
+        match val {
+            ConnectionData::BedrockUsername { name, xuid } => {
+                let helper = connection_types::BedrockLink { name, xuid };
+
+                (
+                    connection_ids::BEDROCK_ACCOUNT.to_owned(),
+                    serde_json::to_string(&helper).unwrap(),
+                )
+            }
+
+            ConnectionData::MojangUuid { name, id } => {
+                let helper = connection_types::MojangLink { name, id };
+                (connection_ids::MOJANG_UUID.to_owned(), serde_json::to_string(&helper).unwrap())
+            }
+            ConnectionData::Playtime(time) => (
+                connection_ids::PLAYTIME.to_owned(),
+                serde_json::ser::to_string(&time).unwrap_or_else(|_| "{}".to_owned()),
+            ),
+        }
+    }
+}
+
 impl TryFrom<(String, String)> for ConnectionData {
     type Error = ConnectionConversionError;
 
