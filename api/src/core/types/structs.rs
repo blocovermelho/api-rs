@@ -25,8 +25,8 @@ pub struct Profile {
 
 #[derive(Debug, Clone)]
 pub struct Player {
-    profile: Option<Profile>,
-    status: PlayerState,
+    pub profile: Option<Profile>,
+    pub status: PlayerState,
 }
 
 #[derive(Debug, Clone)]
