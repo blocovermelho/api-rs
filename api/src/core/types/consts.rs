@@ -18,3 +18,7 @@ pub mod session {
 
     pub const LEASE_TIME: TimeDelta = TimeDelta::minutes(10);
 }
+
+pub mod cidr {
+    pub const MIN_V4_MASK: u8 = 16;
+}
