@@ -2,6 +2,7 @@ use std::{collections::HashMap, net::Ipv4Addr, time::Duration};
 
 use chrono::{DateTime, Utc};
 use ipnet::Ipv4Net;
+use serde::Serialize;
 use uuid::Uuid;
 
 use super::structs::*;
@@ -51,7 +52,7 @@ pub enum Heuristic {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum ConnectionData {
     BedrockUsername(String),
     MojangUuid(uuid::Uuid),
