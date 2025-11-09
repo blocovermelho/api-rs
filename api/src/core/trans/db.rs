@@ -14,6 +14,21 @@ use crate::{
 };
 
 const SESSION_LEASE: TimeDelta = TimeDelta::minutes(10);
+impl From<dbd::ServerV2> for GameServer {
+    fn from(value: dbd::ServerV2) -> Self {
+        Self {
+            id: value.uuid,
+            name: value.name,
+            game: value.game,
+            versions: value.versions.0,
+            max_players: value.max_players,
+            players: HashMap::new(),
+            created_at: get_timestamp_from_uuid(&value.uuid, Utc::now()),
+            last_seen: Utc::now(),
+            staff: value.staff.0,
+        }
+    }
+}
 
 impl From<dbd::Allowlist> for Session {
     fn from(val: dbd::Allowlist) -> Self {
