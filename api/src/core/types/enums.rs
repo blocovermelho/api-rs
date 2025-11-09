@@ -8,7 +8,8 @@ use super::structs::*;
 
 #[derive(Debug, Clone)]
 pub enum PlayerState {
-    Visitor, /* Previously known as "unregistered" */
+    Visitor,  /* Previously known as "unregistered" */
+    PreLogin, /* Has a profile but is pending log-in */
     LoggedIn,
     ResumedSession,
     Banned,
