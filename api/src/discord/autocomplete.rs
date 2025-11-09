@@ -54,3 +54,34 @@ pub async fn servers<'a>(ctx: Context<'_>, partial: &'a str) -> impl Stream<Item
 
     stream::iter(servers)
 }
+
+/// Autocompletion for servers in which the current user is a staffer
+/// as defined in the server's "staff" field.
+pub async fn staff_servers<'a>(
+    ctx: Context<'_>, partial: &'a str,
+) -> impl Stream<Item = String> + 'a {
+    let db = &ctx.data().db;
+    let profiles: HashSet<_> = db
+        .get_profiles_by_discord_id(ctx.author().id.to_string())
+        .await
+        .unwrap_or_default()
+        .iter()
+        .map(|i| i.uuid)
+        .collect();
+
+    let server_ids = db.get_all_servers_v2().await.unwrap_or_default();
+
+    let mut candidates: Vec<_> = vec![];
+
+    for id in server_ids {
+        if let Ok(server) = db.get_server(&id).await {
+            let staff_set: HashSet<_> = server.staff.0.iter().cloned().collect();
+            let intersect: HashSet<_> = staff_set.intersection(&profiles).collect();
+            if !intersect.is_empty() && (server.name.starts_with(partial) || partial.is_empty()) {
+                candidates.push(server.name);
+            }
+        }
+    }
+
+    stream::iter(candidates)
+}
