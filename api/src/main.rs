@@ -32,6 +32,7 @@ pub mod core;
 pub mod db;
 pub mod discord;
 pub mod json;
+pub mod middleware;
 pub mod migrate;
 pub mod models;
 pub mod oauth;
