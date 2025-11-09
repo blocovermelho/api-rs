@@ -3,13 +3,17 @@ use std::{net::Ipv4Addr, time::Duration};
 use ipnet::Ipv4Net;
 use uuid::Uuid;
 
-use crate::db::{
-    data::{
-        result::{self, PlaytimeEntry},
-        stub, Account, Allowlist, BanActor, Blacklist, Connection, Pronoun, SaveData, Server, User,
-        Viewport,
+use super::data::Profile;
+use crate::{
+    core::types::structs::stub::ProfileStub,
+    db::{
+        data::{
+            result::{self, PlaytimeEntry},
+            stub, Account, Allowlist, BanActor, Blacklist, Connection, Pronoun, SaveData, Server,
+            User, Viewport,
+        },
+        drivers::err::Response,
     },
-    drivers::err::Response,
 };
 
 #[async_trait::async_trait]
@@ -27,6 +31,16 @@ pub trait DataSource: Send + Sync {
     async fn create_account(&self, stub: stub::AccountStub) -> Response<()>;
     async fn get_account(&self, uuid: &Uuid) -> Response<Account>;
     async fn get_all_accounts(&self) -> Response<Vec<Uuid>>;
+
+    async fn create_profile(
+        &self, stub: ProfileStub, when: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Response<Profile>;
+
+    async fn get_profile(&self, username: String) -> Response<Profile>;
+    async fn get_profile_by_id(&self, profile_uuid: &Uuid) -> Response<Profile>;
+
+    async fn delete_profile(&self, profile_uuid: &Uuid) -> Response<Profile>;
+
     async fn update_password(&self, player_uuid: &Uuid, new_password: String) -> Response<()>;
 
     async fn update_current_join(&self, player_uuid: &Uuid) -> Response<()>;

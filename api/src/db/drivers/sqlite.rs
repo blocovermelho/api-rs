@@ -1,19 +1,23 @@
 use core::time;
 use std::{fmt::Display, net::Ipv4Addr, path::PathBuf, time::Duration};
 
-use chrono::Utc;
+use chrono::{Timelike, Utc};
 use sqlx::{query_as, sqlite::SqliteConnectOptions, types::Json, Pool, SqlitePool};
 use tracing::error;
-use uuid::Uuid;
+use uuid::{NoContext, Timestamp, Uuid};
 
 use super::err::{base, DriverError, Response};
-use crate::db::{
-    data::{
-        self,
-        result::{PlaytimeEntry, ServerJoin, ServerLeave},
-        Account, Allowlist, BanActor, Blacklist, Connection, SaveData, Server, User, Viewport,
+use crate::{
+    core::types::structs::stub::ProfileStub,
+    db::{
+        data::{
+            self,
+            result::{PlaytimeEntry, ServerJoin, ServerLeave},
+            Account, Allowlist, BanActor, Blacklist, Connection, Profile, SaveData, Server, User,
+            Viewport,
+        },
+        interface::DataSource,
     },
-    interface::DataSource,
 };
 
 #[derive(Debug)]
@@ -200,6 +204,77 @@ impl DataSource for Sqlite {
             .fetch_all(&self.0)
             .await;
         map_or_log(query, DriverError::Unreachable)
+    }
+
+    /// Creates a new [`Profile`]
+    ///
+    /// Returns [`DriverError::DuplicateKeyInsertion`] if an profile with the provided username already exists.
+    async fn create_profile(
+        &self, stub: ProfileStub, when: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Response<Profile> {
+        let time = when.unwrap_or_else(Utc::now);
+        let id = Uuid::new_v7(Timestamp::from_unix(
+            NoContext,
+            time.timestamp().try_into().unwrap_or_default(),
+            time.nanosecond(),
+        ));
+
+        let query = sqlx::query_as::<_, Profile>("INSERT INTO profiles (uuid, username, discord_id, password) VALUES ($1, $2, $3, $4) RETURNING *")
+            .bind(id)
+            .bind(stub.username)
+            .bind(stub.discord_id)
+            .bind(stub.password)
+            .fetch_one(&self.0)
+            .await;
+
+        map_or_log(query, DriverError::DuplicateKeyInsertion)
+    }
+
+    /// Gets an [`Profile`] based on its name
+    ///
+    /// **Note:** This is the *prefered* way to get an profile.
+    /// Getting a profile based on its uuid is still available for convenience.
+    ///
+    /// The workflow now involves asking the server for a profile based on its username and
+    /// keeping the returned Profile's uuid for doing changes to it.
+    ///
+    /// **WARNING:** UUIDS are no longer derived on the username as they once were before.
+    ///
+    /// Returns an [`base::NotFoundError::Profile`] if an profile with the given username can't be found.
+    async fn get_profile(&self, username: String) -> Response<Profile> {
+        let query = sqlx::query_as::<_, Profile>("SELECT * FROM profiles WHERE username = ?")
+            .bind(username.clone())
+            .fetch_one(&self.0)
+            .await;
+
+        map_or_log(query, DriverError::DatabaseError(base::NotFoundError::Profile(username)))
+    }
+
+    /// Gets an [`Profile`] based on its id
+    ///
+    /// **WARNING:** UUIDS are no longer derived on the username as they once were before.
+    ///
+    /// Returns an [`base::NotFoundError::User`] if an profile with the given uuid can't be found.
+    async fn get_profile_by_id(&self, profile_uuid: &Uuid) -> Response<Profile> {
+        let query = sqlx::query_as::<_, Profile>("SELECT * FROM profiles WHERE uuid = ?")
+            .bind(profile_uuid)
+            .fetch_one(&self.0)
+            .await;
+
+        map_or_log(query, DriverError::DatabaseError(base::NotFoundError::User(*profile_uuid)))
+    }
+
+    /// Deletes an [`Profile`] based on its id
+    ///
+    /// **WARNING:** UUIDS are no longer derived on the username as they once were before.
+    ///
+    /// Returns an [`base::NotFoundError::User`] if an profile with the given uuid can't be found.
+    async fn delete_profile(&self, profile_uuid: &Uuid) -> Response<Profile> {
+        let query = sqlx::query_as::<_, Profile>("DELETE FROM profiles WHERE uuid = ? RETURNING *")
+            .bind(profile_uuid)
+            .fetch_one(&self.0)
+            .await;
+        map_or_log(query, DriverError::DatabaseError(base::NotFoundError::User(*profile_uuid)))
     }
 
     /// Updates an [`Account`]'s password..

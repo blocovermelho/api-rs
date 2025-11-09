@@ -19,14 +19,17 @@ use sqlx::types::Json;
 use uuid::Uuid;
 
 use super::err::Response;
-use crate::db::{
-    data::{
-        result::{self, PlaytimeEntry},
-        stub, Account, Allowlist, BanActor, Blacklist, Connection, Loc, Modpack, Pronoun, SaveData,
-        Server, User, Viewport,
+use crate::{
+    core::types::structs::stub::ProfileStub,
+    db::{
+        data::{
+            result::{self, PlaytimeEntry},
+            stub, Account, Allowlist, BanActor, Blacklist, Connection, Loc, Modpack, Profile,
+            Pronoun, SaveData, Server, User, Viewport,
+        },
+        drivers::err::{base::NotFoundError, DriverError},
+        interface::DataSource,
     },
-    drivers::err::{base::NotFoundError, DriverError},
-    interface::DataSource,
 };
 
 /// This driver is read-only. Most functions will be unimplemented. This is here to migrate data and nothing else.
@@ -133,6 +136,24 @@ impl DataSource for JsonDriver {
 
     async fn get_all_accounts(&self) -> Response<Vec<Uuid>> {
         Ok(self.0.accounts.keys().copied().collect())
+    }
+
+    async fn create_profile(
+        &self, stub: ProfileStub, when: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Response<Profile> {
+        unimplemented!();
+    }
+
+    async fn get_profile(&self, username: String) -> Response<Profile> {
+        unimplemented!();
+    }
+
+    async fn get_profile_by_id(&self, profile_uuid: &Uuid) -> Response<Profile> {
+        unimplemented!();
+    }
+
+    async fn delete_profile(&self, profile_uuid: &Uuid) -> Response<Profile> {
+        unimplemented!();
     }
 
     async fn get_allowlists(&self, player_uuid: &Uuid) -> Response<Vec<Allowlist>> {
