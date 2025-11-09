@@ -128,6 +128,8 @@ pub enum ConnectionConversionError {
     UnknownIssuer,
     #[error("The Mojang UUID for this account is invalid.")]
     InvalidMojangUUIDError,
+    #[error("The data for this bedrock account is invalid.")]
+    InvalidBedrockDataError,
 }
 
 #[async_trait::async_trait]
