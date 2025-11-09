@@ -138,10 +138,6 @@ impl<D: DataSource> TryIngest<dbd::Connection, D> for Connection {
     }
 }
 
-pub enum ConnectionTypeConversionError {
-    UnknownConnectionType,
-}
-
 impl TryFrom<(String, String)> for ConnectionData {
     type Error = ConnectionConversionError;
 
