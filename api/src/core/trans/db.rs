@@ -157,18 +157,22 @@ impl<D: DataSource> TryIngest<dbd::Connection, D> for Connection {
 impl TryFrom<(String, String)> for ConnectionData {
     type Error = ConnectionConversionError;
 
-    fn try_from(value: (String, String)) -> Result<Self, Self::Error> {
-        match value.0.as_str() {
-            "bv:bedrock_link" => Ok(Self::BedrockUsername(value.1.trim().to_owned())),
-            "bv:mojang_uuid" => {
-                if let Ok(uuid) = value.1.parse() {
-                    Ok(Self::MojangUuid(uuid))
-                } else {
-                    Err(ConnectionConversionError::InvalidMojangUUIDError)
-                }
+    fn try_from((kind, data): (String, String)) -> Result<Self, Self::Error> {
+        match kind.as_str() {
+            connection_ids::BEDROCK_ACCOUNT => {
+                let decoded: connection_types::BedrockLink = serde_json::from_str(&data)
+                    .map_err(|_| ConnectionConversionError::InvalidBedrockDataError)?;
+
+                Ok(Self::BedrockUsername { name: decoded.name, xuid: decoded.xuid })
             }
-            "bv:playtime" => {
-                if let Ok(parse) = serde_json::de::from_str(&value.1) {
+            connection_ids::MOJANG_UUID => {
+                let decoded: connection_types::MojangLink = serde_json::from_str(&data)
+                    .map_err(|_| ConnectionConversionError::InvalidMojangUUIDError)?;
+
+                Ok(Self::MojangUuid { name: decoded.name, id: decoded.id })
+            }
+            connection_ids::PLAYTIME => {
+                if let Ok(parse) = serde_json::de::from_str(&data) {
                     Ok(Self::Playtime(parse))
                 } else {
                     Ok(Self::Playtime(HashMap::new()))
@@ -179,13 +183,20 @@ impl TryFrom<(String, String)> for ConnectionData {
     }
 }
 
+#[allow(clippy::fallible_impl_from)]
 impl From<Connection> for dbd::Connection {
     fn from(value: Connection) -> Self {
         let (kind, data) = match value.extra {
-            ConnectionData::BedrockUsername(username) => ("bv:bedrock_link", username),
-            ConnectionData::MojangUuid(uuid) => ("bv:mojang_uuid", uuid.into()),
+            ConnectionData::BedrockUsername { name, xuid } => {
+                let helper = connection_types::BedrockLink { name, xuid };
+                (connection_ids::BEDROCK_ACCOUNT, serde_json::ser::to_string(&helper).unwrap())
+            }
+            ConnectionData::MojangUuid { name, id } => {
+                let helper = connection_types::MojangLink { name, id };
+                (connection_ids::MOJANG_UUID, serde_json::to_string(&helper).unwrap())
+            }
             ConnectionData::Playtime(map) => (
-                "bv:playtime",
+                connection_ids::PLAYTIME,
                 serde_json::ser::to_string(&map).unwrap_or_else(|_| String::from("{}")),
             ),
         };

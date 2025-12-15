@@ -54,8 +54,8 @@ pub enum Heuristic {
 
 #[derive(Debug, Clone, Serialize)]
 pub enum ConnectionData {
-    BedrockUsername(String),
-    MojangUuid(uuid::Uuid),
+    BedrockUsername { name: String, xuid: Option<u64> },
+    MojangUuid { name: String, id: uuid::Uuid },
     Playtime(HashMap<uuid::Uuid, Duration>),
 }
 
