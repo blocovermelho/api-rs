@@ -782,4 +782,8 @@ impl MailboxActorHandle {
         let (tx, rx) = mpsc::unbounded_channel();
         (Self { queue: tx }, rx)
     }
+
+    pub fn as_weak(&self) -> WeakUnboundedSender<MailboxCommand> {
+        self.queue.downgrade()
+    }
 }
