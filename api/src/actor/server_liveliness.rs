@@ -80,6 +80,8 @@ impl ServerLivelinessA {
         self.last_seen = Utc::now();
         self.visitors = visitors.into_iter().collect();
 
+        self.profiles.clear();
+
         for prof in profiles {
             match prof {
                 SessionState::Visitor => continue,
