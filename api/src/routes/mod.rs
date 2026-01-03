@@ -35,7 +35,10 @@ pub fn check_scopes(token: &Token, scopes: &[&'static str]) -> bool {
 }
 
 pub mod query_params {
-    use std::net::Ipv4Addr;
+    use std::{
+        net::Ipv4Addr,
+        num::{NonZeroU128, NonZeroU64},
+    };
 
     use serde::Deserialize;
 
@@ -76,6 +79,11 @@ pub mod query_params {
     pub struct IdQuery {
         pub id: uuid::Uuid,
     }
+    #[derive(Deserialize)]
+    pub struct SnowflakeQuery {
+        pub id: NonZeroU64,
+    }
+
     #[derive(Deserialize)]
     pub struct PasswordChange {
         pub old: String,
@@ -201,6 +209,6 @@ pub mod results {
     #[serde(tag = "kind", rename_all = "snake_case")]
     pub enum CreateProfile {
         UsernameExists,
-        Created { id: Uuid } ,
+        Created { id: Uuid },
     }
 }

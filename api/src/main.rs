@@ -176,6 +176,7 @@ async fn main() {
 
     let profile = Router::new()
         .route("/", get(routes::profile::get_profile))
+        .route("/resolve_discord", get(routes::profile::resolve_discord))
         .route("/resolve_mojang", get(routes::profile::resolve_mojang))
         .route("/resolve_bedrock", get(routes::profile::resolve_bedrock))
         .route("/:username", post(routes::profile::create_profile))

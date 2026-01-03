@@ -70,6 +70,26 @@ pub async fn get_profile(
     Ok(Json(hydrate_profile_id(&db, profile).await))
 }
 
+///  [GET] /api/profile/resolve_discord?id=<snowflake>
+pub async fn resolve_discord(
+    State(state): State<Arc<AuthServer>>, Query(query): Query<query_params::SnowflakeQuery>,
+) -> JsonResult<Vec<results::Profile>, String> {
+    let db = state.db.clone();
+    let dbd = db
+        .get_profiles_by_discord_id(query.id.to_string())
+        .await
+        .unwrap_or_default();
+
+    let mut profiles = vec![];
+
+    for data in dbd {
+        let head = hydrate_profile_id(&db, data).await;
+        profiles.push(head);
+    }
+
+    Ok(Json(profiles))
+}
+
 /// [GET] /api/profile/resolve_mojang?username=<name>
 pub async fn resolve_mojang(
     State(state): State<Arc<AuthServer>>, AuthorizedServer(token, _server): AuthorizedServer,
