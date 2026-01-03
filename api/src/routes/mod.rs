@@ -200,6 +200,6 @@ pub mod results {
     #[serde(tag = "kind", rename_all = "snake_case")]
     pub enum CreateProfile {
         UsernameExists,
-        Created(Uuid),
+        Created { id: Uuid } ,
     }
 }

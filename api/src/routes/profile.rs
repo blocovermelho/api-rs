@@ -412,7 +412,7 @@ pub async fn create_profile(
         )
         .await
     {
-        let res = results::CreateProfile::Created(profile.uuid);
+        let res = results::CreateProfile::Created { id: profile.uuid };
         state
             .mailbox
             .session_profile_update(username, profile.into());
