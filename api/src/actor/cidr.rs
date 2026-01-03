@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use super::prelude::*;
 use crate::{
+    actor::mailbox::MailboxActorHandle,
     core::{types::enums::Heuristic, utils::cidr},
     db::{
         data::{Allowlist, BanIssuer, Blacklist},
@@ -269,4 +270,47 @@ pub enum CidrCommand {
         is_active: bool,
         tx: RespCell<CidrResolution>,
     },
+}
+
+// Test Coverage for the CIDR actor.
+
+#[test]
+fn heuristic_check() {
+    let (db_hnd, db_rx) = DatabaseActorHandle::mock();
+    let (mbox_hnd, mbox_rx) = MailboxActorHandle::mock();
+    let localhost = Ipv4Addr::new(127, 0, 0, 1);
+    let mut state = CidrA {
+        recent_attempts: HashMap::new(),
+        database_hnd: db_hnd,
+        mailbox_hnd: mbox_hnd.as_weak(),
+    };
+
+    // Login while the player is active
+    let logged_kick = state.heuristic_check(localhost, "alikindsys".into(), Uuid::new_v4(), true);
+    assert!(matches!(logged_kick, Some(Heuristic::LoggedKickAttempt { .. })));
+    state.recent_attempts.clear();
+    // Multiple logins on different players.
+    // Distinct Usernames > 2, Attempts >= 5.
+    state.recent_attempts.insert(localhost, vec![
+        Attempt {
+            timestamp: Utc::now(),
+            username: "alikindsys".into(),
+        },
+        Attempt { timestamp: Utc::now(), username: "roridev".into() },
+        Attempt {
+            timestamp: Utc::now(),
+            username: "ONickRamos".into(),
+        },
+        Attempt {
+            timestamp: Utc::now(),
+            username: "SofiAzeda".into(),
+        },
+    ]);
+    // Spammed Attempt
+    let spammed = state.heuristic_check(localhost, "alikindsys".into(), Uuid::new_v4(), false);
+    assert!(matches!(spammed, Some(Heuristic::SpammedAttempt { .. })));
+    state.recent_attempts.clear();
+
+    let good_path = state.heuristic_check(localhost, "alikindsys".into(), Uuid::new_v4(), false);
+    assert!(good_path.is_none());
 }
