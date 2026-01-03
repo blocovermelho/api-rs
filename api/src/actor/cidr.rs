@@ -111,10 +111,7 @@ impl CidrA {
         let entry = self.recent_attempts.entry(ip).or_default();
         entry.push(Attempt { timestamp: Utc::now(), username: username.clone() });
 
-        if let Some(heuristic) = self
-            .heuristic_check(ip, username.clone(), server, is_active)
-            .await
-        {
+        if let Some(heuristic) = self.heuristic_check(ip, username.clone(), server, is_active) {
             let message = match &heuristic {
                 Heuristic::SpammedAttempt { count, usernames } => format!(
                     "[Cidr:SpammedAttempt] Blocked after {} attempts affecting {} users.",
@@ -161,7 +158,7 @@ impl CidrA {
         CidrResolution::UnknownIp
     }
 
-    async fn heuristic_check(
+    fn heuristic_check(
         &mut self, ip: Ipv4Addr, username: String, server: Uuid, is_active: bool,
     ) -> Option<Heuristic> {
         trace!(
