@@ -1,6 +1,6 @@
 #![feature(duration_constructors)]
 
-use std::{fs, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::{fs, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration, env};
 
 use actor::mailbox::{MailboxActor, MailboxActorHandle};
 use axum::{
@@ -95,9 +95,11 @@ async fn main() {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    let db_path = PathBuf::from("data.db");
-    let old_data = PathBuf::from("data.json");
-    let config_path = PathBuf::from("config.json");
+    let base_path = env::var("BASE_PATH").unwrap_or(".".to_string());
+
+    let db_path = PathBuf::from(format!("{}/data.db", base_path));
+    let old_data = PathBuf::from(format!("{}/data.json", base_path));
+    let config_path = PathBuf::from(format!("{}/config.json", base_path));
 
     let db = if old_data.exists() {
         // We will migrate the data then move it to data.json.old
