@@ -7,7 +7,7 @@ use std::{collections::HashMap, net::Ipv4Addr, sync::Arc};
 use axum::extract::ws::CloseFrame;
 use axum_typed_websockets::WebSocket;
 use serenity::{
-    all::{ChannelId, GuildId, Member, MessageId, RoleId, UserId},
+    all::{ChannelId, GuildId, Member, MessageId, PartialGuild, RoleId, UserId},
     model::guild,
 };
 use uuid::Uuid;
@@ -228,6 +228,10 @@ impl Mailbox {
         } else {
             Err(DiscordMemberFetchError::UnknownUsername)
         }
+    }
+
+    pub async fn get_discord_guild(&self, guild_id: GuildId) -> Option<PartialGuild> {
+        self.discord.get_guild(guild_id).await
     }
 
     pub async fn notify_unknown_ip(&mut self, ip: Ipv4Addr, username: String, server: Uuid) {
@@ -461,6 +465,7 @@ pub enum MailboxCommand {
     /* Actually checking Ip Addresses */
     CheckIp(Ipv4Addr, String, Uuid, RespCell<CidrResolution>),
     GetDiscordMember(String, GuildId, RespCell<Result<Member, DiscordMemberFetchError>>),
+    GetDiscordGuild(GuildId, RespCell<Option<PartialGuild>>),
 
     /* Single-use tokens */
     GetProfileOTP(Uuid, RespCell<String>),
@@ -584,6 +589,10 @@ impl MailboxActor {
                     let k = self.state.get_discord_member(username, guild_id).await;
                     let _ = res.send(k);
                 }
+                MailboxCommand::GetDiscordGuild(guild_id, res) => {
+                    let k = self.state.get_discord_guild(guild_id).await;
+                    let _ = res.send(k);
+                }
                 MailboxCommand::NotifyUnknownIp { ip, username, server } => {
                     self.state.notify_unknown_ip(ip, username, server).await;
                 }
@@ -704,6 +713,10 @@ impl MailboxActorHandle {
         &self, username: String, guild_id: GuildId,
     ) -> Result<Member, DiscordMemberFetchError> {
         ask_actor!(self.queue, MailboxCommand::GetDiscordMember(username, guild_id));
+    }
+
+    pub async fn get_discord_guild(&self, guild_id: GuildId) -> Option<PartialGuild> {
+        ask_actor!(self.queue, MailboxCommand::GetDiscordGuild(guild_id));
     }
 
     pub fn btn_ip_clicked_allow(

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use serenity::all::{
     ChannelId, CreateInteractionResponseFollowup, CreateMessage, EditMessage, GuildId,
-    InteractionId, Member, Message, MessageId, RoleId, UserId,
+    InteractionId, Member, Message, MessageId, PartialGuild, RoleId, UserId,
 };
 
 use super::prelude::*;
@@ -57,6 +57,10 @@ impl DiscordA {
         self.0.http.get_member(guild_id, user_id).await.ok()
     }
 
+    pub async fn get_guild(&self, guild_id: GuildId) -> Option<PartialGuild> {
+        self.0.http.get_guild(guild_id).await.ok()
+    }
+
     pub async fn grant_role(&self, user_id: UserId, guild_id: GuildId, role_id: RoleId) {
         if let Ok(m) = self.0.http.get_member(guild_id, user_id).await {
             let _ = m.add_role(&self.0.http, role_id).await;
@@ -86,6 +90,7 @@ pub enum DiscordCommand {
     EditMessage(ChannelId, MessageId, EditMessage, RespCell<Option<Message>>),
     GetDmChannel(UserId, RespCell<Option<ChannelId>>),
     GetMember(UserId, GuildId, RespCell<Option<Member>>),
+    GetGuild(GuildId, RespCell<Option<PartialGuild>>),
     GrantRole(UserId, GuildId, RoleId),
     RevokeRole(UserId, GuildId, RoleId),
     CreateInteractionFollowup(InteractionId, String, CreateInteractionResponseFollowup),
@@ -131,6 +136,10 @@ impl DiscordActor {
                     let k = self.state.get_member(user_id, guild_id).await;
                     let _ = res.send(k);
                 }
+                DiscordCommand::GetGuild(guild_id, res) => {
+                    let k = self.state.get_guild(guild_id).await;
+                    let _ = res.send(k);
+                }
                 DiscordCommand::GrantRole(u, g, r) => {
                     self.state.grant_role(u, g, r).await;
                 }
@@ -170,6 +179,10 @@ impl DiscordActorHandle {
 
     pub async fn get_member(&self, user_id: UserId, guild_id: GuildId) -> Option<Member> {
         ask_actor!(self.queue, DiscordCommand::GetMember(user_id, guild_id));
+    }
+
+    pub async fn get_guild(&self, guild_id: GuildId) -> Option<PartialGuild> {
+        ask_actor!(self.queue, DiscordCommand::GetGuild(guild_id));
     }
 
     pub fn grant_role(&self, user_id: UserId, guild_id: GuildId, role_id: RoleId) {
