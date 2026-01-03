@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 use oauth2::AuthorizationCode;
-use serenity::all::Colour;
+use serenity::all::{CacheHttp, Colour, GuildId, Role};
 
 use super::{query_params, JsonResult};
 use crate::{
@@ -49,12 +49,32 @@ pub async fn link(
             )
         })?;
 
+    let guild = state
+        .mailbox
+        .get_discord_guild(state.config.guild_id.parse().unwrap())
+        .await;
+
     let response =
         match oauth::routes::get_guild(&state.clients.reqwest, &token, &state.config).await {
             Ok(member) => {
-                let cache = &state.clients.serenity.cache;
-                let guild = cache.guild(member.guild_id).unwrap();
-                let role = guild.member_highest_role(&member);
+                let role = if let Some(h_guild) = guild {
+                    let mut roles = h_guild.roles;
+                    roles.retain(|k, _| member.roles.contains(k));
+                    let mut highest: Option<Role> = None;
+                    for role in roles.values() {
+                        if let Some(ref highest) = highest {
+                            if role.position < highest.position ||
+                                (role.position == highest.position && role.id > highest.id)
+                            {
+                                continue;
+                            }
+                        }
+                        highest = Some(role.clone());
+                    }
+                    highest
+                } else {
+                    None
+                };
 
                 DiscordLink {
                     username,
@@ -64,8 +84,8 @@ pub async fn link(
                     member_since: member.joined_at.map(|it| it.to_utc()),
                     extras: Some(DiscordExtras {
                         nickname: member.nick,
-                        role_color: role.map(|it| it.colour.hex()),
-                        role_name: role.map(|it| it.name.clone()),
+                        role_color: role.as_ref().map(|it| it.colour.hex()),
+                        role_name: role.as_ref().map(|it| it.name.clone()),
                     }),
                 }
             }

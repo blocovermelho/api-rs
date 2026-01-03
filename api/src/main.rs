@@ -1,6 +1,6 @@
 #![feature(duration_constructors)]
 
-use std::{fs, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration, env};
+use std::{env, fs, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 use actor::mailbox::{MailboxActor, MailboxActorHandle};
 use axum::{
