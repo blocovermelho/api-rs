@@ -167,6 +167,7 @@ pub mod results {
         AllowedIp,
         BannedIp,
         BlockedIp,
+        NotInGuild,
     }
 
     #[derive(Serialize)]

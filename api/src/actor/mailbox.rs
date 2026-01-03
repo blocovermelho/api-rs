@@ -6,7 +6,10 @@ use std::{collections::HashMap, net::Ipv4Addr, sync::Arc};
 
 use axum::extract::ws::CloseFrame;
 use axum_typed_websockets::WebSocket;
-use serenity::all::{ChannelId, GuildId, MessageId, RoleId, UserId};
+use serenity::{
+    all::{ChannelId, GuildId, Member, MessageId, RoleId, UserId},
+    model::guild,
+};
 use uuid::Uuid;
 
 use super::{
@@ -30,7 +33,10 @@ use crate::{
             DiscordLink, IncomingMessage, OutgoingMessage, WebsocketActor, WebsocketActorHandle,
         },
     },
-    core::types::{enums::Heuristic, structs::Profile},
+    core::types::{
+        enums::{DiscordMemberFetchError, Heuristic},
+        structs::Profile,
+    },
     db::drivers::sqlite::Sqlite,
 };
 
@@ -206,6 +212,24 @@ impl Mailbox {
         self.cidr.check(ip, username, server_id, is_active).await
     }
 
+    pub async fn get_discord_member(
+        &self, username: String, guild_id: GuildId,
+    ) -> Result<Member, DiscordMemberFetchError> {
+        if let Some(profile) = self.database.get_profile(username).await {
+            if let Some(member) = self
+                .discord
+                .get_member(profile.discord_id.parse().unwrap(), guild_id)
+                .await
+            {
+                Ok(member)
+            } else {
+                Err(DiscordMemberFetchError::NotInGuild)
+            }
+        } else {
+            Err(DiscordMemberFetchError::UnknownUsername)
+        }
+    }
+
     pub async fn notify_unknown_ip(&mut self, ip: Ipv4Addr, username: String, server: Uuid) {
         let profile = self
             .database
@@ -234,7 +258,14 @@ impl Mailbox {
             }
         };
 
-        hnd.notify_new_user(profile, server_name);
+        if self
+            .discord
+            .get_member(profile.discord_id.parse().unwrap(), self.guild_id)
+            .await
+            .is_some()
+        {
+            hnd.notify_new_user(profile, server_name);
+        }
     }
 
     pub fn notify_heuristic(&mut self, ip: Ipv4Addr, heuristic: Heuristic) {
@@ -429,6 +460,7 @@ pub enum MailboxCommand {
 
     /* Actually checking Ip Addresses */
     CheckIp(Ipv4Addr, String, Uuid, RespCell<CidrResolution>),
+    GetDiscordMember(String, GuildId, RespCell<Result<Member, DiscordMemberFetchError>>),
 
     /* Single-use tokens */
     GetProfileOTP(Uuid, RespCell<String>),
@@ -548,6 +580,10 @@ impl MailboxActor {
                     let k = self.state.check_ip(ip, u, s).await;
                     let _ = res.send(k);
                 }
+                MailboxCommand::GetDiscordMember(username, guild_id, res) => {
+                    let k = self.state.get_discord_member(username, guild_id).await;
+                    let _ = res.send(k);
+                }
                 MailboxCommand::NotifyUnknownIp { ip, username, server } => {
                     self.state.notify_unknown_ip(ip, username, server).await;
                 }
@@ -662,6 +698,12 @@ impl MailboxActorHandle {
 
     pub async fn check_ip(&self, ip: Ipv4Addr, username: String, server: Uuid) -> CidrResolution {
         ask_actor!(self.queue, MailboxCommand::CheckIp(ip, username, server));
+    }
+
+    pub async fn get_discord_member(
+        &self, username: String, guild_id: GuildId,
+    ) -> Result<Member, DiscordMemberFetchError> {
+        ask_actor!(self.queue, MailboxCommand::GetDiscordMember(username, guild_id));
     }
 
     pub fn btn_ip_clicked_allow(

@@ -109,3 +109,8 @@ pub enum NewIpUserReply {
     AllowIP { message_id: String },
     DenyIP { message_id: String },
 }
+
+pub enum DiscordMemberFetchError {
+    UnknownUsername,
+    NotInGuild,
+}

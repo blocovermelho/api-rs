@@ -25,6 +25,7 @@ use crate::{
 struct NewConnectionA {
     ip: Ipv4Addr,
     fallback_channel: ChannelId,
+    fallback_guild: GuildId,
     // Note: This is correct since users should only have *one* notification per IP address
     // Map from Username -> IpNotifHandle
     handles: HashMap<String, IpNotifActorHandle>,
@@ -223,6 +224,7 @@ impl NewConnectionActor {
             state: NewConnectionA {
                 ip,
                 fallback_channel,
+                fallback_guild,
                 handles: HashMap::new(),
                 message_ids: BiHashMap::new(),
                 discord_hnd: discord,

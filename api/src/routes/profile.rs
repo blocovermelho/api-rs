@@ -21,7 +21,7 @@ use crate::{
             },
             connection_ids::{BEDROCK_ACCOUNT, MOJANG_UUID},
         },
-        enums::ConnectionData,
+        enums::{ConnectionData, DiscordMemberFetchError},
         structs::{stub::ProfileStub, Connection},
     },
     db::{data::Profile, drivers::sqlite::Sqlite, interface::DataSource},
@@ -324,13 +324,26 @@ pub async fn login(
 ) -> JsonResult<results::Login, String> {
     scopes!(token, [PROFILE_READ, SERVER_SELF_MODIFY]);
 
+    let member = state
+        .mailbox
+        .get_discord_member(username.clone(), state.config.guild_id.parse().unwrap())
+        .await;
+
     match state
         .mailbox
         .check_ip(query.ip, username.clone(), server.uuid)
         .await
     {
         crate::actor::cidr::CidrResolution::AllowedIp(_) => Ok(Json(results::Login::AllowedIp)),
-        crate::actor::cidr::CidrResolution::UnknownIp => Ok(Json(results::Login::NewIp)),
+        crate::actor::cidr::CidrResolution::UnknownIp => {
+            if let Err(k) = member {
+                return match k {
+                    DiscordMemberFetchError::UnknownUsername => Ok(Json(results::Login::NewIp)),
+                    DiscordMemberFetchError::NotInGuild => Ok(Json(results::Login::NotInGuild)),
+                };
+            }
+            Ok(Json(results::Login::NewIp))
+        }
         crate::actor::cidr::CidrResolution::BannedIp(_) => Ok(Json(results::Login::BannedIp)),
         crate::actor::cidr::CidrResolution::BlockedWithHeuristic(_) => {
             Ok(Json(results::Login::BlockedIp))
