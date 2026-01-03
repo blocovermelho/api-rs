@@ -37,6 +37,7 @@
       ];
 
       packages = with pkgs; [
+        cargo-nextest cargo-llvm-cov
       ];
 
       # Inputs needed at compile-time
