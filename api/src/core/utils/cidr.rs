@@ -3,6 +3,7 @@ use std::net::Ipv4Addr;
 use ipnet::Ipv4Net;
 use iprange::IpNet;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrefixLenMatch {
     Contains(u8),
     Grows { prev: u8, current: u8 },

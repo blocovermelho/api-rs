@@ -1,6 +1,7 @@
 use std::net::Ipv4Addr;
 
 use ipnet::Ipv4Net;
+use iprange::IpNet;
 use quickcheck::Arbitrary;
 use quickcheck_macros::quickcheck;
 
@@ -39,4 +40,26 @@ fn prop_simplify_respects_bound(cluster: ClusteredIpv4Nets) -> bool {
     };
 
     outnets.iter().all(|n| n.prefix_len() >= MIN_COMMON_PREFIX)
+}
+
+#[quickcheck]
+fn contains_ip(ip: Ipv4Addr, prefix_len: u8) -> bool {
+    let prefix_len = prefix_len % 33;
+    let net = Ipv4Net::new(ip, prefix_len).unwrap();
+    match_prefix(&net, &ip) == PrefixLenMatch::Contains(prefix_len)
+}
+
+#[test]
+fn grows_ip() {
+    let net = Ipv4Net::new(Ipv4Addr::new(192, 168, 1, 0), 24).unwrap();
+    let ip = Ipv4Addr::new(192, 168, 2, 42);
+    let result = match_prefix(&net, &ip);
+    assert_eq!(result, PrefixLenMatch::Grows { prev: 24, current: 22 });
+}
+#[test]
+fn non_overlapping_ip() {
+    let net = Ipv4Net::new(Ipv4Addr::new(10, 0, 0, 0), 24).unwrap();
+    let ip = Ipv4Addr::new(192, 168, 1, 42);
+    let result = match_prefix(&net, &ip);
+    assert_eq!(result, PrefixLenMatch::NonOverlappingWithinBound { bound: MIN_COMMON_PREFIX });
 }
