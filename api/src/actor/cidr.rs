@@ -257,6 +257,11 @@ impl CidrActorHandle {
     ) -> CidrResolution {
         ask_actor!(self.queue, CidrCommand::Check { ip, username, server, is_active });
     }
+
+    pub fn mock() -> (Self, mpsc::UnboundedReceiver<CidrCommand>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self { queue: tx }, rx)
+    }
 }
 
 pub enum CidrCommand {

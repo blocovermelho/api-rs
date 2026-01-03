@@ -777,4 +777,9 @@ impl MailboxActorHandle {
     pub fn ws_send_discord_link(&self, link: DiscordLink) {
         notify_actor!(self.queue, MailboxCommand::WsSendDiscordLink(link));
     }
+
+    pub fn mock() -> (Self, mpsc::UnboundedReceiver<MailboxCommand>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self { queue: tx }, rx)
+    }
 }

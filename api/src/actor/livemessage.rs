@@ -131,4 +131,9 @@ impl LiveMessageActorHandle {
     pub fn edit_instantly(&self, change: EditMessage) {
         notify_actor!(self.queue, LiveMessageCommand::EditInstantly(change));
     }
+
+    pub fn mock() -> (Self, mpsc::UnboundedReceiver<LiveMessageCommand>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self { queue: tx }, rx)
+    }
 }

@@ -450,6 +450,11 @@ impl DatabaseActorHandle {
     pub async fn close(self) {
         drop(self.queue);
     }
+
+    pub fn mock() -> (Self, mpsc::UnboundedReceiver<DatabaseCommand>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self { queue: tx }, rx)
+    }
 }
 
 /*

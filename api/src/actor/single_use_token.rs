@@ -152,4 +152,9 @@ impl SingleUseTokenActorHandle {
     pub fn clear(&self, otp: String) {
         notify_actor!(self.queue, SingleUseTokenCommand::Clear(otp));
     }
+
+    pub fn mock() -> (Self, mpsc::UnboundedReceiver<SingleUseTokenCommand>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self { queue: tx }, rx)
+    }
 }

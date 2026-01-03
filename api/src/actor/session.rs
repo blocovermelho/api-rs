@@ -314,4 +314,9 @@ impl SessionActorHandle {
     pub async fn check_activity(&self, server_uuid: Uuid) -> bool {
         ask_actor!(self.queue, SessionCommand::CheckActivity(server_uuid));
     }
+
+    pub fn mock() -> (Self, mpsc::UnboundedReceiver<SessionCommand>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self { queue: tx }, rx)
+    }
 }

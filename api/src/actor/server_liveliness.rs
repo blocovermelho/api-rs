@@ -351,4 +351,9 @@ impl ServerLivelinessActorHandle {
     pub fn poll(&self) {
         notify_actor!(self.queue, ServerLivelinessCommand::Poll);
     }
+
+    pub fn mock() -> (Self, mpsc::UnboundedReceiver<ServerLivelinessCommand>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self { queue: tx }, rx)
+    }
 }

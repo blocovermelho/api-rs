@@ -185,4 +185,9 @@ impl DiscordActorHandle {
     ) {
         notify_actor!(self.queue, DiscordCommand::CreateInteractionFollowup(id, token, followup));
     }
+
+    pub fn mock() -> (Self, mpsc::UnboundedReceiver<DiscordCommand>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self { queue: tx }, rx)
+    }
 }

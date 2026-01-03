@@ -314,6 +314,11 @@ impl NewConnectionActorHandle {
     pub fn cleanup_handle(&self, username: String) {
         notify_actor!(self.queue, NewConnectionCommand::CleanupHandle(username));
     }
+
+    pub fn mock() -> (Self, mpsc::UnboundedReceiver<NewConnectionCommand>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self { queue: tx }, rx)
+    }
 }
 
 pub struct InteractionHolder(pub InteractionId, pub String);

@@ -186,4 +186,9 @@ impl PlaytimeActorHandle {
     pub fn promote(&self, profile_id: Uuid) {
         notify_actor!(self.queue, PlaytimeCommand::Promote(profile_id));
     }
+
+    pub fn mock() -> (Self, mpsc::UnboundedReceiver<PlaytimeCommand>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self { queue: tx }, rx)
+    }
 }

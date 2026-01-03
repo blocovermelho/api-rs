@@ -369,4 +369,9 @@ impl IpNotifActorHandle {
     pub fn heuristic_solve(&self, heuristic: Heuristic) {
         notify_actor!(self.queue, IpNotifCommand::HeuristicSolve(heuristic));
     }
+
+    pub fn mock() -> (Self, mpsc::UnboundedReceiver<IpNotifCommand>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self { queue: tx }, rx)
+    }
 }

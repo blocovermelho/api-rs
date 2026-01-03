@@ -94,6 +94,11 @@ impl WebsocketActorHandle {
     pub fn close(&self, frame: Option<ws::CloseFrame<'static>>) {
         notify_actor!(self.queue, WebsocketCommand::Close(frame));
     }
+
+    pub fn mock() -> (Self, mpsc::UnboundedReceiver<WebsocketCommand>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self { queue: tx }, rx)
+    }
 }
 
 // Currently Empty, the websocket will be an outgoing firehose for the time being.
