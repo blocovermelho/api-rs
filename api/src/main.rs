@@ -176,7 +176,7 @@ async fn main() {
         .route("/@me", get(routes::game_server::get_self))
         .route("/@me/ws", get(routes::game_server::websocket))
         .route("/@me/heartbeat", post(routes::game_server::keepalive))
-        .route("/@me/versions", get(routes::game_server::update_versions));
+        .route("/@me/versions", post(routes::game_server::update_versions));
 
     let profile = Router::new()
         .route("/", get(routes::profile::get_profile))
@@ -201,7 +201,7 @@ async fn main() {
         .nest("/profile", profile)
         .nest("/link", link)
         .nest("/server", server)
-        .route("/get_version_ranges", get(routes::utils::get_version_ranges))
+        .route("/get_version_ranges", post(routes::utils::get_version_ranges))
         .with_state(auth_server)
         .layer(stack);
 
