@@ -17,6 +17,7 @@ use reqwest::{header, Client};
 use serenity::all::GatewayIntents;
 use tower::ServiceBuilder;
 use tower_http::{timeout::TimeoutLayer, ServiceBuilderExt};
+use tracing::warn;
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
@@ -96,6 +97,8 @@ async fn main() {
         .init();
 
     let base_path = env::var("BASE_PATH").unwrap_or(".".to_string());
+
+    let no_discord = env::var("NO_DISCORD").ok();
 
     let db_path = PathBuf::from(format!("{}/data.db", base_path));
     let old_data = PathBuf::from(format!("{}/data.json", base_path));
@@ -205,8 +208,13 @@ async fn main() {
     let api_listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     // Threads
     let api = axum::serve(api_listener, router);
-    let bot = gateway_client.start();
 
-    // Spawn the threads
-    let _ = tokio::join!(api, bot);
+    if no_discord.is_none() {
+        let bot = gateway_client.start();
+        // Spawn the threads
+        let _ = tokio::join!(api, bot);
+    } else {
+        warn!("Disabling Discord Bot. Only running the API.");
+        let _ = tokio::join!(api);
+    }
 }
