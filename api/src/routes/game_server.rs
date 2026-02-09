@@ -78,3 +78,33 @@ pub async fn get_self(
         staff: profiles,
     }))
 }
+
+/// [PATCH] /api/servers/@me/versions
+pub async fn update_versions(
+    State(state): State<Arc<AuthServer>>, AuthorizedServer(token, server): AuthorizedServer,
+    Json(versions): Json<Vec<String>>,
+) -> JsonResult<super::results::Server, String> {
+    scopes!(token, [SERVER_READ, SERVER_SELF_MODIFY]);
+    let response = state
+        .db
+        .update_server_versions(&server.uuid, versions)
+        .await
+        .unwrap();
+
+    let mut profiles = vec![];
+
+    for staff in response.staff.0 {
+        if let Ok(p) = state.db.get_profile_by_id(&staff).await {
+            profiles.push(hydrate_profile_id(&state.db, p).await);
+        }
+    }
+
+    Ok(Json(results::Server {
+        id: response.uuid,
+        name: response.name,
+        game: response.game,
+        versions: response.versions.0,
+        max_players: response.max_players,
+        staff: profiles,
+    }))
+}

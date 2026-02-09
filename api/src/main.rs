@@ -175,7 +175,8 @@ async fn main() {
     let server = Router::new()
         .route("/@me", get(routes::game_server::get_self))
         .route("/@me/ws", get(routes::game_server::websocket))
-        .route("/@me/heartbeat", post(routes::game_server::keepalive));
+        .route("/@me/heartbeat", post(routes::game_server::keepalive))
+        .route("/@me/versions", get(routes::game_server::update_versions));
 
     let profile = Router::new()
         .route("/", get(routes::profile::get_profile))
