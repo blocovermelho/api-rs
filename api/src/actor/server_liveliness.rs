@@ -124,6 +124,10 @@ impl ServerLivelinessA {
         );
     }
 
+    fn update_versions(&mut self, versions: Vec<String>) {
+        self.versions = versions;
+    }
+
     fn message_from(&self) -> CreateEmbed {
         let (color, footer) = if self.missed_count == 0 {
             (
@@ -218,6 +222,7 @@ pub enum ServerLivelinessCommand {
         motd: Option<String>,
     },
     Poll,
+    UpdateVersions(Vec<String>),
 }
 
 pub struct ServerLivelinessActor {
@@ -309,7 +314,8 @@ impl ServerLivelinessActor {
                                 }
 
                                 self.state.poll().await;
-                            }
+                            },
+                            ServerLivelinessCommand::UpdateVersions(versions) => self.state.update_versions(versions)
                         }
                     },
                     None => {
@@ -350,6 +356,10 @@ impl ServerLivelinessActorHandle {
 
     pub fn poll(&self) {
         notify_actor!(self.queue, ServerLivelinessCommand::Poll);
+    }
+
+    pub fn modify_versions(&self, versions: Vec<String>) {
+        notify_actor!(self.queue, ServerLivelinessCommand::UpdateVersions(versions));
     }
 
     pub fn mock() -> (Self, mpsc::UnboundedReceiver<ServerLivelinessCommand>) {

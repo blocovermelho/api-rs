@@ -4,7 +4,7 @@
 
 use std::{collections::HashMap, net::Ipv4Addr, sync::Arc};
 
-use axum::extract::ws::CloseFrame;
+use axum::{extract::ws::CloseFrame, serve};
 use axum_typed_websockets::WebSocket;
 use serenity::{
     all::{ChannelId, GuildId, Member, MessageId, PartialGuild, RoleId, UserId},
@@ -112,6 +112,13 @@ impl Mailbox {
             debug!("[a:Mailbox] Event:ServerKeepAlive SPAWN ServerLivelinessActor({})", server_id);
             let (profiles, visitors) = self.process_playerlist(players).await;
             handle.keep_alive(visitors, profiles, motd);
+        }
+    }
+
+    pub fn server_update_versions(&mut self, server_id: Uuid, versions: Vec<String>) {
+        if let Some(l_hnd) = self.liveliness.remove(&server_id) {
+            l_hnd.modify_versions(versions);
+            self.liveliness.insert(server_id, l_hnd);
         }
     }
 
@@ -461,6 +468,7 @@ pub enum MailboxCommand {
         players: Vec<String>,
         motd: Option<String>,
     },
+    ServerUpdateVersions(Uuid, Vec<String>),
 
     /* Actually checking Ip Addresses */
     CheckIp(Ipv4Addr, String, Uuid, RespCell<CidrResolution>),
@@ -577,6 +585,9 @@ impl MailboxActor {
                 }
                 MailboxCommand::ServerKeepAlive { id, players, motd } => {
                     self.state.server_keepalive(id, players, motd).await;
+                }
+                MailboxCommand::ServerUpdateVersions(id, versions) => {
+                    self.state.server_update_versions(id, versions)
                 }
                 MailboxCommand::CleanupLiveliness(id) => self.state.cleanup_liveliness(&id),
                 MailboxCommand::CleanupSession(name) => self.state.cleanup_session(&name),
@@ -695,6 +706,10 @@ impl MailboxActorHandle {
 
     pub fn server_keepalive(&self, id: Uuid, players: Vec<String>, motd: Option<String>) {
         notify_actor!(self.queue, MailboxCommand::ServerKeepAlive { id, players, motd });
+    }
+
+    pub fn server_update_versions(&self, id: Uuid, versions: Vec<String>) {
+        notify_actor!(self.queue, MailboxCommand::ServerUpdateVersions(id, versions));
     }
 
     pub fn cleanup_liveliness(&self, id: Uuid) {
