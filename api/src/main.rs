@@ -200,6 +200,7 @@ async fn main() {
         .nest("/profile", profile)
         .nest("/link", link)
         .nest("/server", server)
+        .route("/get_version_ranges", get(routes::utils::get_version_ranges))
         .with_state(auth_server)
         .layer(stack);
 

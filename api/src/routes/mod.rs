@@ -7,6 +7,7 @@ use crate::db::data::Token;
 pub mod discord;
 pub mod game_server;
 pub mod profile;
+pub mod utils;
 
 pub type JsonResult<T, E> = Result<Json<T>, (StatusCode, E)>;
 pub type StringResult<E> = Result<String, (StatusCode, E)>;
