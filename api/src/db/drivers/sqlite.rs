@@ -605,6 +605,20 @@ impl DataSource for Sqlite {
         map_or_log(query, DriverError::Unreachable)
     }
 
+    async fn update_server_versions(
+        &self, server_uuid: &Uuid, versions: Vec<String>,
+    ) -> Response<ServerV2> {
+        let query = sqlx::query_as::<_, ServerV2>(
+            "UPDATE server_v2 SET versions = $1 WHERE uuid = $2 RETURNING *",
+        )
+        .bind(server_uuid)
+        .bind(Json(versions))
+        .fetch_one(&self.0)
+        .await;
+
+        map_or_log(query, DriverError::DatabaseError(base::NotFoundError::Server))
+    }
+
     /// Gets an [`Server`] given its name.
     ///
     /// Returns an [`base::NotFoundError::Server`] wrapped inside a [`DriverError::DatabaseError`] if an server with the given name can't be found.

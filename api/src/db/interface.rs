@@ -84,6 +84,10 @@ pub trait DataSource: Send + Sync {
     async fn get_all_servers_v1(&self) -> Response<Vec<Uuid>>;
     async fn get_all_servers_v2(&self) -> Response<Vec<Uuid>>;
 
+    async fn update_server_versions(
+        &self, server_uuid: &Uuid, versions: Vec<String>,
+    ) -> Response<ServerV2>;
+
     async fn create_token(&self, server_uuid: &Uuid, scopes: Vec<String>) -> Response<String>;
     async fn reset_token(&self, server_uuid: &Uuid) -> Response<String>;
     async fn get_token(&self, token: String) -> Response<Token>;

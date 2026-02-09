@@ -234,6 +234,12 @@ impl DataSource for JsonDriver {
         Ok(vec![])
     }
 
+    async fn update_server_versions(
+        &self, server_uuid: &Uuid, versions: Vec<String>,
+    ) -> Response<ServerV2> {
+        unimplemented!()
+    }
+
     async fn create_token(&self, server_uuid: &Uuid, scopes: Vec<String>) -> Response<String> {
         unimplemented!();
     }
