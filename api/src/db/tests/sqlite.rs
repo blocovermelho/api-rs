@@ -298,6 +298,23 @@ async fn get_server_by_name(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> 
 // }
 
 #[test(sqlx::test(migrations = "src/db/migrations"))]
+async fn update_server_versions(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
+    let db = get_wrapper(pool).await.unwrap();
+    let server = mock_server(&db).await;
+
+    let update = db
+        .update_server_versions(&server.uuid, vec!["1.21.11".to_string()])
+        .await
+        .unwrap();
+
+    let check = db.get_server(&server.uuid).await.unwrap();
+    assert_eq!(check.versions, update.versions);
+    assert_eq!(update.versions.0, vec!["1.21.11".to_string()]);
+
+    Ok(())
+}
+
+#[test(sqlx::test(migrations = "src/db/migrations"))]
 async fn get_blacklists(pool: sqlx::Pool<sqlx::Sqlite>) -> sqlx::Result<()> {
     let db = get_wrapper(pool).await.unwrap();
     let actor = BanIssuer::AutomatedSystem("Database Testing".to_owned());
