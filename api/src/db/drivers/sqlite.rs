@@ -611,8 +611,8 @@ impl DataSource for Sqlite {
         let query = sqlx::query_as::<_, ServerV2>(
             "UPDATE server_v2 SET versions = $1 WHERE uuid = $2 RETURNING *",
         )
-        .bind(server_uuid)
         .bind(Json(versions))
+        .bind(server_uuid)
         .fetch_one(&self.0)
         .await;
 
