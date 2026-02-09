@@ -87,9 +87,11 @@ pub async fn update_versions(
     scopes!(token, [SERVER_READ, SERVER_SELF_MODIFY]);
     let response = state
         .db
-        .update_server_versions(&server.uuid, versions)
+        .update_server_versions(&server.uuid, versions.clone())
         .await
         .unwrap();
+
+    state.mailbox.server_update_versions(server.uuid, versions);
 
     let mut profiles = vec![];
 
