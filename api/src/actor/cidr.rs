@@ -305,6 +305,10 @@ fn heuristic_check() {
             timestamp: Utc::now(),
             username: "SofiAzeda".into(),
         },
+        Attempt {
+            timestamp: Utc::now(),
+            username: "SofiAzeda".into(),
+        },
     ]);
     // Spammed Attempt
     let spammed = state.heuristic_check(localhost, "alikindsys".into(), Uuid::new_v4(), false);
