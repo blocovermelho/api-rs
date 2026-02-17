@@ -11,6 +11,7 @@ use super::{discord::DiscordActorHandle, prelude::*};
 
 pub struct LiveMessageA {
     last: Instant,
+    fail_count: u64,
     interval: Duration,
     change: Option<EditMessage>,
     message_id: MessageId,
@@ -28,11 +29,24 @@ impl LiveMessageA {
         self.deadline() > Instant::now()
     }
 
+    fn get_backoff(&self) -> Instant {
+	// Simple exponential backoff where it starts at one second and doubles per each failure. 
+	self.last + Duration::from_secs(std::cmp::min(1 << (self.fail_count - 1), 60))
+    }
+
     async fn update_message(&mut self) {
         if let Some(change) = self.change.take() {
-            self.discord_hnd
+            if self
+                .discord_hnd
                 .edit_message(self.channel_id, self.message_id, change)
-                .await;
+                .await
+                .is_err()
+            {
+		self.fail_count += 1;
+	    } else {
+		self.fail_count = 0;
+	    }
+
             self.last = Instant::now();
             debug!("[a:LiveMessageActor({})] Updated Message.", self.message_id);
         }
@@ -78,6 +92,7 @@ impl LiveMessageActor {
                 channel_id,
                 discord_hnd,
                 delete_on_drop,
+                fail_count: 0,
             },
             queue: rx,
         };
@@ -103,6 +118,10 @@ impl LiveMessageActor {
                 _ = tokio::time::sleep_until(self.state.deadline()) => {
                     self.state.update_message().await;
                 }
+		_ = tokio::time::sleep_until(self.state.get_backoff()), if self.state.fail_count > 0 => {
+		    warn!("[a:LiveMessageActor({})] Running Exponential Backoff. Failures: {}.", self.state.message_id, self.state.fail_count);
+		    self.state.update_message().await;
+		}
             }
         }
     }
