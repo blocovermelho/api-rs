@@ -30,8 +30,8 @@ impl LiveMessageA {
     }
 
     fn get_backoff(&self) -> Instant {
-	// Simple exponential backoff where it starts at one second and doubles per each failure. 
-	self.last + Duration::from_secs(std::cmp::min(1 << (self.fail_count - 1), 60))
+        // Simple exponential backoff where it starts at one second and doubles per each failure.
+        self.last + Duration::from_secs(std::cmp::min(1 << (self.fail_count - 1), 60))
     }
 
     async fn update_message(&mut self) {
@@ -42,10 +42,10 @@ impl LiveMessageA {
                 .await
                 .is_err()
             {
-		self.fail_count += 1;
-	    } else {
-		self.fail_count = 0;
-	    }
+                self.fail_count += 1;
+            } else {
+                self.fail_count = 0;
+            }
 
             self.last = Instant::now();
             debug!("[a:LiveMessageActor({})] Updated Message.", self.message_id);
@@ -118,10 +118,10 @@ impl LiveMessageActor {
                 _ = tokio::time::sleep_until(self.state.deadline()) => {
                     self.state.update_message().await;
                 }
-		_ = tokio::time::sleep_until(self.state.get_backoff()), if self.state.fail_count > 0 => {
-		    warn!("[a:LiveMessageActor({})] Running Exponential Backoff. Failures: {}.", self.state.message_id, self.state.fail_count);
-		    self.state.update_message().await;
-		}
+                _ = tokio::time::sleep_until(self.state.get_backoff()), if self.state.fail_count > 0 => {
+                    warn!("[a:LiveMessageActor({})] Running Exponential Backoff. Failures: {}.", self.state.message_id, self.state.fail_count);
+                    self.state.update_message().await;
+                }
             }
         }
     }
