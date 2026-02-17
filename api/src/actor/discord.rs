@@ -14,33 +14,26 @@ pub struct DiscordA(Arc<serenity::Client>);
 impl DiscordA {
     pub async fn send_message(
         &self, channel_id: ChannelId, builder: CreateMessage,
-    ) -> Option<Message> {
-        self.0
-            .http
-            .send_message(channel_id, vec![], &builder)
-            .await
-            .ok()
+    ) -> Result<Message, serenity::Error> {
+        self.0.http.send_message(channel_id, vec![], &builder).await
     }
 
-    pub async fn delete_message(&self, channel_id: ChannelId, message_id: MessageId) {
+    pub async fn delete_message(
+        &self, channel_id: ChannelId, message_id: MessageId,
+    ) -> Result<(), serenity::Error> {
         self.0
             .http
             .delete_message(channel_id, message_id, None)
             .await
-            .ok();
     }
 
     pub async fn edit_message(
         &self, channel_id: ChannelId, message_id: MessageId, message: EditMessage,
-    ) -> Option<Message> {
-        let msg = self
-            .0
+    ) -> Result<Message, serenity::Error> {
+        self.0
             .http
             .edit_message(channel_id, message_id, &message, vec![])
             .await
-            .unwrap();
-
-        Some(msg)
     }
 
     pub async fn get_dm_channel(&self, user_id: UserId) -> Option<ChannelId> {
@@ -85,9 +78,9 @@ impl DiscordA {
 }
 
 pub enum DiscordCommand {
-    SendMessage(ChannelId, CreateMessage, RespCell<Option<Message>>),
+    SendMessage(ChannelId, CreateMessage, RespCell<Result<Message, serenity::Error>>),
     DeleteMessage(ChannelId, MessageId),
-    EditMessage(ChannelId, MessageId, EditMessage, RespCell<Option<Message>>),
+    EditMessage(ChannelId, MessageId, EditMessage, RespCell<Result<Message, serenity::Error>>),
     GetDmChannel(UserId, RespCell<Option<ChannelId>>),
     GetMember(UserId, GuildId, RespCell<Option<Member>>),
     GetGuild(GuildId, RespCell<Option<PartialGuild>>),
@@ -159,13 +152,13 @@ impl DiscordActor {
 impl DiscordActorHandle {
     pub async fn send_message(
         &self, channel_id: ChannelId, message: CreateMessage,
-    ) -> Option<Message> {
+    ) -> Result<Message, serenity::Error> {
         ask_actor!(self.queue, DiscordCommand::SendMessage(channel_id, message));
     }
 
     pub async fn edit_message(
         &self, channel_id: ChannelId, message_id: MessageId, message: EditMessage,
-    ) -> Option<Message> {
+    ) -> Result<Message, serenity::Error> {
         ask_actor!(self.queue, DiscordCommand::EditMessage(channel_id, message_id, message));
     }
 
