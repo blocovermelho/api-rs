@@ -31,7 +31,13 @@ impl LiveMessageA {
 
     fn get_backoff(&self) -> Instant {
         // Simple exponential backoff where it starts at one second and doubles per each failure.
-        self.last + Duration::from_secs(std::cmp::min(1 << (self.fail_count - 1), 60))
+        let pow = if self.fail_count == 0 {
+            1
+        } else {
+            self.fail_count - 1
+        };
+
+        self.last + Duration::from_secs(std::cmp::min(1 << pow, 60))
     }
 
     async fn update_message(&mut self) {
