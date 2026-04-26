@@ -28,6 +28,7 @@ pub async fn framework(
     let options = poise::FrameworkOptions {
         commands: vec![
             commands::change_password::changepw(),
+            commands::change_username::changename(),
             // commands::stats::stats(),
             commands::rank::rank(),
             commands::otp::otp(),
