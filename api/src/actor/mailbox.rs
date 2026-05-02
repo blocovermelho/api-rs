@@ -511,7 +511,7 @@ impl MailboxActor {
     pub fn spawn(
         db: Arc<Sqlite>, discord: Arc<serenity::Client>, server_liveliness_channel_id: ChannelId,
         new_ip_fallback_channel_id: ChannelId, verification_role_id: RoleId,
-        playing_role_id: RoleId, guild_id: GuildId,
+        playing_role_id: RoleId, guild_id: GuildId, bad_names: Vec<String>,
     ) -> MailboxActorHandle {
         debug!("[a:Mailbox] SPAWN");
 
@@ -519,7 +519,7 @@ impl MailboxActor {
 
         let db_hnd = DatabaseActor::spawn(db);
         let discord_hnd = DiscordActor::spawn(discord);
-        let cidr_hnd = CidrActor::spawn(db_hnd.clone(), tx.downgrade());
+        let cidr_hnd = CidrActor::spawn(db_hnd.clone(), tx.downgrade(), bad_names);
         let otp_hnd = SingleUseTokenActor::spawn();
 
         let actor = Self {

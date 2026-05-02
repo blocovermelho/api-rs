@@ -51,6 +51,7 @@ pub enum Heuristic {
         username: String,
         server: uuid::Uuid,
     },
+    BadName,
 }
 
 #[derive(Debug, Clone, Serialize)]

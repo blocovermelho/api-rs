@@ -35,6 +35,7 @@ pub enum CidrResolution {
 
 pub struct CidrA {
     recent_attempts: HashMap<Ipv4Addr, Vec<Attempt>>,
+    bad_names: Vec<String>,
     database_hnd: DatabaseActorHandle,
     mailbox_hnd: WeakMailboxSender,
 }
@@ -124,6 +125,7 @@ impl CidrA {
                     username.clone(),
                     server
                 ),
+                Heuristic::BadName => "[Cidr::BadName] Blocked username used for login".to_string(),
             };
 
             self.database_hnd
@@ -200,6 +202,18 @@ impl CidrA {
             return Some(Heuristic::LoggedKickAttempt { username, server });
         }
 
+        if self.bad_names.contains(&username) {
+            trace!(
+                "[HeuristicCheck]  ip={}, username={}, server={}, is_active={} | Resolved: BadName",
+                ip,
+                username,
+                server,
+                is_active
+            );
+
+            return Some(Heuristic::BadName);
+        }
+
         trace!(
             "[HeuristicCheck]  ip={}, username={}, server={} | Resolved: None",
             ip,
@@ -217,13 +231,16 @@ pub struct CidrActor {
 }
 
 impl CidrActor {
-    pub fn spawn(database: DatabaseActorHandle, mailbox: WeakMailboxSender) -> CidrActorHandle {
+    pub fn spawn(
+        database: DatabaseActorHandle, mailbox: WeakMailboxSender, bad_names: Vec<String>,
+    ) -> CidrActorHandle {
         let (tx, rx) = mpsc::unbounded_channel();
         let actor = Self {
             state: CidrA {
                 recent_attempts: HashMap::new(),
                 database_hnd: database,
                 mailbox_hnd: mailbox,
+                bad_names,
             },
             queue: rx,
         };
@@ -282,6 +299,7 @@ fn heuristic_check() {
     let mut state = CidrA {
         recent_attempts: HashMap::new(),
         database_hnd: db_hnd,
+        bad_names: vec!["fail2ban".to_string()],
         mailbox_hnd: mbox_hnd.as_weak(),
     };
 
