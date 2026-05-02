@@ -213,6 +213,7 @@ async fn main() {
         .nest("/link", link)
         .nest("/server", server)
         .route("/get_version_ranges", post(routes::utils::get_version_ranges))
+        .route("/bad_names", get(routes::utils::get_bad_names))
         .with_state(auth_server)
         .layer(stack);
 

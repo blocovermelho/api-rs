@@ -25,6 +25,13 @@ pub async fn get_version_ranges(
     Ok(Json(ranges))
 }
 
+// [GET] /api/bad_names
+pub async fn get_bad_names(
+    State(state): State<Arc<AuthServer>>, AuthorizedServer(_token, _server): AuthorizedServer,
+) -> JsonResult<Vec<String>, String> {
+    Ok(Json(state.bad_names.to_vec()))
+}
+
 fn simplify_ranges(mut items: Vec<Version>) -> Vec<(Version, Version)> {
     if items.is_empty() {
         return Vec::new();
