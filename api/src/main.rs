@@ -96,7 +96,7 @@ async fn main() {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    let base_path = env::var("BASE_PATH").unwrap_or(".".to_string());
+    let base_path = env::var("BASE_PATH").unwrap_or_else(|_| ".".to_string());
 
     let no_discord = env::var("NO_DISCORD").ok();
 
