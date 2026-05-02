@@ -260,6 +260,7 @@ impl IpNotifA {
                     "[KICK] Conexão de um IP não reconhecido no seu perfil enquanto jogava no servidor.", true)
                 .footer(CreateEmbedFooter::new("Nota: Isso normalmente ocorre com mods/hacks que permitem logar com o nick de alguem que está online (O que normalmente causaria o erro \"You logged in from a different location\" e te kickaria do servidor). Raramente pode ser falso-positivo."));
             }
+            Heuristic::BadName => {}
         }
 
         embed
