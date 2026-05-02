@@ -159,6 +159,7 @@ async fn main() {
         config.verification_role_id.parse().unwrap(),
         config.playing_role_id.parse().unwrap(),
         config.guild_id.parse().unwrap(),
+        bad_names.clone(),
     );
 
     let auth_server = Arc::new(AuthServer::new(
