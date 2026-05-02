@@ -41,19 +41,21 @@ pub struct AuthServer {
     pub clients: Arc<Clients>,
     pub config: Arc<Config>,
     pub mailbox: MailboxActorHandle,
+    pub bad_names: Vec<String>,
     pub event_bus: MpscChannel<Event>,
 }
 
 impl AuthServer {
     fn new(
         db: Arc<Sqlite>, config: Arc<Config>, serenity: Arc<serenity::Client>,
-        mailbox: MailboxActorHandle,
+        mailbox: MailboxActorHandle, names: Vec<String>,
     ) -> Self {
         Self {
             db,
             clients: Arc::new(Clients::new(serenity, &config)),
             config,
             mailbox,
+            bad_names: names,
             event_bus: channel(128),
         }
     }
@@ -103,6 +105,7 @@ async fn main() {
     let db_path = PathBuf::from(format!("{}/data.db", base_path));
     let old_data = PathBuf::from(format!("{}/data.json", base_path));
     let config_path = PathBuf::from(format!("{}/config.json", base_path));
+    let bad_path = PathBuf::from(format!("{}/blacklist.json", base_path));
 
     let db = if old_data.exists() {
         // We will migrate the data then move it to data.json.old
@@ -139,6 +142,9 @@ async fn main() {
     }
     let token = std::env::var("DISCORD_BOT_TOKEN").expect("Expected a discord bot token in path.");
 
+    let bad_text = fs::read_to_string(bad_path).unwrap_or_else(|_| "[\"fail2ban\"]".to_string());
+    let bad_names: Vec<String> = serde_json::from_str(&bad_text).unwrap();
+
     let http_client = serenity::Client::builder(&token, GatewayIntents::GUILD_MODERATION)
         .await
         .expect("Error while building client");
@@ -155,8 +161,13 @@ async fn main() {
         config.guild_id.parse().unwrap(),
     );
 
-    let auth_server =
-        Arc::new(AuthServer::new(db.clone(), Arc::new(config), shared, mailbox.clone()));
+    let auth_server = Arc::new(AuthServer::new(
+        db.clone(),
+        Arc::new(config),
+        shared,
+        mailbox.clone(),
+        bad_names,
+    ));
 
     let bot_fw = framework(db.clone(), mailbox.clone()).await;
 
