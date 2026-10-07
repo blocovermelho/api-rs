@@ -39,9 +39,6 @@ pub async fn create(ctx: AppContext<'_>) -> Result<(), Error> {
         return Ok(());
     }
 
-    // Removes the ugly "This interaction failed"
-    let _ = ctx.defer().await;
-
     match NewServer::execute(ctx).await? {
         Some(server) => {
             let name = server.name.trim().to_string();

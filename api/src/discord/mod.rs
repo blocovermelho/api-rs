@@ -23,7 +23,7 @@ pub type Context<'a> = poise::Context<'a, Data, Error>;
 pub type AppContext<'a> = poise::ApplicationContext<'a, Data, Error>;
 
 pub async fn framework(
-    db: Arc<Sqlite>, mailbox: MailboxActorHandle,
+    db: Arc<Sqlite>, mailbox: MailboxActorHandle, guild_id: GuildId,
 ) -> poise::Framework<Data, Error> {
     let options = poise::FrameworkOptions {
         commands: vec![
@@ -52,12 +52,10 @@ pub async fn framework(
     };
 
     poise::Framework::builder()
-        .setup(|ctx, _ready, fw| {
+        .setup(move |ctx, _ready, fw| {
             Box::pin(async move {
                 poise::builtins::register_in_guild(
-                    ctx,
-                    &fw.options().commands,
-                    GuildId::new(1038487852662661223),
+                    ctx, &fw.options().commands, guild_id,
                 )
                 .await?;
 
