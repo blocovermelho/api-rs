@@ -140,6 +140,7 @@ async fn main() {
             .expect("Error happened while saving config to file.");
         panic!("Please change the configuration file on {:?}.", config_path)
     }
+    let guild_id = config.guild_id.parse().unwrap();
     let token = std::env::var("DISCORD_BOT_TOKEN").expect("Expected a discord bot token in path.");
 
     let bad_text = fs::read_to_string(bad_path).unwrap_or_else(|_| "[\"fail2ban\"]".to_string());
@@ -170,7 +171,7 @@ async fn main() {
         bad_names,
     ));
 
-    let bot_fw = framework(db.clone(), mailbox.clone()).await;
+    let bot_fw = framework(db.clone(), mailbox.clone(), guild_id).await;
 
     let mut gateway_client = serenity::Client::builder(&token, GatewayIntents::GUILD_MODERATION)
         .framework(bot_fw)
