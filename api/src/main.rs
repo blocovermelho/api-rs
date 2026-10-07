@@ -106,8 +106,9 @@ async fn main() {
     let old_data = PathBuf::from(format!("{}/data.json", base_path));
     let config_path = PathBuf::from(format!("{}/config.json", base_path));
     let bad_path = PathBuf::from(format!("{}/blacklist.json", base_path));
+    let has_legacy_data = old_data.exists();
 
-    let db = if old_data.exists() {
+    let db = if has_legacy_data {
         // We will migrate the data then move it to data.json.old
         if let Ok(db) = migrate(&db_path, &old_data).await {
             match fs::rename(old_data.clone(), "data.json.bak") {
@@ -129,7 +130,11 @@ async fn main() {
         Arc::new(Sqlite::new(&db_path).await)
     };
 
-    let _ = migrate_v2(&db_path).await;
+    if has_legacy_data {
+        migrate_v2(&db_path)
+            .await
+            .expect("Failed to migrate legacy database data.");
+    }
 
     db.run_migrations().await;
 
